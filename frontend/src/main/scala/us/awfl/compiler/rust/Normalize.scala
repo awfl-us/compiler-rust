@@ -193,6 +193,23 @@ object Normalize {
             }
             val slot = register(loop.resultValue, where)
             Vector(RepeatEach(nodeId, step.name, iterable, itemSlot, body, result, slot))
+          case fold: Fold[?, ?, ?] =>
+            val initial = valueExpr(fold.b, s"$where.initial")
+            val iterable = valueExpr(fold.list, s"$where.list")
+            // Fold's result is also its mutable accumulator. Bind it before
+            // normalizing the body, so references resolve to the same slot.
+            val resultSlot = register(fold.resultValue, where)
+            val (itemSlot, body, result) = scoped {
+              val itemName = fold.item.resolver.path.path match {
+                case CelConst(name) :: Nil => name
+                case other => fail(where, s"invalid fold item path: $other")
+              }
+              val itemSlot = local(itemName, where)
+              val body = steps(fold.run._1, s"$nodeId.each")
+              (itemSlot, body, valueExpr(fold.run._2, s"$where.each.result"))
+            }
+            Vector(ReduceEach(nodeId, step.name, initial, iterable, itemSlot,
+              body, result, resultSlot))
           case other =>
             fail(where, s"${other.getClass.getSimpleName} requires native lowering before Rust emission; cannot silently interpret YAML")
         }

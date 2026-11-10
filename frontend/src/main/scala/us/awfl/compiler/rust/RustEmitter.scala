@@ -125,6 +125,15 @@ ${children(body)}
 ${pad}    $items.push(${expr(result)});
 ${pad}}
 ${pad}let $resultSlot = AwflValue::List($items);"""
+      case ReduceEach(nodeId, name, initial, iterable, itemSlot, body, result, resultSlot) =>
+        val local = s"item_$itemSlot"
+        s"""$pad// AWFL $nodeId $name
+${pad}let mut $resultSlot = ${expr(initial)};
+${pad}for $local in ops::list_value(&(${expr(iterable)}))? {
+${pad}    let $itemSlot = $local;
+${children(body)}
+${pad}    $resultSlot = ${expr(result)};
+${pad}}"""
       case effect: Effect =>
         unsupported(effect, s"effect ${effect.id.wireId} needs server-managed continuation, checkpoint and outcome handling")
     }

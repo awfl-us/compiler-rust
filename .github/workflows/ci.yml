@@ -51,7 +51,7 @@ jobs:
             'Test / runMain us.awfl.compiler.rust.NativeCliSmoke'
       - name: Build and lint all generated Rust fixtures
         run: |
-          for name in native-smoke native-switch native-unmatched native-range native-each native-nested; do
+          for name in native-smoke native-switch native-unmatched native-range native-each native-nested native-fold; do
             cargo build --manifest-path "fixtures/$name/Cargo.toml" --locked
             cargo clippy --manifest-path "fixtures/$name/Cargo.toml" --all-targets --locked -- -D warnings
           done

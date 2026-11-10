@@ -21,7 +21,8 @@ Workflows for production.
 - `Normalize` walks constructed AWFL DSL trees and builds versioned typed IR
   with structural node and value-slot IDs, not persisted Scala hashes.
 - Supported control flow: ordered `Switch`, `ForRange` with exclusive
-  upper bound, `For`, nesting, and pure expression returns.
+  upper bound, `For`, sequential `Fold` with mutable accumulator,
+  nesting, and pure expression returns.
 - `RustEmitter` generates source with real Rust conditionals/loops, not a
   runtime workflow interpreter, with a source-hash manifest and unique Cargo
   executable names for each workflow.
@@ -32,7 +33,7 @@ Workflows for production.
   to load Scala singleton workflow builders.
 - Scala compile/smoke and actual native Rust fixture executions cover pure
   arithmetic, branches, loops and nesting. CI builds and checks fixtures.
-- **Pending:** `Fold`, `Try`, `Parallel`, early-return lowering, exhaustive
+- **Pending:** `Try`, `Parallel`, early-return lowering, exhaustive
   CEL compatibility, Google differential validation and direct
   `awfl-us/compiler --target rust` integration.
 - Published `compiler` 0.3.1 is reused for the loader, and the typed DSL

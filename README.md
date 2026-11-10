@@ -16,7 +16,7 @@ source manifests. A pure-workflow fixture is compiled and executed end-to-end.
 `runtime/` implements tagged-value persistence and the tested native helper
 functions. See `docs/implementation-status.md` for the precise capability gates.
 
-The pure subset now includes compiled `Switch`, `ForRange`, and `For`, including
+The pure subset now includes compiled `Switch`, `ForRange`, `For` and `Fold`, including
 nested control flow. The Scala CLI in `frontend/` reuses the existing compiler
 workflow loader. General folds/exceptions, server checkpointing, external
 effects, and production deployment are not implemented.

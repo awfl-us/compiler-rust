@@ -42,6 +42,13 @@ object Ir {
   final case class RepeatEach(nodeId: String, displayName: String, iterable: Expr,
                               itemSlot: String, body: Vector[Instruction],
                               result: Expr, resultSlot: String) extends Instruction
+  /** Sequential left fold; accumulator is visible to its own body and updated
+    * only after that iteration's child steps finish.
+    */
+  final case class ReduceEach(nodeId: String, displayName: String, initial: Expr,
+                              iterable: Expr, itemSlot: String,
+                              body: Vector[Instruction], result: Expr,
+                              resultSlot: String) extends Instruction
   final case class Finish(nodeId: String, displayName: String, value: Expr) extends Instruction
 
   final case class Program(name: String, steps: Vector[Instruction], slots: Vector[String]) {
@@ -51,6 +58,7 @@ object Ir {
         case choice: Choose => Vector(choice.nodeId) ++ choice.cases.flatMap(c => walk(c.body))
         case loop: RepeatRange => Vector(loop.nodeId) ++ walk(loop.body)
         case loop: RepeatEach => Vector(loop.nodeId) ++ walk(loop.body)
+        case loop: ReduceEach => Vector(loop.nodeId) ++ walk(loop.body)
         case other => Vector(other.nodeId)
       }
       walk(steps)
@@ -61,6 +69,7 @@ object Ir {
         case choice: Choose => choice.cases.flatMap(c => walk(c.body))
         case loop: RepeatRange => walk(loop.body)
         case loop: RepeatEach => walk(loop.body)
+        case loop: ReduceEach => walk(loop.body)
         case _ => Vector.empty
       }
       walk(steps)

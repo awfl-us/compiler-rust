@@ -56,6 +56,15 @@ object ControlFlowSmoke {
     assert(nestedIR.nodeIds == Vector("0.0", "0.0.each.0", "0.return"))
     RustEmitter.write(nestedIR, base.resolve("native-nested"), runtime)
 
+    val fold = Fold[Int, Int]("sum", obj(10), us.awfl.dsl.ListValue[Int](CelConst("input"))) {
+      (acc, item) =>
+        List.empty[Step[?, ?]] -> Value[Int](acc.cel + item.cel)
+    }
+    val foldIR = Normalize(Workflow((List(fold), fold.resultValue), Some("fold")))
+    assert(foldIR.steps.head.isInstanceOf[ReduceEach])
+    assert(foldIR.nodeIds == Vector("0.0", "0.return"))
+    RustEmitter.write(foldIR, base.resolve("native-fold"), runtime)
+
     // Even a conditional effect must be rejected, not hidden in unselected branches.
     val effect = TypedCall[Map[String, String], String](
       "request", CallId.HttpPost, obj(Map("url" -> "https://example.org")))

@@ -55,12 +55,12 @@ python3 scripts/test_control_flow.py
 ## Current capability
 
 Compiled and tested: pure return-only workflows, `Switch`, `ForRange`,
-`For`, and nested switch/loop combinations; literal objects/lists, input
+`For`, sequential `Fold`, and nested switch/loop combinations; literal objects/lists, input
 selection, selected arithmetic, comparison and boolean operators. Branches
 use ordered first-match semantics. A range's upper bound is exclusive.
 
 Known limitations: typed `Call` steps are recognized but rejected by the
 emitter pending server-managed effects, checkpoint/replay and recovery.
-`Fold`, `Try`, `Parallel`, generic early returns and full Google/CEL
+`Try`, `Parallel`, generic early returns and full Google/CEL
 semantics are not implemented. Unsupported expressions fail compilation with
 node context rather than falling back silently.
