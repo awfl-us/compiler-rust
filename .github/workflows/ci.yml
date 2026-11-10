@@ -39,7 +39,9 @@ jobs:
         with:
           toolchain: '1.99.1'
       - name: Publish pinned typed DSL locally
-        run: cd _dsl && sbt -batch publishLocal
+        # dsl's dynver uses release tags when CI=true; force the temporary
+        # snapshot coordinate expected by frontend/build.sbt.
+        run: cd _dsl && sbt -batch 'set ThisBuild / version := "0.1.0-SNAPSHOT"' publishLocal
       - name: Normalize constructed Scala DSL and generate native fixture
         run: cd frontend && sbt -batch 'Test / runMain us.awfl.compiler.rust.FrontendSmoke'
       - name: Build and lint generated Rust
