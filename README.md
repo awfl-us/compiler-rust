@@ -10,9 +10,14 @@ implementing any new compiler/runtime paths.
 
 ## Current state
 
-Early foundation only: pinned source inventory and a tagged-value Rust support
-crate. There is no native workflow emitter, executable workflow runner, server
-checkpointing backend or production deployment in this repository yet.
+An initial **Scala 3 compiler module** in `frontend/` now normalizes constructed
+DSL workflows into a typed IR and generates native Rust crates, with deterministic
+source manifests. A pure-workflow fixture is compiled and executed end-to-end.
+`runtime/` implements tagged-value persistence and the tested native helper
+functions. See `docs/implementation-status.md` for the precise capability gates.
+
+There is not yet general workflow control-flow lowering, a server checkpointing
+backend, external-effect execution, or production deployment.
 
 Local source inventory (requires sibling repository clones):
 
@@ -24,6 +29,16 @@ Runtime unit tests (requires Rust 1.99.1):
 
 ```bash
 cargo test --workspace
+```
+
+Scala → Rust integration smoke test (requires the typed DSL PR published locally):
+
+```bash
+cd frontend
+sbt -batch 'Test / runMain us.awfl.compiler.rust.FrontendSmoke'
+cd ..
+cargo build --manifest-path fixtures/native-smoke/Cargo.toml
+python3 scripts/test_native_smoke.py
 ```
 
 The shared operation identity catalog is maintained in `awfl-us/dsl`, not copied

@@ -1,4 +1,4 @@
-name: Native Rust foundation
+name: Native Rust compiler
 
 on:
   push:
@@ -19,3 +19,32 @@ jobs:
         run: cargo test --workspace --locked
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  scala-to-native-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      # Temporary pinned dependency until the typed DSL registry is released.
+      - uses: actions/checkout@v4
+        with:
+          repository: awfl-us/dsl
+          ref: 5b041e1e9c5d153e4ff76a9845bfabbbd7d04628
+          path: _dsl
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: sbt/setup-sbt@v1
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.99.1'
+      - name: Publish pinned typed DSL locally
+        run: cd _dsl && sbt -batch publishLocal
+      - name: Normalize constructed Scala DSL and generate native fixture
+        run: cd frontend && sbt -batch 'Test / runMain us.awfl.compiler.rust.FrontendSmoke'
+      - name: Build and lint generated Rust
+        run: |
+          cargo build --manifest-path fixtures/native-smoke/Cargo.toml --locked
+          cargo clippy --manifest-path fixtures/native-smoke/Cargo.toml --all-targets --locked -- -D warnings
+      - name: Run compiled AWFL workflow
+        run: python3 scripts/test_native_smoke.py

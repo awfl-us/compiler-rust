@@ -1,35 +1,50 @@
-# Implementation status — 2026-11-10
+# Native Rust implementation status — 2026-11-10
 
-This is a progress record, not a claim that the roadmap is complete.
+This records implemented code and verified tests, **not** completion of the
+native workflow execution plan.
 
-## Phase 0 — in progress
+## Phase 0 (partial)
+- Exact plan baseline revisions pinned in `docs/phase0-source-inventory.json`.
+- Supplementary literal-source scan shows **zero unregistered** function or call
+  strings in the observed sources.
+- **Pending:** actual constructed-AST inventory for all application workflows,
+  pinned Google semantic/error fixtures, end-to-end latency baseline.
 
-- Checked out the plan's exact source revisions of dsl, compiler-yaml, compiler,
-  workflow-utils, workflows and server. Their commit IDs, tree IDs and static
-  source matches are in `phase0-source-inventory.json`.
-- Added a repeatable source inventory tool. This is **supplementary**: it cannot
-  discover dynamically constructed DSL trees or prove compatibility.
-- Constructed-AST walking, real Google differential fixtures, full dependency
-  closure and benchmark baselines are **not complete**.
+## Phase 1 (partial; companion PRs)
+- [dsl PR #2](https://github.com/awfl-us/dsl/pull/2) defines canonical typed
+  function, call, global, operator and retry policy IDs with legacy aliases.
+- [compiler-yaml PR #1](https://github.com/awfl-us/compiler-yaml/pull/1)
+  retains Google Workflows generation for typed DSL nodes.
+- Scala compile and smoke tests passed; production changes remain draft
+  pending dependency release and compatibility coverage.
+- **Pending:** migrate workflow-utils and application call sites, raw CEL and
+  deployment string substitutions.
 
-## Phase 1 — in progress in sibling repositories
+## Phase 2 (partial; in this repository)
+- `frontend/` is a **Scala 3 module** with normalized typed expression/step IR.
+- `Normalize` consumes constructed DSL objects directly, allocates structural
+  node IDs and stable slot indices, classifies calls, and rejects unsupported
+  raw expressions with workflow/node context.
+- `RustEmitter` generates native Rust statements, a Cargo crate, and an
+  artifact manifest pinned to the SHA-256 of generated source.
+- `NativeCompiler.compile` is the backend API for the existing Scala compiler
+  loader and schema generator.
+- `runtime/` is a Rust helper crate containing tagged value persistence,
+  explicit errors, JSON boundary conversions, arithmetic, and path operations.
+- A Scala fixture compiles to real Rust and produces the correct JSON for
+  three different inputs. Scala compile/smoke, Rust tests and Clippy passed.
+- **Currently supported:** pure return-only workflows, typed literals,
+  input references, maps/lists, selected integer/float and boolean expressions,
+  nested input selections and the tested length function.
+- **Not yet supported:** general switch/loops/folds, exception frames, parallel
+  flow, artifact deployment, effectful calls, server-owned state, wakeups.
+  Rust emission explicitly rejects unsafe/unsupported behavior.
 
-- Added distinct typed IDs for functions, calls, globals, operators and retry
-  policies to `awfl-us/dsl`, with legacy aliases and explicit unsupported-Rust
-  diagnostics. All Rust capabilities are initially marked unimplemented.
-- Introduced structured CEL function/global/operator nodes and typed calls;
-  extended `awfl-us/compiler-yaml` to emit their legacy Google spellings.
-- Remaining work: migrate ALL application/workflow utility calls and raw CEL;
-  conformance tests and published dependency upgrades are still required.
+## Phase 3+ — not implemented
+- Server backend dispatch, leases/fencing, checkpoints, effect journal, crash
+  replay, callbacks/children, backend routing and rollout remain future work.
+- Never route real executions to this pure fixture runner. No arbitrary external
+  effect is exactly-once without idempotency or reconciliation.
 
-## Runtime foundation — experimental
-
-- `runtime/` contains tagged values and tests for byte/text, null/missing,
-  integers/floats, nested maps and non-finite floats. This is NOT a backend.
-
-## Guardrails
-
-- Do not route production executions to Rust until compiled fixture coverage,
-  crash/replay behavior and server-managed persistence have passed their gates.
-- Do not claim arbitrary HTTP exactly-once effects; expose unknown outcome
-  unless the receiver supports idempotency/reconciliation.
+## Test commands
+See `frontend/README.md` and `scripts/test_native_smoke.py`.

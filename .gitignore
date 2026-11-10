@@ -1,7 +1,9 @@
-/target/
+**/target/
 **/.bloop/
 **/.bsp/
 **/.metals/
 **/.scala-build/
+**/project/project/
+**/project/target/
 .DS_Store
-
+/_dsl/
