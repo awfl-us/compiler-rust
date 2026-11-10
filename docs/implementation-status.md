@@ -39,10 +39,45 @@ Workflows for production.
 - Published `compiler` 0.3.1 is reused for the loader, and the typed DSL
   snapshot is temporarily forced until coordinated releases.
 
-## Server execution — not implemented
-- No backend dispatch, leases/fencing, durable checkpointing, callback or
-  effect journal, crash/replay conformance, rollout, or production deploy.
-- External effects are recognized by the IR but deliberately rejected by the
-  code generator. Arbitrary network calls cannot be claimed exactly-once.
+## Phase 3 — experimental server foundation (draft, not integrated)
 
-For commands see `frontend/README.md`.
+- [server PR #72](https://github.com/awfl-us/server/pull/72) adds a
+  Firestore transaction-backed `NativeExecutionStore`: pinned artifact SHA-256,
+  owner/project identity, leases with epoch fencing and renewal, cancellation,
+  checkpoints, prepared effect intents and outcome recording.
+- An opt-in pure native runner verifies binary SHA-256, launches a bounded
+  JSON-in/JSON-out subprocess and completes the fenced execution. It is **not**
+  wired to the common `createWorkflowExecution` launcher, and the process is
+  **not sandboxed**. Executable paths must be selected from a trusted registry.
+- An effect dispatcher boundary supports explicit handlers for canonical HTTP
+  operation IDs and requires reconciliation rather than blind replay of
+  uncertain outcomes. Actual secure HTTP adapters are **not** implemented.
+- Tests: 12 local Node suites passed, including negative runner paths and
+  running an actual Scala-generated Rust Fold executable through the server
+  runner with a **mock** persistence adapter. The real binary returned the
+  expected outputs for `[1,2,3]`, `[]` and `[-4,5]`.
+- **Not tested:** real Firestore/emulator transactions and contention, persisted
+  crash recovery, real effect delivery, native Rust suspension/resumption,
+  full launcher integration, production deployment or Google latency parity.
+- The prototype keeps all effect results in one execution document. This
+  cannot support unbounded histories and must move to a bounded/subcollection
+  journal with tested transaction behavior.
+
+## Next required validation and implementation gates
+
+1. Test the store against Firestore emulator: simultaneous claims, transaction
+   retries, lease takeover, cancellation races and crashes around intent/outcome
+   persistence. Do not treat in-memory transaction mocks as concurrency tests.
+2. Define and implement a versioned Rust continuation/IPC protocol with stable
+   invocation keys across nested loops, and exercise actual suspend/resume.
+3. Implement bounded effect journal, artifact registry and authenticated
+   dispatcher with idempotency/reconciliation. Test crash injection at every
+   effect boundary, including unknown remote outcomes.
+4. Extend the **existing** shared web/Agents MCP launcher and status/callback
+   services with opt-in backend routing. Keep Google as the default.
+5. Complete DSL semantics (`Try`, `Parallel`, CEL, early returns), differential
+   fixtures, representative workflows and p50/p95/p99 benchmarks before pilot.
+
+For frontend commands see `frontend/README.md`; for the server library and
+cross-repository test commands see `server/workflows/native/README.md` in
+[server PR #72](https://github.com/awfl-us/server/pull/72).
