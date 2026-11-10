@@ -1,0 +1,1225 @@
+{
+  "counts": {
+    "call_target_literal": 48,
+    "cel_function_literal": 98,
+    "raw_time_or_uuid": 16
+  },
+  "distinct_call_target_literals": [
+    "events.await_callback",
+    "events.create_callback_endpoint",
+    "googleapis.pubsub.v1.projects.topics.publish",
+    "googleapis.storage.v1.objects.get",
+    "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+    "http.delete",
+    "http.get",
+    "http.patch",
+    "http.post",
+    "sys.log"
+  ],
+  "distinct_function_literals": [
+    "base64.encode",
+    "default",
+    "get_type",
+    "int",
+    "json.decode",
+    "json.encode",
+    "json.encode_to_string",
+    "len",
+    "list.concat",
+    "map.get",
+    "map.merge",
+    "string",
+    "sys.get_env",
+    "text.decode",
+    "text.encode",
+    "text.split",
+    "text.substring",
+    "text.to_lower",
+    "text.url_encode",
+    "time.format",
+    "uuid.generate"
+  ],
+  "format_version": 1,
+  "limitations": "Static literal scan only. AST traversal, tests, semantic parity, source-tree/dependency resolution and baseline latency remain necessary.",
+  "occurrences": [
+    {
+      "kind": "cel_function_literal",
+      "line": 7,
+      "literal": "sys.get_env",
+      "path": "src/main/scala/us/awfl/yaml/Constants.scala",
+      "repository": "compiler-yaml"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 8,
+      "literal": "sys.get_env",
+      "path": "src/main/scala/us/awfl/yaml/Constants.scala",
+      "repository": "compiler-yaml"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 9,
+      "literal": "sys.get_env",
+      "path": "src/main/scala/us/awfl/yaml/Constants.scala",
+      "repository": "compiler-yaml"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 10,
+      "literal": "sys.get_env",
+      "path": "src/main/scala/us/awfl/yaml/Constants.scala",
+      "repository": "compiler-yaml"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 18,
+      "literal": "json.encode_to_string",
+      "path": "src/test/scala/us/awfl/yaml/TypedYamlSmoke.scala",
+      "repository": "compiler-yaml"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 43,
+      "literal": "http.get",
+      "path": "src/main/scala/us/awfl/dsl/Operations.scala",
+      "repository": "dsl"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 43,
+      "literal": "http.get",
+      "path": "src/main/scala/us/awfl/dsl/Operations.scala",
+      "repository": "dsl"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 44,
+      "literal": "http.post",
+      "path": "src/main/scala/us/awfl/dsl/Operations.scala",
+      "repository": "dsl"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 44,
+      "literal": "http.post",
+      "path": "src/main/scala/us/awfl/dsl/Operations.scala",
+      "repository": "dsl"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 45,
+      "literal": "http.patch",
+      "path": "src/main/scala/us/awfl/dsl/Operations.scala",
+      "repository": "dsl"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 45,
+      "literal": "http.patch",
+      "path": "src/main/scala/us/awfl/dsl/Operations.scala",
+      "repository": "dsl"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 46,
+      "literal": "http.delete",
+      "path": "src/main/scala/us/awfl/dsl/Operations.scala",
+      "repository": "dsl"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 46,
+      "literal": "http.delete",
+      "path": "src/main/scala/us/awfl/dsl/Operations.scala",
+      "repository": "dsl"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 47,
+      "literal": "sys.log",
+      "path": "src/main/scala/us/awfl/dsl/Operations.scala",
+      "repository": "dsl"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 48,
+      "literal": "events.create_callback_endpoint",
+      "path": "src/main/scala/us/awfl/dsl/Operations.scala",
+      "repository": "dsl"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 49,
+      "literal": "events.await_callback",
+      "path": "src/main/scala/us/awfl/dsl/Operations.scala",
+      "repository": "dsl"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 50,
+      "literal": "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+      "path": "src/main/scala/us/awfl/dsl/Operations.scala",
+      "repository": "dsl"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 51,
+      "literal": "googleapis.storage.v1.objects.get",
+      "path": "src/main/scala/us/awfl/dsl/Operations.scala",
+      "repository": "dsl"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 52,
+      "literal": "googleapis.pubsub.v1.projects.topics.publish",
+      "path": "src/main/scala/us/awfl/dsl/Operations.scala",
+      "repository": "dsl"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 165,
+      "literal": "sys.log",
+      "path": "src/main/scala/us/awfl/dsl/Steps.scala",
+      "repository": "dsl"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 10,
+      "literal": "events.await_callback",
+      "path": "src/test/scala/us/awfl/dsl/OperationRegistrySmoke.scala",
+      "repository": "dsl"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 60,
+      "literal": "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+      "path": "src/main/scala/us/awfl/Workflow.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 31,
+      "literal": "map.get",
+      "path": "src/main/scala/us/awfl/ista/Convo.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 33,
+      "literal": "json.decode",
+      "path": "src/main/scala/us/awfl/ista/Convo.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "raw_time_or_uuid",
+      "line": 44,
+      "literal": "sys.now()",
+      "path": "src/main/scala/us/awfl/ista/Convo.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 84,
+      "literal": "list.concat",
+      "path": "src/main/scala/us/awfl/services/Llm.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 88,
+      "literal": "json.decode",
+      "path": "src/main/scala/us/awfl/services/Llm.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 104,
+      "literal": "len",
+      "path": "src/main/scala/us/awfl/services/Llm.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 22,
+      "literal": "text.url_encode",
+      "path": "src/main/scala/us/awfl/services/Storage.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 24,
+      "literal": "googleapis.storage.v1.objects.get",
+      "path": "src/main/scala/us/awfl/services/Storage.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 26,
+      "literal": "get_type",
+      "path": "src/main/scala/us/awfl/services/Storage.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 26,
+      "literal": "text.decode",
+      "path": "src/main/scala/us/awfl/services/Storage.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 32,
+      "literal": "json.encode_to_string",
+      "path": "src/main/scala/us/awfl/services/Storage.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "raw_time_or_uuid",
+      "line": 34,
+      "literal": "sys.now()",
+      "path": "src/main/scala/us/awfl/utils/Cache.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 38,
+      "literal": "events.create_callback_endpoint",
+      "path": "src/main/scala/us/awfl/utils/Callback.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 62,
+      "literal": "events.await_callback",
+      "path": "src/main/scala/us/awfl/utils/Callback.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 67,
+      "literal": "get_type",
+      "path": "src/main/scala/us/awfl/utils/Callback.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 67,
+      "literal": "map.get",
+      "path": "src/main/scala/us/awfl/utils/Callback.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 68,
+      "literal": "map.get",
+      "path": "src/main/scala/us/awfl/utils/Callback.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "raw_time_or_uuid",
+      "line": 18,
+      "literal": "sys.now()",
+      "path": "src/main/scala/us/awfl/utils/Convo.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "raw_time_or_uuid",
+      "line": 66,
+      "literal": "sys.now()",
+      "path": "src/main/scala/us/awfl/utils/Events.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "raw_time_or_uuid",
+      "line": 30,
+      "literal": "sys.now()",
+      "path": "src/main/scala/us/awfl/utils/Exec.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "raw_time_or_uuid",
+      "line": 53,
+      "literal": "sys.now()",
+      "path": "src/main/scala/us/awfl/utils/Exec.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 77,
+      "literal": "default",
+      "path": "src/main/scala/us/awfl/utils/Exec.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 77,
+      "literal": "len",
+      "path": "src/main/scala/us/awfl/utils/Exec.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "raw_time_or_uuid",
+      "line": 105,
+      "literal": "sys.now()",
+      "path": "src/main/scala/us/awfl/utils/Exec.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "raw_time_or_uuid",
+      "line": 136,
+      "literal": "sys.now()",
+      "path": "src/main/scala/us/awfl/utils/Exec.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 42,
+      "literal": "http.post",
+      "path": "src/main/scala/us/awfl/utils/Http.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 56,
+      "literal": "http.get",
+      "path": "src/main/scala/us/awfl/utils/Http.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 74,
+      "literal": "http.patch",
+      "path": "src/main/scala/us/awfl/utils/Http.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 87,
+      "literal": "http.delete",
+      "path": "src/main/scala/us/awfl/utils/Http.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 21,
+      "literal": "string",
+      "path": "src/main/scala/us/awfl/utils/Locks.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "raw_time_or_uuid",
+      "line": 105,
+      "literal": "uuid.generate()",
+      "path": "src/main/scala/us/awfl/utils/Prakriya.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 118,
+      "literal": "time.format",
+      "path": "src/main/scala/us/awfl/utils/Prakriya.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 119,
+      "literal": "time.format",
+      "path": "src/main/scala/us/awfl/utils/Prakriya.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 140,
+      "literal": "json.encode_to_string",
+      "path": "src/main/scala/us/awfl/utils/Prakriya.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 175,
+      "literal": "time.format",
+      "path": "src/main/scala/us/awfl/utils/Prakriya.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 183,
+      "literal": "time.format",
+      "path": "src/main/scala/us/awfl/utils/Prakriya.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 190,
+      "literal": "time.format",
+      "path": "src/main/scala/us/awfl/utils/Prakriya.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 197,
+      "literal": "time.format",
+      "path": "src/main/scala/us/awfl/utils/Prakriya.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 38,
+      "literal": "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+      "path": "src/main/scala/us/awfl/utils/strider/StriderAllLatestBackfill.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 105,
+      "literal": "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+      "path": "src/main/scala/us/awfl/utils/strider/StriderAllLatestBackfill.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 134,
+      "literal": "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+      "path": "src/main/scala/us/awfl/utils/strider/StriderAllLatestBackfill.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 157,
+      "literal": "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+      "path": "src/main/scala/us/awfl/utils/strider/StriderAllLatestBackfill.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 189,
+      "literal": "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+      "path": "src/main/scala/us/awfl/utils/strider/StriderAllLatestBackfill.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "raw_time_or_uuid",
+      "line": 44,
+      "literal": "uuid.generate()",
+      "path": "src/main/scala/us/awfl/utils/strider/StriderBase.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 23,
+      "literal": "default",
+      "path": "src/main/scala/us/awfl/utils/strider/StriderObj.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 24,
+      "literal": "default",
+      "path": "src/main/scala/us/awfl/utils/strider/StriderObj.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 31,
+      "literal": "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+      "path": "src/main/scala/us/awfl/utils/strider/StriderTraits.scala",
+      "repository": "workflow-utils"
+    },
+    {
+      "kind": "raw_time_or_uuid",
+      "line": 55,
+      "literal": "sys.now()",
+      "path": "src/main/scala/us/awfl/workflows/EventHandler.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 118,
+      "literal": "list.concat",
+      "path": "src/main/scala/us/awfl/workflows/EventHandler.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 139,
+      "literal": "map.get",
+      "path": "src/main/scala/us/awfl/workflows/EventHandler.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "raw_time_or_uuid",
+      "line": 140,
+      "literal": "sys.now()",
+      "path": "src/main/scala/us/awfl/workflows/EventHandler.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 155,
+      "literal": "default",
+      "path": "src/main/scala/us/awfl/workflows/EventHandler.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 157,
+      "literal": "map.get",
+      "path": "src/main/scala/us/awfl/workflows/EventHandler.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 186,
+      "literal": "len",
+      "path": "src/main/scala/us/awfl/workflows/EventHandler.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 199,
+      "literal": "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+      "path": "src/main/scala/us/awfl/workflows/EventHandler.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 267,
+      "literal": "default",
+      "path": "src/main/scala/us/awfl/workflows/EventHandler.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 269,
+      "literal": "default",
+      "path": "src/main/scala/us/awfl/workflows/EventHandler.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 271,
+      "literal": "default",
+      "path": "src/main/scala/us/awfl/workflows/EventHandler.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 273,
+      "literal": "map.get",
+      "path": "src/main/scala/us/awfl/workflows/EventHandler.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 274,
+      "literal": "map.get",
+      "path": "src/main/scala/us/awfl/workflows/EventHandler.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 276,
+      "literal": "map.get",
+      "path": "src/main/scala/us/awfl/workflows/EventHandler.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 23,
+      "literal": "len",
+      "path": "src/main/scala/us/awfl/workflows/Summaries.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "raw_time_or_uuid",
+      "line": 36,
+      "literal": "uuid.generate()",
+      "path": "src/main/scala/us/awfl/workflows/codebase/workflows/PlainToCodeHook.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 49,
+      "literal": "json.encode_to_string",
+      "path": "src/main/scala/us/awfl/workflows/context/ContextCollapser.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 35,
+      "literal": "text.split",
+      "path": "src/main/scala/us/awfl/workflows/evals/Datasets.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 37,
+      "literal": "json.decode",
+      "path": "src/main/scala/us/awfl/workflows/evals/Datasets.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 10,
+      "literal": "int",
+      "path": "src/main/scala/us/awfl/workflows/evals/Eval.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 25,
+      "literal": "map.get",
+      "path": "src/main/scala/us/awfl/workflows/evals/Eval.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 34,
+      "literal": "json.encode_to_string",
+      "path": "src/main/scala/us/awfl/workflows/evals/Eval.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 42,
+      "literal": "len",
+      "path": "src/main/scala/us/awfl/workflows/evals/Eval.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 42,
+      "literal": "text.substring",
+      "path": "src/main/scala/us/awfl/workflows/evals/Eval.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 48,
+      "literal": "map.get",
+      "path": "src/main/scala/us/awfl/workflows/evals/Eval.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 45,
+      "literal": "json.encode_to_string",
+      "path": "src/main/scala/us/awfl/workflows/evals/Experiment.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 46,
+      "literal": "json.encode_to_string",
+      "path": "src/main/scala/us/awfl/workflows/evals/Experiment.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 49,
+      "literal": "json.encode_to_string",
+      "path": "src/main/scala/us/awfl/workflows/evals/Experiment.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 17,
+      "literal": "map.merge",
+      "path": "src/main/scala/us/awfl/workflows/evals/Product.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 27,
+      "literal": "text.url_encode",
+      "path": "src/main/scala/us/awfl/workflows/evals/experiments/SweBenchLite.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 34,
+      "literal": "uuid.generate",
+      "path": "src/main/scala/us/awfl/workflows/evals/experiments/SweBenchLite.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 93,
+      "literal": "int",
+      "path": "src/main/scala/us/awfl/workflows/evals/experiments/SweBenchLite.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 93,
+      "literal": "int",
+      "path": "src/main/scala/us/awfl/workflows/evals/experiments/SweBenchLite.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 118,
+      "literal": "json.encode_to_string",
+      "path": "src/main/scala/us/awfl/workflows/evals/experiments/SweBenchLite.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 146,
+      "literal": "json.decode",
+      "path": "src/main/scala/us/awfl/workflows/evals/experiments/SweBenchLite.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 31,
+      "literal": "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+      "path": "src/main/scala/us/awfl/workflows/helpers/Chain.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 41,
+      "literal": "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+      "path": "src/main/scala/us/awfl/workflows/helpers/Chain.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 59,
+      "literal": "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+      "path": "src/main/scala/us/awfl/workflows/helpers/Chain.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 8,
+      "literal": "text.to_lower",
+      "path": "src/main/scala/us/awfl/workflows/helpers/Files.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 34,
+      "literal": "base64.encode",
+      "path": "src/main/scala/us/awfl/workflows/helpers/Queue.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 34,
+      "literal": "json.encode",
+      "path": "src/main/scala/us/awfl/workflows/helpers/Queue.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 45,
+      "literal": "googleapis.pubsub.v1.projects.topics.publish",
+      "path": "src/main/scala/us/awfl/workflows/helpers/Queue.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 50,
+      "literal": "len",
+      "path": "src/main/scala/us/awfl/workflows/helpers/Queue.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 61,
+      "literal": "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+      "path": "src/main/scala/us/awfl/workflows/helpers/Queue.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 68,
+      "literal": "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+      "path": "src/main/scala/us/awfl/workflows/helpers/Queue.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 48,
+      "literal": "string",
+      "path": "src/main/scala/us/awfl/workflows/helpers/Tasks.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 49,
+      "literal": "string",
+      "path": "src/main/scala/us/awfl/workflows/helpers/Tasks.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 50,
+      "literal": "string",
+      "path": "src/main/scala/us/awfl/workflows/helpers/Tasks.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 51,
+      "literal": "string",
+      "path": "src/main/scala/us/awfl/workflows/helpers/Tasks.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 52,
+      "literal": "string",
+      "path": "src/main/scala/us/awfl/workflows/helpers/Tasks.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 61,
+      "literal": "get_type",
+      "path": "src/main/scala/us/awfl/workflows/helpers/Tasks.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 62,
+      "literal": "string",
+      "path": "src/main/scala/us/awfl/workflows/helpers/Tasks.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 66,
+      "literal": "len",
+      "path": "src/main/scala/us/awfl/workflows/helpers/Tasks.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 149,
+      "literal": "get_type",
+      "path": "src/main/scala/us/awfl/workflows/helpers/Tasks.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 152,
+      "literal": "map.get",
+      "path": "src/main/scala/us/awfl/workflows/helpers/Tasks.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 153,
+      "literal": "map.get",
+      "path": "src/main/scala/us/awfl/workflows/helpers/Tasks.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 154,
+      "literal": "default",
+      "path": "src/main/scala/us/awfl/workflows/helpers/Tasks.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 154,
+      "literal": "map.get",
+      "path": "src/main/scala/us/awfl/workflows/helpers/Tasks.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 174,
+      "literal": "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+      "path": "src/main/scala/us/awfl/workflows/helpers/Tasks.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 88,
+      "literal": "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+      "path": "src/main/scala/us/awfl/workflows/helpers/ToolDefs.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 100,
+      "literal": "len",
+      "path": "src/main/scala/us/awfl/workflows/helpers/ToolDefs.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 33,
+      "literal": "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+      "path": "src/main/scala/us/awfl/workflows/helpers/ToolDispatcher.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 45,
+      "literal": "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+      "path": "src/main/scala/us/awfl/workflows/helpers/ToolDispatcher.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "raw_time_or_uuid",
+      "line": 52,
+      "literal": "sys.now()",
+      "path": "src/main/scala/us/awfl/workflows/helpers/ToolDispatcher.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 36,
+      "literal": "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+      "path": "src/main/scala/us/awfl/workflows/helpers/links/SaveReflection.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 23,
+      "literal": "default",
+      "path": "src/main/scala/us/awfl/workflows/helpers/tasks/TaskRunners.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 32,
+      "literal": "string",
+      "path": "src/main/scala/us/awfl/workflows/helpers/tasks/TaskRunners.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 57,
+      "literal": "string",
+      "path": "src/main/scala/us/awfl/workflows/helpers/tasks/TaskRunners.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 67,
+      "literal": "string",
+      "path": "src/main/scala/us/awfl/workflows/helpers/tasks/TaskRunners.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 74,
+      "literal": "len",
+      "path": "src/main/scala/us/awfl/workflows/helpers/tasks/TaskRunners.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 82,
+      "literal": "len",
+      "path": "src/main/scala/us/awfl/workflows/helpers/tasks/TaskRunners.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "raw_time_or_uuid",
+      "line": 21,
+      "literal": "sys.now()",
+      "path": "src/main/scala/us/awfl/workflows/homeschool/ExtractLesson.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 50,
+      "literal": "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+      "path": "src/main/scala/us/awfl/workflows/homeschool/ExtractLesson.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 33,
+      "literal": "string",
+      "path": "src/main/scala/us/awfl/workflows/tools/Agent.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 37,
+      "literal": "default",
+      "path": "src/main/scala/us/awfl/workflows/tools/Agent.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 39,
+      "literal": "default",
+      "path": "src/main/scala/us/awfl/workflows/tools/Agent.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 40,
+      "literal": "default",
+      "path": "src/main/scala/us/awfl/workflows/tools/Agent.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 58,
+      "literal": "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+      "path": "src/main/scala/us/awfl/workflows/tools/Agent.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 62,
+      "literal": "json.encode_to_string",
+      "path": "src/main/scala/us/awfl/workflows/tools/Agent.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 76,
+      "literal": "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+      "path": "src/main/scala/us/awfl/workflows/tools/Agent.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "raw_time_or_uuid",
+      "line": 28,
+      "literal": "sys.now()",
+      "path": "src/main/scala/us/awfl/workflows/tools/CliTools.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 49,
+      "literal": "json.encode_to_string",
+      "path": "src/main/scala/us/awfl/workflows/tools/CliTools.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 67,
+      "literal": "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+      "path": "src/main/scala/us/awfl/workflows/tools/CliTools.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 65,
+      "literal": "json.decode",
+      "path": "src/main/scala/us/awfl/workflows/tools/SpawnCrawlers.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 75,
+      "literal": "base64.encode",
+      "path": "src/main/scala/us/awfl/workflows/tools/SpawnCrawlers.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 75,
+      "literal": "text.encode",
+      "path": "src/main/scala/us/awfl/workflows/tools/SpawnCrawlers.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 113,
+      "literal": "json.encode_to_string",
+      "path": "src/main/scala/us/awfl/workflows/tools/SpawnCrawlers.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 53,
+      "literal": "string",
+      "path": "src/main/scala/us/awfl/workflows/tools/Tasks.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 99,
+      "literal": "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+      "path": "src/main/scala/us/awfl/workflows/tools/Tasks.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 24,
+      "literal": "json.encode_to_string",
+      "path": "src/main/scala/us/awfl/workflows/traits/ToolWorkflow.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "call_target_literal",
+      "line": 48,
+      "literal": "googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run",
+      "path": "src/main/scala/us/awfl/workflows/traits/ToolWorkflow.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 79,
+      "literal": "map.get",
+      "path": "src/main/scala/us/awfl/workflows/traits/ToolWorkflow.scala",
+      "repository": "workflows"
+    },
+    {
+      "kind": "cel_function_literal",
+      "line": 81,
+      "literal": "json.decode",
+      "path": "src/main/scala/us/awfl/workflows/traits/ToolWorkflow.scala",
+      "repository": "workflows"
+    }
+  ],
+  "repositories": {
+    "compiler": {
+      "build_sbt_sha256": "08dffe1ab3fa9c601aaffd6fbcf81dee5c3e254ad2f0888bfc637e9f9d7787dd",
+      "commit": "54920a42e0f78c9abf232a5b16cc475d1d16d1c1",
+      "scala_file_count": 14,
+      "tree": "5d519f981e9ddd477a242bd5766f884505791b2e",
+      "working_tree_clean": true
+    },
+    "compiler-yaml": {
+      "build_sbt_sha256": "89bd798ffce6443166e98e7e54f88f5b0489b6fa9c28b9bc8189ae912f8e5fdf",
+      "commit": "4b183a005e214049ce0b5bd75043130e59a03a31",
+      "scala_file_count": 5,
+      "tree": "25504e108f575d5a454f4daa4c2a66cbba772863",
+      "working_tree_clean": false
+    },
+    "dsl": {
+      "build_sbt_sha256": "258b3a0086e3357b59f3a614de2bd46c39decb7511959050e7a31e16f55f2431",
+      "commit": "e6e2b4faba09c82bc505e4e0686006feba13abab",
+      "scala_file_count": 8,
+      "tree": "f7cb3b170555f9baf0a20e269690fd5890b5c3ce",
+      "working_tree_clean": false
+    },
+    "server": {
+      "build_sbt_sha256": null,
+      "commit": "fbf75ca5d70b14e90b975fd741b7e1623325dd35",
+      "tree": "6fb6142be74e76b7842aa89e913d21c8657e2c4b",
+      "working_tree_clean": true
+    },
+    "workflow-utils": {
+      "build_sbt_sha256": "252907e4cd1e66bccb04d109a01dc929a080359b4de3cfb036e1075f8df4b129",
+      "commit": "28f30e47b81fcf188ba58d6dc8ad9fb120cf3480",
+      "scala_file_count": 31,
+      "tree": "141ab8e5fbee37f2de999f37b65b67a1fe9bae66",
+      "working_tree_clean": true
+    },
+    "workflows": {
+      "build_sbt_sha256": "3b58240da3998711d4340c00e1a8fb2d5ea53c9fe9705ed667624239d1920ab7",
+      "commit": "f549d1fe7dec1679b886e82257d9f3dcb870bfdd",
+      "scala_file_count": 52,
+      "tree": "af5fcec3909b962e03a530dc564e832548f1b8d2",
+      "working_tree_clean": true
+    }
+  },
+  "unregistered_call_target_literals": [],
+  "unregistered_function_literals": []
+}
