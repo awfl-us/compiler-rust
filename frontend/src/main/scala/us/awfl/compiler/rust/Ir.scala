@@ -49,6 +49,8 @@ object Ir {
                               iterable: Expr, itemSlot: String,
                               body: Vector[Instruction], result: Expr,
                               resultSlot: String) extends Instruction
+  /** Explicit DSL Return stops the entire workflow, including nested control flow. */
+  final case class EarlyReturn(nodeId: String, displayName: String, value: Expr) extends Instruction
   final case class Finish(nodeId: String, displayName: String, value: Expr) extends Instruction
 
   final case class Program(name: String, steps: Vector[Instruction], slots: Vector[String]) {

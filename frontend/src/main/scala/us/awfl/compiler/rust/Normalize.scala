@@ -150,8 +150,7 @@ object Normalize {
             val slot = register(call.resultValue, where)
             Vector(Effect(nodeId, step.name, call.id, args, slot))
           case ret: Return[?] =>
-            if (scope != "0") fail(where, "nested Return requires explicit early-exit lowering")
-            Vector(Finish(nodeId, step.name, valueExpr(ret.value, where)))
+            Vector(EarlyReturn(nodeId, step.name, valueExpr(ret.value, where)))
           case block: Block[?, ?] =>
             steps(block.steps, nodeId)
           case branch: Switch[?, ?] =>

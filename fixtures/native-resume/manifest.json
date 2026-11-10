@@ -1,0 +1,1 @@
+{"schema_version":2,"workflow":"resume-after-branch","source_sha256":"9b4e041af8e24839d9c9db5703122d56755679bc4fa3946e72d03f967c303d9c","runtime_abi":2,"node_ids":["0.0","0.1","0.return"],"effects":[{"node_id":"0.1","operation":"http.post"}]}

@@ -212,30 +212,32 @@ Run equal-input benchmarks: 1,000 pure operations, 100 local mock HTTP steps, ne
 
 ## 6. Implementation phases and completion gates
 
-### Implementation checkpoint — 2026-11-10 (draft, incomplete)
+### Implementation checkpoint — 2026-11-10 (tested, still experimental)
 
 The architectural plan below is the target design, **not** a claim of completed
-features. The compiler-rust Scala frontend currently emits pure native control
-flow including `Switch`, `ForRange`, `For`, `Fold` and nested expressions;
-external effects remain rejected by code generation. Companion draft PRs are
+features. The Scala frontend emits pure native `Switch`, `ForRange`, `For`,
+`Fold`, nested expressions, and explicit early `Return`.
+It also emits a **versioned native IPC** for top-level typed `Call` effects:
+the Rust executable suspends, the server journals the requested effect and
+its outcome, and the executable resumes from tagged live slots.
+Nested effects remain compile-time rejected until dynamic frames exist.
+Companion draft PRs are
 [dsl #2](https://github.com/awfl-us/dsl/pull/2) and
 [compiler-yaml #1](https://github.com/awfl-us/compiler-yaml/pull/1).
 
-[server PR #72](https://github.com/awfl-us/server/pull/72) is an **unconnected
-experimental implementation** of the Firestore execution-store interface,
-fenced leases, prepared effect intents, cancellation, a pure binary runner and
-an injected effect-dispatch/reconciliation boundary. It has no actual Rust
-continuation/IPC, no durable effect integration and no production backend
-routing. Twelve local Node tests passed, including a real generated Rust Fold
-binary run via the server runner, but with mocked persistence. There have been
-**no real Firestore concurrency tests or production benchmarks**. The single
-execution-document effect-results map is temporary and does not meet the
-bounded journal requirement specified above.
+[server PR #72](https://github.com/awfl-us/server/pull/72) remains an
+**unconnected experimental implementation**. The Firestore execution store now
+persists results in a bounded per-effect subcollection journal, with epoch
+fencing, lease expiry, cancellation, prepared intents and tagged continuations.
+Real Firestore emulator integration tests exercise competing claims, crash
+recovery, cancellation and compiled Rust suspend/resume; no Google Cloud
+production deployment or real remote HTTP delivery has been tested.
 
-**Enforced next gate:** Firestore emulator concurrency/crash-injection tests,
-then versioned native suspend/resume with real effect boundaries, then
-secure dispatch and shared-launcher integration. Do not enable native routing
-until these gates pass. See `docs/implementation-status.md` for exact status.
+**Enforced next gate:** nested effect frames, deeper crash/side-effect
+reconciliation tests, a secure artifact registry and sandbox, authenticated
+real HTTP handlers, then **shared-launcher integration and workload parity**.
+Do not enable native production routing until these gates pass.
+See `docs/implementation-status.md` for the verified status.
 
 ### Phase 0 — Freeze baseline and executable inventory
 - Capture exact commit SHAs and dependency versions for a reproducible fixture bundle.

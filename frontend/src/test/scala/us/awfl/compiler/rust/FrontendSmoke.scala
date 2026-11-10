@@ -39,20 +39,19 @@ object FrontendSmoke {
     assert(Normalize(echo).steps.map(_.nodeId) == Vector("0.return"))
     assert(RustEmitter.emit(Normalize(echo)).source.contains("input.clone()"))
 
-    // Constructed AST with an effect is recognized but not falsely compiled as pure Rust.
+    // Effects compile to a versioned suspension request; no HTTP runs locally.
     val call = TypedCall[Map[String, String], String]("fetch", CallId.HttpPost, obj(Map("url" -> "https://example.org")))
     val effectFlow = Workflow((List(call), call.resultValue))
     val effect = Normalize(effectFlow)
     assert(effect.effects.map(_.id) == Vector(CallId.HttpPost))
     assert(effect.effects.map(_.resultSlot) == Vector("s0"))
     assert(effect == Normalize(effectFlow))
-    val denied = try {
-      RustEmitter.emit(effect)
-      throw new AssertionError("should not silently issue external effects")
-    } catch {
-      case e: CompileError => e.getMessage
-    }
-    assert(denied.contains("continuation"))
+    val protocol = RustEmitter.write(effect,
+      Paths.get("../fixtures/native-effect").toAbsolutePath.normalize,
+      Paths.get("../runtime").toAbsolutePath.normalize)
+    assert(protocol.source.contains("Outcome::Suspended"))
+    assert(protocol.manifest.contains("http.post"))
+    assert(protocol.manifest.contains("\"runtime_abi\":2"))
 
     val invalidCall = Call[Map[String, String], String]("custom", "provider.unclassified", obj(Map("x" -> "y")))
     val diagnostic2 = try {

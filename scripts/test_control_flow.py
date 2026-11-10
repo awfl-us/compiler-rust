@@ -17,6 +17,8 @@ CASES = [
     ("native-each", [([1, 2, -3], [4, 5, 0]), ([], [])]),
     ("native-nested", [(None, [2, 3, 9, 9])]),
     ("native-fold", [([1, 2, 3], 16), ([], 10), ([-4, 5], 11)]),
+    ("native-early-return", [(3, 777), (0, 42), (-2, 42)]),
+    ("native-top-return", [(None, 55)]),
 ]
 
 

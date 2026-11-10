@@ -50,17 +50,31 @@ cargo test --workspace --locked
 cargo build --manifest-path fixtures/native-smoke/Cargo.toml --locked
 python3 scripts/test_native_smoke.py
 python3 scripts/test_control_flow.py
+python3 scripts/test_native_protocol.py
 ```
 
 ## Current capability
 
-Compiled and tested: pure return-only workflows, `Switch`, `ForRange`,
+Compiled and tested: pure return-only workflows, explicit `Return` from nested
+branches and top-level steps, `Switch`, `ForRange`,
 `For`, sequential `Fold`, and nested switch/loop combinations; literal objects/lists, input
 selection, selected arithmetic, comparison and boolean operators. Branches
 use ordered first-match semantics. A range's upper bound is exclusive.
 
-Known limitations: typed `Call` steps are recognized but rejected by the
-emitter pending server-managed effects, checkpoint/replay and recovery.
-`Try`, `Parallel`, generic early returns and full Google/CEL
-semantics are not implemented. Unsupported expressions fail compilation with
-node context rather than falling back silently.
+Top-level typed `Call` steps now compile to server-managed suspension and
+resume points using versioned JSON IPC. They return canonical operation
+identifiers, arguments, result slot and tagged continuation slots. The Rust
+artifact makes **no HTTP request itself**. Two sequential top-level calls
+have been built and executed across native subprocess restarts with recorded
+results. See [native IPC specification](../docs/native-ipc-v1.md) and
+[implementation status](../docs/implementation-status.md).
+
+Pure artifacts retain ABI 1 (plain JSON in/out). Effectful artifacts use
+ABI 2 (versioned request/response protocol). The server integration is a
+standalone experimental library: it is **not** connected to production routing.
+
+Known limitations: a typed `Call` **inside** a branch/loop/fold is rejected
+until dynamic invocation frames and unambiguous effect IDs are supported.
+`Try`, `Parallel` and full Google/CEL semantics are not implemented.
+Unsupported expressions fail compilation with node context rather than
+falling back silently to YAML.

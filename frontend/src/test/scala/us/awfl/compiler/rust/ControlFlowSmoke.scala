@@ -65,6 +65,21 @@ object ControlFlowSmoke {
     assert(foldIR.nodeIds == Vector("0.0", "0.return"))
     RustEmitter.write(foldIR, base.resolve("native-fold"), runtime)
 
+    // Explicit Return exits the workflow even from inside a nested branch.
+    val early = Switch("early", List(
+      (input.cel > CelInteger(0)) ->
+        (List[Step[?, ?]](Return("stop", obj(777))) -> obj(0)),
+      CelBoolean(true) -> (List.empty[Step[?, ?]] -> obj(42))
+    ))
+    val earlyIR = Normalize(Workflow((List(early), early.resultValue), Some("early-return")))
+    assert(earlyIR.nodeIds.contains("0.0.case0.0"))
+    RustEmitter.write(earlyIR, base.resolve("native-early-return"), runtime)
+
+    // A top-level Return precedes the implicit terminal DSL result.
+    val topReturn = Return("stop", obj(55))
+    RustEmitter.write(Normalize(Workflow((List[Step[?, ?]](topReturn), obj(99)),
+      Some("top-level-return"))), base.resolve("native-top-return"), runtime)
+
     // Even a conditional effect must be rejected, not hidden in unselected branches.
     val effect = TypedCall[Map[String, String], String](
       "request", CallId.HttpPost, obj(Map("url" -> "https://example.org")))
@@ -78,7 +93,26 @@ object ControlFlowSmoke {
     } catch {
       case e: CompileError => e.getMessage
     }
-    assert(denied.contains("continuation"))
+    assert(denied.contains("nested effect"))
+
+    // A preceding compiled branch is checkpointed once and restored on resume.
+    val beforeEffect = Switch("before-effect", List(
+      (input.cel > CelInteger(0)) -> (List.empty[Step[?, ?]] -> obj(8)),
+      CelBoolean(true) -> (List.empty[Step[?, ?]] -> obj(3))
+    ))
+    val topEffect = TypedCall[Map[String, String], String](
+      "external", CallId.HttpPost, obj(Map("url" -> "https://example.org")))
+    val sequence = Workflow((List[Step[?, ?]](beforeEffect, topEffect),
+      topEffect.resultValue), Some("resume-after-branch"))
+    RustEmitter.write(Normalize(sequence), base.resolve("native-resume"), runtime)
+
+    val firstCall = TypedCall[Map[String, String], String](
+      "first", CallId.HttpPost, obj(Map("url" -> "https://example.org/first")))
+    val secondCall = TypedCall[Map[String, String], String](
+      "second", CallId.HttpPost, obj(Map("url" -> "https://example.org/second")))
+    RustEmitter.write(Normalize(Workflow((List[Step[?, ?]](firstCall, secondCall),
+      secondCall.resultValue), Some("two-effects"))),
+      base.resolve("native-two-effects"), runtime)
 
     println("Scala control-flow fixtures passed")
   }

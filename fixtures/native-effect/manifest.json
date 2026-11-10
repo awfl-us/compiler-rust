@@ -1,0 +1,1 @@
+{"schema_version":2,"workflow":"workflow","source_sha256":"4b21fcca2c9023216702aaa937154d8f120bd64f19d19ffa355f59affc2815e9","runtime_abi":2,"node_ids":["0.0","0.return"],"effects":[{"node_id":"0.0","operation":"http.post"}]}

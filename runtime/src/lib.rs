@@ -8,6 +8,7 @@ use std::collections::BTreeMap;
 use std::fmt;
 
 pub mod operations;
+pub mod protocol;
 
 #[derive(Debug, PartialEq)]
 pub enum ValueError {
