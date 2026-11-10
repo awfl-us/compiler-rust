@@ -28,7 +28,9 @@ object NativeCompiler {
     if (duplicates.nonEmpty)
       throw CompileError("artifact names", s"duplicate artifact names: ${duplicates.mkString(", ")}")
     named.map { (workflow, name, safeName) =>
-      val program = Normalize(workflow, name)
+      // The compiled artifact identifies the fully qualified workflow name,
+      // even when the DSL child has a shorter local name.
+      val program = Normalize(workflow, name).copy(name = name)
       val destination = outputDirectory.resolve(safeName)
       val emitted = RustEmitter.write(program, destination, runtimeDirectory)
       Artifact(name, destination, program, emitted)

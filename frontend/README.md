@@ -1,36 +1,66 @@
 # Scala 3 native Rust compiler frontend
 
-This sbt module consumes **constructed AWFL DSL workflows** and emits Rust source
-directly. The existing `awfl-us/compiler` module remains responsible for Scala
-workflow-builder loading and input/output schema generation.
+The Scala compiler consumes **constructed AWFL DSL workflows** and generates
+native Rust source directly; it does not execute Google Workflows YAML or
+interpret the workflow graph at runtime.
 
-The intended integration boundary is
-`NativeCompiler.compile(workflows, baseName, outputDir, runtimeDir)`.
+- `NativeCompiler.compile(workflows, baseName, outputDir, runtimeDir)` is the
+  reusable backend API.
+- `NativeMain` is the current opt-in CLI. It reuses
+  `us.awfl.compiler.WorkflowLoader` from the published `awfl-us/compiler`
+  module, including the same Scala-object discovery conventions.
+- The existing `awfl-us/compiler` remains responsible for input/output schema
+  generation. A coordinated `--target rust` switch in its CLI is still pending.
 
-## Development dependency
+## Dependencies
 
-Until the operation registry in [dsl PR #2](https://github.com/awfl-us/dsl/pull/2)
-is released, this module depends on `us.awfl:dsl_3:0.1.0-SNAPSHOT`, published
-locally from that commit. Run `sbt publishLocal` in a matching DSL checkout
-before building this module. The release build should use a versioned published
-DSL artifact; don't publish this snapshot to production.
+The frontend currently depends on `us.awfl:compiler_3:0.3.1` and the typed
+`us.awfl:dsl_3:0.1.0-SNAPSHOT` from
+[dsl PR #2](https://github.com/awfl-us/dsl/pull/2).
+Publish that exact DSL checkout locally before development. This snapshot and
+the forced dependency override are **not** for production deployment.
 
-## Test real Scala → Rust code generation
+## Use the Scala CLI
+
+Build your Scala workflow object into the frontend classpath, then run:
 
 ```bash
-cd ../dsl
-sbt -batch publishLocal
-cd ../compiler-rust/frontend
-sbt -batch 'Test / runMain us.awfl.compiler.rust.FrontendSmoke'
-cd ..
-cargo build --manifest-path fixtures/native-smoke/Cargo.toml
-printf '5\n' | fixtures/native-smoke/target/debug/awfl-generated-workflow
+cd frontend
+sbt -batch 'runMain us.awfl.compiler.rust.NativeMain your.package.WorkflowBuilder ../rust_gens ../runtime'
 ```
 
-Expected JSON: `{"name":"native","score":12,"valid":true}`
+This generates a Cargo project for each DSL workflow, each with a deterministic
+distinct executable name. You can then build the generated crate with Cargo.
+This does not deploy it or register server-side execution.
 
-**Current scope:** simple pure workflows, typed literals, input references and
-selected arithmetic/boolean functions and operators. `Call` steps are normalized
-to typed effects but Rust codegen refuses them until a durable server checkpoint
-and effect replay protocol is implemented. Complex control flow fails at
-compilation with source context. These are intentional safety gates.
+## Integration tests
+
+```bash
+# In sibling checkout of awfl-us/dsl at the typed operation registry PR:
+sbt -batch publishLocal
+
+# In compiler-rust/frontend:
+sbt -batch \
+  'Test / runMain us.awfl.compiler.rust.FrontendSmoke' \
+  'Test / runMain us.awfl.compiler.rust.ControlFlowSmoke' \
+  'Test / runMain us.awfl.compiler.rust.NativeCliSmoke'
+
+# In compiler-rust:
+cargo test --workspace --locked
+cargo build --manifest-path fixtures/native-smoke/Cargo.toml --locked
+python3 scripts/test_native_smoke.py
+python3 scripts/test_control_flow.py
+```
+
+## Current capability
+
+Compiled and tested: pure return-only workflows, `Switch`, `ForRange`,
+`For`, and nested switch/loop combinations; literal objects/lists, input
+selection, selected arithmetic, comparison and boolean operators. Branches
+use ordered first-match semantics. A range's upper bound is exclusive.
+
+Known limitations: typed `Call` steps are recognized but rejected by the
+emitter pending server-managed effects, checkpoint/replay and recovery.
+`Fold`, `Try`, `Parallel`, generic early returns and full Google/CEL
+semantics are not implemented. Unsupported expressions fail compilation with
+node context rather than falling back silently.

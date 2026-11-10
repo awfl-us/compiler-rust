@@ -2,6 +2,35 @@
 //! a workflow AST evaluator or a mechanism for making external side effects.
 use crate::{AwflValue, ValueError};
 
+pub fn int_value(value: &AwflValue) -> Result<i64, ValueError> {
+    match value {
+        AwflValue::Integer(n) => Ok(*n),
+        _ => Err(ValueError::Type("range boundary must be an integer".into())),
+    }
+}
+
+pub fn list_value(value: &AwflValue) -> Result<Vec<AwflValue>, ValueError> {
+    match value {
+        AwflValue::List(items) => Ok(items.clone()),
+        _ => Err(ValueError::Type("for iteration requires a list".into())),
+    }
+}
+
+/// Restricted same-kind ordering until mixed-type comparisons have
+/// differential fixtures against the Google backend.
+pub fn compare(a: &AwflValue, b: &AwflValue) -> Result<std::cmp::Ordering, ValueError> {
+    match (a, b) {
+        (AwflValue::Integer(x), AwflValue::Integer(y)) => Ok(x.cmp(y)),
+        (AwflValue::String(x), AwflValue::String(y)) => Ok(x.cmp(y)),
+        (AwflValue::Float(x), AwflValue::Float(y)) => {
+            x.partial_cmp(y).ok_or(ValueError::NonFiniteFloat)
+        }
+        _ => Err(ValueError::Type(
+            "comparison requires matching integer, float or text operands".into(),
+        )),
+    }
+}
+
 pub fn field(value: &AwflValue, name: &str) -> Result<AwflValue, ValueError> {
     match value {
         AwflValue::Map(m) => m

@@ -29,10 +29,41 @@ object Ir {
   }
   final case class Effect(nodeId: String, displayName: String, id: CallId,
                           arguments: Expr, resultSlot: String) extends Instruction
+  final case class ChoiceCase(condition: Expr, body: Vector[Instruction], result: Expr)
+  /** Ordered first-match branch. If no branch matches, Google YAML initializes
+    * the result to the empty object, so that is the native default as well.
+    */
+  final case class Choose(nodeId: String, displayName: String, cases: Vector[ChoiceCase],
+                          resultSlot: String) extends Instruction
+  /** End is exclusive, as with the AWFL DSL ForRange(from, to) builder. */
+  final case class RepeatRange(nodeId: String, displayName: String, from: Expr, until: Expr,
+                               indexSlot: String, body: Vector[Instruction],
+                               result: Expr, resultSlot: String) extends Instruction
+  final case class RepeatEach(nodeId: String, displayName: String, iterable: Expr,
+                              itemSlot: String, body: Vector[Instruction],
+                              result: Expr, resultSlot: String) extends Instruction
   final case class Finish(nodeId: String, displayName: String, value: Expr) extends Instruction
 
   final case class Program(name: String, steps: Vector[Instruction], slots: Vector[String]) {
-    val irVersion: Int = 1
-    def effects: Vector[Effect] = steps.collect { case effect: Effect => effect }
+    val irVersion: Int = 2
+    def nodeIds: Vector[String] = {
+      def walk(all: Vector[Instruction]): Vector[String] = all.flatMap {
+        case choice: Choose => Vector(choice.nodeId) ++ choice.cases.flatMap(c => walk(c.body))
+        case loop: RepeatRange => Vector(loop.nodeId) ++ walk(loop.body)
+        case loop: RepeatEach => Vector(loop.nodeId) ++ walk(loop.body)
+        case other => Vector(other.nodeId)
+      }
+      walk(steps)
+    }
+    def effects: Vector[Effect] = {
+      def walk(all: Vector[Instruction]): Vector[Effect] = all.flatMap {
+        case effect: Effect => Vector(effect)
+        case choice: Choose => choice.cases.flatMap(c => walk(c.body))
+        case loop: RepeatRange => walk(loop.body)
+        case loop: RepeatEach => walk(loop.body)
+        case _ => Vector.empty
+      }
+      walk(steps)
+    }
   }
 }

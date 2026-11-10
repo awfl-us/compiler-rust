@@ -66,7 +66,8 @@ object FrontendSmoke {
     val scratch = java.nio.file.Files.createTempDirectory("awfl-native-frontend-")
     val artifacts = NativeCompiler.compile(List(wf), "batch", scratch, runtime)
     assert(artifacts.map(_.workflowName) == List("batch-math-fixture"))
-    assert(artifacts.head.program == ir)
+    assert(artifacts.head.program.name == "batch-math-fixture")
+    assert(artifacts.head.program.copy(name = ir.name) == ir)
 
     println("Scala frontend native smoke passed")
   }

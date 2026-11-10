@@ -16,8 +16,10 @@ source manifests. A pure-workflow fixture is compiled and executed end-to-end.
 `runtime/` implements tagged-value persistence and the tested native helper
 functions. See `docs/implementation-status.md` for the precise capability gates.
 
-There is not yet general workflow control-flow lowering, a server checkpointing
-backend, external-effect execution, or production deployment.
+The pure subset now includes compiled `Switch`, `ForRange`, and `For`, including
+nested control flow. The Scala CLI in `frontend/` reuses the existing compiler
+workflow loader. General folds/exceptions, server checkpointing, external
+effects, and production deployment are not implemented.
 
 Local source inventory (requires sibling repository clones):
 
@@ -36,9 +38,12 @@ Scala → Rust integration smoke test (requires the typed DSL PR published local
 ```bash
 cd frontend
 sbt -batch 'Test / runMain us.awfl.compiler.rust.FrontendSmoke'
+sbt -batch 'Test / runMain us.awfl.compiler.rust.ControlFlowSmoke'
+sbt -batch 'Test / runMain us.awfl.compiler.rust.NativeCliSmoke'
 cd ..
 cargo build --manifest-path fixtures/native-smoke/Cargo.toml
 python3 scripts/test_native_smoke.py
+python3 scripts/test_control_flow.py
 ```
 
 The shared operation identity catalog is maintained in `awfl-us/dsl`, not copied

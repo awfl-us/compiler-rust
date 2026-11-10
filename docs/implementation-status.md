@@ -1,50 +1,47 @@
 # Native Rust implementation status — 2026-11-10
 
-This records implemented code and verified tests, **not** completion of the
-native workflow execution plan.
+This records a **partial** implementation, not readiness to replace Google
+Workflows for production.
 
-## Phase 0 (partial)
-- Exact plan baseline revisions pinned in `docs/phase0-source-inventory.json`.
-- Supplementary literal-source scan shows **zero unregistered** function or call
-  strings in the observed sources.
-- **Pending:** actual constructed-AST inventory for all application workflows,
-  pinned Google semantic/error fixtures, end-to-end latency baseline.
+## Phase 0 — incomplete
+- Pinned source revision inventory in `phase0-source-inventory.json`; static
+  literal source scan shows no unregistered function/call spellings.
+- Still required: complete constructed-AST inventory, exhaustive Google
+  differential fixtures, error semantics and latency baseline.
 
-## Phase 1 (partial; companion PRs)
-- [dsl PR #2](https://github.com/awfl-us/dsl/pull/2) defines canonical typed
-  function, call, global, operator and retry policy IDs with legacy aliases.
+## Phase 1 — companion draft PRs
+- [dsl PR #2](https://github.com/awfl-us/dsl/pull/2) introduces canonical
+  operation, call, operator, global and retry policy identifiers.
 - [compiler-yaml PR #1](https://github.com/awfl-us/compiler-yaml/pull/1)
-  retains Google Workflows generation for typed DSL nodes.
-- Scala compile and smoke tests passed; production changes remain draft
-  pending dependency release and compatibility coverage.
-- **Pending:** migrate workflow-utils and application call sites, raw CEL and
-  deployment string substitutions.
+  preserves Google/YAML output for typed expressions.
+- Publication and complete application migration are not yet done.
 
-## Phase 2 (partial; in this repository)
-- `frontend/` is a **Scala 3 module** with normalized typed expression/step IR.
-- `Normalize` consumes constructed DSL objects directly, allocates structural
-  node IDs and stable slot indices, classifies calls, and rejects unsupported
-  raw expressions with workflow/node context.
-- `RustEmitter` generates native Rust statements, a Cargo crate, and an
-  artifact manifest pinned to the SHA-256 of generated source.
-- `NativeCompiler.compile` is the backend API for the existing Scala compiler
-  loader and schema generator.
-- `runtime/` is a Rust helper crate containing tagged value persistence,
-  explicit errors, JSON boundary conversions, arithmetic, and path operations.
-- A Scala fixture compiles to real Rust and produces the correct JSON for
-  three different inputs. Scala compile/smoke, Rust tests and Clippy passed.
-- **Currently supported:** pure return-only workflows, typed literals,
-  input references, maps/lists, selected integer/float and boolean expressions,
-  nested input selections and the tested length function.
-- **Not yet supported:** general switch/loops/folds, exception frames, parallel
-  flow, artifact deployment, effectful calls, server-owned state, wakeups.
-  Rust emission explicitly rejects unsafe/unsupported behavior.
+## Phase 2 — Scala frontend and native pure control flow
+- The native compiler is a Scala 3 module in `frontend/`.
+- `Normalize` walks constructed AWFL DSL trees and builds versioned typed IR
+  with structural node and value-slot IDs, not persisted Scala hashes.
+- Supported control flow: ordered `Switch`, `ForRange` with exclusive
+  upper bound, `For`, nesting, and pure expression returns.
+- `RustEmitter` generates source with real Rust conditionals/loops, not a
+  runtime workflow interpreter, with a source-hash manifest and unique Cargo
+  executable names for each workflow.
+- The Rust support crate provides tagged value serialization, checked
+  arithmetic, typed comparisons and value path operations.
+- `NativeCompiler.compile` provides an API for passing workflows in.
+  `NativeMain` reuses the **existing** `awfl-us/compiler.WorkflowLoader`
+  to load Scala singleton workflow builders.
+- Scala compile/smoke and actual native Rust fixture executions cover pure
+  arithmetic, branches, loops and nesting. CI builds and checks fixtures.
+- **Pending:** `Fold`, `Try`, `Parallel`, early-return lowering, exhaustive
+  CEL compatibility, Google differential validation and direct
+  `awfl-us/compiler --target rust` integration.
+- Published `compiler` 0.3.1 is reused for the loader, and the typed DSL
+  snapshot is temporarily forced until coordinated releases.
 
-## Phase 3+ — not implemented
-- Server backend dispatch, leases/fencing, checkpoints, effect journal, crash
-  replay, callbacks/children, backend routing and rollout remain future work.
-- Never route real executions to this pure fixture runner. No arbitrary external
-  effect is exactly-once without idempotency or reconciliation.
+## Server execution — not implemented
+- No backend dispatch, leases/fencing, durable checkpointing, callback or
+  effect journal, crash/replay conformance, rollout, or production deploy.
+- External effects are recognized by the IR but deliberately rejected by the
+  code generator. Arbitrary network calls cannot be claimed exactly-once.
 
-## Test commands
-See `frontend/README.md` and `scripts/test_native_smoke.py`.
+For commands see `frontend/README.md`.

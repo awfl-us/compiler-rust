@@ -1,0 +1,11 @@
+[package]
+name = "awfl_native_switch_594355ea"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+awfl-native-runtime = { path = "../../runtime" }
+serde_json = "1"
+
+[workspace]

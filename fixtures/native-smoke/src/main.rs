@@ -3,6 +3,7 @@ use std::io::{self, Read};
 use awfl_native_runtime::{AwflValue, operations as ops};
 
 fn run(input: &AwflValue) -> Result<AwflValue, Box<dyn std::error::Error>> {
+    let _ = input; // workflows with constant inputs should remain warning-free
     // AWFL 0.return return
     Ok(AwflValue::Map(std::collections::BTreeMap::from([("name".to_owned(), AwflValue::String("native".to_owned())), ("score".to_owned(), ops::add(input.clone(), AwflValue::Integer(7i64))?), ("valid".to_owned(), AwflValue::Bool(true))])))
 }

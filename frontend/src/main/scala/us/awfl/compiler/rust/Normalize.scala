@@ -12,7 +12,6 @@ object Normalize {
   def apply(workflow: us.awfl.dsl.Workflow[?], workflowName: String = "workflow"): Program = {
     val symbols = mutable.Map.empty[String, String]
     val slots = mutable.ArrayBuffer.empty[String]
-    val output = mutable.ArrayBuffer.empty[Instruction]
 
     def fail(where: String, why: String): Nothing = throw CompileError(where, why)
 
@@ -118,8 +117,25 @@ object Normalize {
       slot
     }
 
-    def steps(all: List[Step[?, ?]], scope: String): Unit = {
-      all.zipWithIndex.foreach { (step, i) =>
+    def local(name: String, where: String): String = {
+      if (symbols.contains(name)) fail(where, s"colliding iterator symbol: $name")
+      val slot = s"s${slots.size}"
+      slots += slot
+      symbols(name) = slot
+      slot
+    }
+
+    def scoped[A](f: => A): A = {
+      val before = symbols.toMap
+      try f
+      finally {
+        symbols.clear()
+        symbols ++= before
+      }
+    }
+
+    def steps(all: List[Step[?, ?]], scope: String): Vector[Instruction] = {
+      all.zipWithIndex.flatMap { (step, i) =>
         val nodeId = s"$scope.$i"
         val where = s"workflow=$workflowName node=$nodeId step='${step.name}'"
         step match {
@@ -128,23 +144,63 @@ object Normalize {
               .fold(msg => fail(where, msg), identity)
             val args = valueExpr(call.args, s"$where.args")
             val slot = register(call.resultValue, where)
-            output += Effect(nodeId, step.name, id, args, slot)
+            Vector(Effect(nodeId, step.name, id, args, slot))
           case call: TypedCall[?, ?] =>
             val args = valueExpr(call.args, s"$where.args")
             val slot = register(call.resultValue, where)
-            output += Effect(nodeId, step.name, call.id, args, slot)
+            Vector(Effect(nodeId, step.name, call.id, args, slot))
           case ret: Return[?] =>
-            output += Finish(nodeId, step.name, valueExpr(ret.value, where))
+            if (scope != "0") fail(where, "nested Return requires explicit early-exit lowering")
+            Vector(Finish(nodeId, step.name, valueExpr(ret.value, where)))
           case block: Block[?, ?] =>
             steps(block.steps, nodeId)
+          case branch: Switch[?, ?] =>
+            // The second Switch type parameter is a match type (ValueType[T,V]).
+            // At this boundary, all variants are BaseValue; the local erasure
+            // avoids inventing an unconstrained wildcard for its upper bound.
+            val entries = branch.cases.asInstanceOf[
+              List[(Cel, (List[Step[?, ?]], BaseValue[?]))]
+            ]
+            val cases = entries.zipWithIndex.map { case ((condition, (run, out)), caseIdx) =>
+              val cond = cel(condition, s"$where.case[$caseIdx].condition")
+              scoped {
+                val body = steps(run, s"$nodeId.case$caseIdx")
+                ChoiceCase(cond, body, valueExpr(out, s"$where.case[$caseIdx].result"))
+              }
+            }.toVector
+            val slot = register(branch.resultValue, where)
+            Vector(Choose(nodeId, step.name, cases, slot))
+          case loop: ForRange[?] =>
+            val from = cel(loop.from, s"$where.from")
+            val until = cel(loop.to, s"$where.until")
+            val (indexSlot, body, result) = scoped {
+              val idxSlot = local(loop.idx.value, where)
+              val inner = steps(loop.each._1, s"$nodeId.each")
+              (idxSlot, inner, valueExpr(loop.each._2, s"$where.each.result"))
+            }
+            val slot = register(loop.resultValue, where)
+            Vector(RepeatRange(nodeId, step.name, from, until, indexSlot, body, result, slot))
+          case loop: us.awfl.dsl.For[?, ?] =>
+            val iterable = valueExpr(loop.in, s"$where.in")
+            val (itemSlot, body, result) = scoped {
+              val itemName = loop.item.resolver.path.path match {
+                case CelConst(name) :: Nil => name
+                case other => fail(where, s"invalid iterator value path: $other")
+              }
+              val slot = local(itemName, where)
+              val inner = steps(loop.each._1, s"$nodeId.each")
+              (slot, inner, valueExpr(loop.each._2, s"$where.each.result"))
+            }
+            val slot = register(loop.resultValue, where)
+            Vector(RepeatEach(nodeId, step.name, iterable, itemSlot, body, result, slot))
           case other =>
             fail(where, s"${other.getClass.getSimpleName} requires native lowering before Rust emission; cannot silently interpret YAML")
         }
-      }
+      }.toVector
     }
 
-    steps(workflow.steps._1, "0")
-    output += Finish("0.return", "return", valueExpr(workflow.steps._2, s"workflow=$workflowName return"))
-    Program(workflow.name.getOrElse(workflowName), output.toVector, slots.toVector)
+    val compiled = steps(workflow.steps._1, "0")
+    val output = compiled :+ Finish("0.return", "return", valueExpr(workflow.steps._2, s"workflow=$workflowName return"))
+    Program(workflow.name.getOrElse(workflowName), output, slots.toVector)
   }
 }

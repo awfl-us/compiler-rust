@@ -42,11 +42,20 @@ jobs:
         # dsl's dynver uses release tags when CI=true; force the temporary
         # snapshot coordinate expected by frontend/build.sbt.
         run: cd _dsl && sbt -batch 'set ThisBuild / version := "0.1.0-SNAPSHOT"' publishLocal
-      - name: Normalize constructed Scala DSL and generate native fixture
-        run: cd frontend && sbt -batch 'Test / runMain us.awfl.compiler.rust.FrontendSmoke'
-      - name: Build and lint generated Rust
+      - name: Normalize DSL, test control flow, and load builders via existing compiler
         run: |
-          cargo build --manifest-path fixtures/native-smoke/Cargo.toml --locked
-          cargo clippy --manifest-path fixtures/native-smoke/Cargo.toml --all-targets --locked -- -D warnings
-      - name: Run compiled AWFL workflow
-        run: python3 scripts/test_native_smoke.py
+          cd frontend
+          sbt -batch \
+            'Test / runMain us.awfl.compiler.rust.FrontendSmoke' \
+            'Test / runMain us.awfl.compiler.rust.ControlFlowSmoke' \
+            'Test / runMain us.awfl.compiler.rust.NativeCliSmoke'
+      - name: Build and lint all generated Rust fixtures
+        run: |
+          for name in native-smoke native-switch native-unmatched native-range native-each native-nested; do
+            cargo build --manifest-path "fixtures/$name/Cargo.toml" --locked
+            cargo clippy --manifest-path "fixtures/$name/Cargo.toml" --all-targets --locked -- -D warnings
+          done
+      - name: Execute compiled AWFL workflows
+        run: |
+          python3 scripts/test_native_smoke.py
+          python3 scripts/test_control_flow.py
