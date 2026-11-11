@@ -37,6 +37,33 @@ execution disabled until wider equivalence and safety tests pass.
   explicitly unsupported; the 32-name YAML matrix does **not** imply full
   Rust function/effect parity.
 
+## November 11: native CEL standard-library expansion
+
+`feat/native-cel-stdlib` adds eight Google-compatible pure operations to the
+existing ABI 3 compiler/runtime, without changing the DSL API: `default`,
+`get_type`, `map.get`, `map.merge`, `list.concat`, `json.decode`,
+`json.encode_to_string`, and `json.encode`. Each matches an existing
+backend-neutral `CelFunctions` constant and is emitted directly as compiled
+Rust function calls. The compiler now validates `map.get` arity **exactly two**;
+its second argument may be a string key or list of nested string keys.
+
+- `map.get` returns `null` for missing keys and non-map intermediate nodes;
+  wrong key types still raise errors. `map.merge` is shallow and favors the
+  right map. `list.concat` appends **one value**, preserving nested lists.
+  `default` selects its fallback *only* for null, not falsy values.
+- JSON functions encode **plain** JSON, not AWFL tagged checkpoints; decode
+  supports UTF-8 text and bytes, with invalid JSON causing an error. JSON
+  output rejects AWFL bytes rather than silently changing their type. The
+  exact Google exception taxonomy and JSON encoding edge-case parity still
+  require differential tests before declaring complete CEL parity.
+- Verified locally: all **14** runtime unit tests, Scala normalizer/codegen
+  smoke, generated Cargo executable on representative inputs, deterministic
+  replay, invalid JSON rejection, and strict Clippy. Reproduce with
+  `scripts/test-local.sh --full` and `python3 scripts/test_cel_stdlib.py`.
+- Remaining CEL functions (e.g., numerical/text/base64/time/UUID helpers) are
+  deliberately **unsupported** by the Rust emitter; registered constants do
+  not imply native implementations. No existing workflows were migrated.
+
 ## Compiler: implemented
 
 - Scala 3 `frontend/` loads constructed AWFL DSL workflow objects through the

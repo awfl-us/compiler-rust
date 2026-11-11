@@ -59,6 +59,22 @@ object ExpressionEmitter {
       case Unary(OperatorId.Not, value) => s"AwflValue::Bool(!ops::bool_value(&(${inner(value)}))?)"
       case Unary(id, _) => throw CompileError(where, s"unary operator ${id.wireId} unsupported")
       case Function(FunctionId.Length, Vector(arg)) => s"ops::length(&(${inner(arg)}))?"
+      case Function(FunctionId.Default, Vector(value, fallback)) =>
+        s"ops::default_value(${inner(value)}, ${inner(fallback)})"
+      case Function(FunctionId.TypeOf, Vector(value)) =>
+        s"ops::type_of(&(${inner(value)}))"
+      case Function(FunctionId.MapGet, Vector(map, path)) =>
+        s"ops::map_get(&(${inner(map)}), &(${inner(path)}))?"
+      case Function(FunctionId.MapMerge, Vector(left, right)) =>
+        s"ops::map_merge(&(${inner(left)}), &(${inner(right)}))?"
+      case Function(FunctionId.ListConcat, Vector(list, element)) =>
+        s"ops::list_concat(&(${inner(list)}), ${inner(element)})?"
+      case Function(FunctionId.JsonDecode, Vector(value)) =>
+        s"ops::json_decode(&(${inner(value)}))?"
+      case Function(FunctionId.JsonEncodeString, Vector(value)) =>
+        s"ops::json_encode_string(&(${inner(value)}))?"
+      case Function(FunctionId.JsonEncodeBytes, Vector(value)) =>
+        s"ops::json_encode_bytes(&(${inner(value)}))?"
       case Function(id, _) =>
         throw CompileError(where, s"function ${id.wireId} lacks tested native semantics")
     }
