@@ -50,6 +50,9 @@ the selected branch and active effect site. The first carries the Switch
 node ID and zero-based branch index; the second carries the effect node ID
 and its ordinal within the branch. Resume bypasses branch condition
 evaluation and restores prior Call results from the tagged slots.
+A two-level nested Switch (one inner Switch as the only step in the effectful
+outer branch) uses three frames for outer branch, inner branch and direct
+Call site. Both branch conditions remain pinned on resume.
 
 ## Response
 
@@ -91,10 +94,11 @@ slots, and skips finished steps or range iterations instead of replaying
 effects. Direct top-level effect IDs use call_<step>. Range Call IDs use
 call_<step>_<result-slot>_<ordinal>; the unique result slot distinguishes
 multiple effect sites in the same iteration, and the ordinal is zero-based
-even for negative range starts. A Switch branch Call uses the stable ID
-`call_<step>_<result-slot>_b<branch-index>`. Effects in deeper branches or
-nested loops still fail compilation until those frame paths and live slots
-are implemented.
+even for negative range starts. A Switch branch Call uses the stable
+ID `call_<step>_<result-slot>_b<branch-index>`. A two-level nested Switch
+uses `call_<step>_<result-slot>_b<outer-branch>_b<inner-branch>`.
+Effects beyond two Switch levels or inside nested loops still fail
+compilation until those frame paths and live slots are implemented.
 
 ## Safety constraints and limitations
 

@@ -344,13 +344,143 @@ $sites
     };"""
   }
 
+  /** One additional structural Switch depth, without replaying either
+    * branch condition. A branch containing nested effects must contain
+    * exactly its nested Switch; inner effectful branches contain direct Calls.
+    * The three-frame path is validated against all legal static sites.
+    */
+  private def emitNestedEffectChoice(outer: Choose, index: Int,
+                                     prior: Vector[String]): String = {
+    val where = s"node=${outer.nodeId} step='${outer.displayName}'"
+    val nested = outer.cases.zipWithIndex.flatMap { (branch, outerBranch) =>
+      val effects = Program("outer-branch", branch.body, Vector.empty).effects
+      if (effects.isEmpty) Vector.empty
+      else branch.body match {
+        case Vector(inner: Choose) =>
+          inner.cases.foreach { innerBranch =>
+            val found = Program("inner-branch", innerBranch.body, Vector.empty).effects
+            if (found.nonEmpty && (innerBranch.body.size != found.size ||
+                !innerBranch.body.forall(_.isInstanceOf[Effect])))
+              throw CompileError(where,
+                "nested effectful Switch branches require only direct Calls")
+          }
+          Vector((outerBranch, inner))
+        case _ => throw CompileError(where,
+          "nested effectful Switch requires exactly one inner Switch in its outer branch")
+      }
+    }
+    if (nested.isEmpty) throw CompileError(where, "nested effectful Switch has no Call sites")
+    val legalSites = nested.flatMap { (outerBranch, inner) =>
+      inner.cases.zipWithIndex.flatMap { (branch, innerBranch) =>
+        branch.body.collect { case e: Effect => e }.zipWithIndex.map { (e, site) =>
+          s"""                (${outerBranch}u64, ${q(inner.nodeId)}, ${innerBranch}u64, ${q(e.nodeId)}, ${site}u64) =>
+                    (${outerBranch}u64, ${innerBranch}u64, ${site}u64),"""
+        }
+      }
+    }.mkString("\n")
+    val savedTop = prior.map(slot =>
+      s"""                        slots.insert(${q(slot)}.to_owned(), $slot.clone());""").mkString("\n")
+    val outerBranches = outer.cases.zipWithIndex.map { (branch, outerBranch) =>
+      val prefix = if (outerBranch == 0) "if" else "else if"
+      val guard = s"(__awfl_nested_resume && __awfl_outer_branch == ${outerBranch}u64) || (!__awfl_nested_resume && ops::bool_value(&(${render(branch.condition, where)}))?)"
+      val body = branch.body match {
+        case Vector(inner: Choose) if Program("inner", inner.cases.flatMap(_.body), Vector.empty).effects.nonEmpty =>
+          val innerWhere = s"node=${inner.nodeId} step='${inner.displayName}'"
+          val innerBranches = inner.cases.zipWithIndex.map { (innerBranch, innerBranchIndex) =>
+            val innerPrefix = if (innerBranchIndex == 0) "if" else "else if"
+            val innerGuard = s"(__awfl_nested_resume && __awfl_inner_branch == ${innerBranchIndex}u64) || (!__awfl_nested_resume && ops::bool_value(&(${render(innerBranch.condition, innerWhere)}))?)"
+            val effects = innerBranch.body.collect { case e: Effect => e }
+            val children = innerBranch.body.map {
+              case e: Effect =>
+                val site = effects.indexWhere(_.nodeId == e.nodeId)
+                val savedPrevious = effects.take(site).map(previous =>
+                  s"""                        slots.insert(${q(previous.resultSlot)}.to_owned(), ${previous.resultSlot}.clone());""").mkString("\n")
+                val slotsBinding = if (prior.isEmpty && site == 0) "let slots" else "let mut slots"
+                val resumeSite = if (site == 0) "" else s" && __awfl_call_site >= ${site}u64"
+                s"""                    // AWFL ${e.nodeId} ${e.displayName}
+                    let ${e.resultSlot} = if __awfl_nested_resume$resumeSite {
+                        resume.ok_or("missing native continuation")?.slot(${q(e.resultSlot)})?
+                    } else {
+                        $slotsBinding = std::collections::BTreeMap::new();
+$savedTop
+$savedPrevious
+                        return Ok(Outcome::Suspended {
+                            effect: EffectIntent {
+                                effect_id: ${q(s"call_${index}_${e.resultSlot}_b${outerBranch}_b${innerBranchIndex}")}.to_owned(),
+                                node_id: ${q(e.nodeId)}.to_owned(),
+                                operation: ${q(e.id.wireId)}.to_owned(),
+                                result_slot: ${q(e.resultSlot)}.to_owned(),
+                                args: (${render(e.arguments, innerWhere)}).to_plain_json()?,
+                            },
+                            continuation: Continuation {
+                                next_step: $index, slots,
+                                frames: vec![
+                                    InvocationFrame { node_id: ${q(outer.nodeId)}.to_owned(), iteration: ${outerBranch}u64 },
+                                    InvocationFrame { node_id: ${q(inner.nodeId)}.to_owned(), iteration: ${innerBranchIndex}u64 },
+                                    InvocationFrame { node_id: ${q(e.nodeId)}.to_owned(), iteration: ${site}u64 },
+                                ],
+                            },
+                        });
+                    };"""
+              case pure => emitStep(pure, 20, effectful = true)
+            }.mkString("\n")
+            s"""$innerPrefix $innerGuard {
+$children
+                    ${render(innerBranch.result, innerWhere)}
+                }"""
+          }.mkString(" ")
+          val innerResult = if (innerBranches.isEmpty)
+            "AwflValue::Map(std::collections::BTreeMap::new())"
+          else s"$innerBranches else { AwflValue::Map(std::collections::BTreeMap::new()) }"
+          s"""            let ${inner.resultSlot} = $innerResult;"""
+        case _ => branch.body.map(pure => emitStep(pure, 12, effectful = true)).mkString("\n")
+      }
+      s"""$prefix $guard {
+$body
+            ${render(branch.result, where)}
+        }"""
+    }.mkString(" ")
+    val assigned = if (outerBranches.isEmpty)
+      "AwflValue::Map(std::collections::BTreeMap::new())"
+    else s"$outerBranches else { AwflValue::Map(std::collections::BTreeMap::new()) }"
+    s"""    // AWFL ${outer.nodeId} ${outer.displayName} (nested resumable Switch)
+    let ${outer.resultSlot} = if pc > $index {
+        resume.ok_or("missing native continuation")?.slot(${q(outer.resultSlot)})?
+    } else {
+        let __awfl_nested_resume = resume.is_some_and(|s| !s.frames.is_empty() && pc == $index);
+        let (__awfl_outer_branch, __awfl_inner_branch, __awfl_call_site) =
+            if __awfl_nested_resume {
+                let state = resume.ok_or("missing native continuation")?;
+                if state.frames.len() != 3 || state.frames[0].node_id != ${q(outer.nodeId)} {
+                    return Err("invalid nested Switch continuation frame".into());
+                }
+                match (
+                    state.frames[0].iteration, state.frames[1].node_id.as_str(),
+                    state.frames[1].iteration, state.frames[2].node_id.as_str(),
+                    state.frames[2].iteration,
+                ) {
+$legalSites
+                    _ => return Err("invalid nested Switch continuation site".into()),
+                }
+            } else { (0u64, 0u64, 0u64) };
+        $assigned
+    };"""
+  }
+
   /** Direct Rust computation with server-managed effect boundaries. */
   private def effectfulSource(program: Program): String = {
     val frameConditions = program.steps.zipWithIndex.collect {
       case (loop: RepeatRange, i) if Program("range-effects", loop.body, Vector.empty).effects.nonEmpty =>
         s"pc == $i && s.frames.len() == ${if (loop.body.collect { case _: Effect => 1 }.size > 1) 2 else 1} && s.frames[0].node_id == ${q(loop.nodeId)}"
       case (choice: Choose, i) if Program("choice-effects", choice.cases.flatMap(_.body), Vector.empty).effects.nonEmpty =>
-        s"pc == $i && s.frames.len() == 2 && s.frames[0].node_id == ${q(choice.nodeId)}"
+        val nested = choice.cases.exists { c =>
+          c.body.exists {
+            case inner: Choose =>
+              Program("inner-effects", inner.cases.flatMap(_.body), Vector.empty).effects.nonEmpty
+            case _ => false
+          }
+        }
+        s"pc == $i && s.frames.len() == ${if (nested) 3 else 2} && s.frames[0].node_id == ${q(choice.nodeId)}"
     }
     val frameTargets = frameConditions match {
       case Vector() => "false"
@@ -401,7 +531,13 @@ ${emitStep(loop, 8, effectful = true)}
     };"""
         case choice: Choose if Program("choice-effects", choice.cases.flatMap(_.body), Vector.empty).effects.nonEmpty =>
           val prior = program.steps.take(index).flatMap(topLevelSlot)
-          emitEffectChoice(choice, index, prior)
+          val nested = choice.cases.exists(_.body.exists {
+            case inner: Choose =>
+              Program("inner-effects", inner.cases.flatMap(_.body), Vector.empty).effects.nonEmpty
+            case _ => false
+          })
+          if (nested) emitNestedEffectChoice(choice, index, prior)
+          else emitEffectChoice(choice, index, prior)
         case other =>
           val slot = topLevelSlot(other).getOrElse(
             throw CompileError(where, "unsupported top-level native statement"))

@@ -101,16 +101,44 @@ object ControlFlowSmoke {
       effectChoice, base.resolve("native-switch-effects"), runtime)
     assert(choiceGenerated.source.contains("invalid native Switch continuation site"))
 
-    // Effects nested another level in the selected branch remain rejected.
-    val nestedUnsafe = Switch("nested-effects", List(
-      CelBoolean(true) -> (List[Step[?, ?]](choiceEffects) -> choiceEffects.resultValue)
+    // Nested Switch: both branch choices are pinned while a dependent second
+    // Call resumes; unrelated outer branches do not dispatch effects.
+    val deepFirst = TypedCall[Map[String, String], String](
+      "deep-first", CallId.HttpPost, obj(Map("url" -> "https://example.org/deep-a")))
+    val deepSecond = TypedCall[String, String](
+      "deep-second", CallId.HttpPost, deepFirst.resultValue)
+    val deepAlternate = TypedCall[Map[String, String], String](
+      "deep-alternate", CallId.HttpPost, obj(Map("url" -> "https://example.org/deep-b")))
+    val innerChoice = Switch("inner-choice", List(
+      (input.cel > CelInteger(4)) ->
+        (List[Step[?, ?]](deepFirst, deepSecond) -> deepSecond.resultValue),
+      CelBoolean(true) ->
+        (List[Step[?, ?]](deepAlternate) -> deepAlternate.resultValue)
+    ))
+    val outerChoice = Switch("outer-choice", List(
+      (input.cel > CelInteger(0)) ->
+        (List[Step[?, ?]](innerChoice) -> innerChoice.resultValue),
+      CelBoolean(true) ->
+        (List.empty[Step[?, ?]] -> obj("no-effect"))
+    ))
+    val nestedChoiceProgram = Normalize(Workflow((List[Step[?, ?]](outerChoice),
+      outerChoice.resultValue), Some("nested-switch-effects")))
+    assert(nestedChoiceProgram.effects.size == 3)
+    val nestedChoiceSource = RustEmitter.write(nestedChoiceProgram,
+      base.resolve("native-nested-switch-effects"), runtime)
+    assert(nestedChoiceSource.source.contains("invalid nested Switch continuation site"))
+    assert(nestedChoiceSource.source.contains("state.frames.len() != 3"))
+
+    // A third branch depth must fail closed until the frame path is lowered.
+    val tooDeep = Switch("third-depth", List(
+      CelBoolean(true) -> (List[Step[?, ?]](outerChoice) -> outerChoice.resultValue)
     ))
     val denied = try {
-      RustEmitter.emit(Normalize(Workflow((List[Step[?, ?]](nestedUnsafe),
-        nestedUnsafe.resultValue))))
-      throw new AssertionError("deeply nested external effect was not rejected")
+      RustEmitter.emit(Normalize(Workflow((List[Step[?, ?]](tooDeep),
+        tooDeep.resultValue))))
+      throw new AssertionError("third nested Switch was not rejected")
     } catch { case e: CompileError => e.getMessage }
-    assert(denied.contains("effectful Switch branch must contain only direct Calls"))
+    assert(denied.contains("nested effectful Switch branches require only direct Calls"))
 
     // A preceding compiled branch is checkpointed once and restored on resume.
     val beforeEffect = Switch("before-effect", List(

@@ -51,10 +51,14 @@ statements; the server owns all effects, state transitions and persistence.
   use two frames to pin the branch and Call site. Previously completed Calls
   are restored without re-evaluating branch conditions after restart.
   Pure and unmatched branches still return without effects.
-- **Still unsupported:** Calls nested deeper inside branch/range bodies,
-  For, Fold, Try and Parallel. Mixed pure steps and Calls in one Switch
-  branch also fail closed; complete CEL,
-  Google retry/error semantics and YAML fallback are pending.
+- **Nested Switch slice:** One inner Switch in an effectful outer branch is
+  supported. Three validated invocation frames pin both chosen branches
+  and the exact direct Call site. Results from preceding Calls are restored
+  after worker takeover without re-evaluating conditions.
+- **Still unsupported:** Calls beyond two Switch levels, effects inside
+  nested loops, effectful For/Fold, Try and Parallel. Mixed pure steps and
+  Calls in one effectful Switch branch fail closed. Complete CEL, Google
+  retry/error semantics and YAML fallback remain pending.
 - `NativeCompiler.compile` consumes constructed DSL workflows.
   `NativeMain` reuses `awfl-us/compiler.WorkflowLoader` to load existing
   Scala objects. Integration with `compiler --target rust` is pending.
@@ -72,7 +76,9 @@ statements; the server owns all effects, state transitions and persistence.
     four unique invocation IDs, saved intra-iteration results, and
     malformed site/missing-slot rejection. The new two-branch Switch fixture
     passed branch pinning, dependent Calls, alternate and unmatched branches
-    and malformed continuation site/missing-slot rejection.
+    and malformed continuation site/missing-slot rejection. A two-level
+    nested Switch fixture passed pinned branches, dependent Calls, alternate
+    and no-effect paths, malformed frames and missing-slot rejection.
   - Rustfmt and strict Clippy checks apply to the Rust crate and generated
     fixtures in CI.
 
@@ -102,11 +108,11 @@ statements; the server owns all effects, state transitions and persistence.
   cancellation versus recording, process/store reconstruction around
   pending intents, uncertain outcome reconciliation, a generated Rust
   suspension with recorded server outcome, and a two-effect Rust sequence.
-  All nine emulator integration tests passed, including a generated Rust
+  All ten emulator integration tests passed, including a generated Rust
   range resuming after worker takeover without duplicating its three effects,
-  a two-Call-per-iteration range recovering mid-iteration, and an effectful
-  Switch resuming after worker takeover. The entire Node native suite
-  passed 23/23 with all real-binary integrations
+  a two-Call-per-iteration range recovering mid-iteration, and effectful
+  Switches at one and two levels resuming after worker takeover. The entire
+  Node native suite passed 24/24 with all real-binary integrations
   enabled; two additional
   local tests verify subcollection scaling and persistence-size rejection.
 - This is **not** wired to production `createWorkflowExecution`, cloud
@@ -116,8 +122,8 @@ statements; the server owns all effects, state transitions and persistence.
 
 ## Remaining gates before a pilot
 
-1. Extend bounded frames beyond direct Calls in top-level Switch/ForRange
-   to deeper nested branches and loops, For and Fold, with precise live-slot
+1. Extend bounded frames beyond the two-level Switch case to nested loops,
+   deeper branches, For and Fold, with precise live-slot
    capture and branch-safe replay.
 2. Test every crash window (prepare, dispatch, unknown remote outcome,
    result commit, post-commit resume), transaction contention at realistic

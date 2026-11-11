@@ -84,10 +84,12 @@ A top-level Switch now suspends at direct Calls in its selected branch.
 Its two-frame continuation pins the branch and Call site, and previous
 Call results are restored without re-evaluating branch conditions.
 Pure and unmatched branches still complete without dispatching effects.
+A two-level nested Switch also supports direct Calls in its inner branches.
+Three frames pin the outer choice, inner choice and active Call site.
 
-Known limitations: Effects inside deeper nested branches/loops, For and
-Fold remain explicitly rejected. Pure and effectful steps mixed within
-the same Switch branch also fail closed. Try, Parallel
-and complete Google/CEL semantics are not implemented.
+Known limitations: Effects beyond two Switch levels, effects in nested
+loops and effectful For/Fold remain explicitly rejected. Pure and
+effectful steps mixed within the same Switch branch also fail closed.
+Try, Parallel and complete Google/CEL semantics are not implemented.
 Unsupported expressions fail compilation with node context rather than
 falling back silently to YAML.

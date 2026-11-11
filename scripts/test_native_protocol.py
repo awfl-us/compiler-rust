@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = [
     "native-effect", "native-resume", "native-two-effects",
     "native-range-effect", "native-range-two-effects", "native-switch-effects",
+    "native-nested-switch-effects",
 ]
 
 
@@ -272,9 +273,72 @@ def check():
         assert other_done["result"] == "branch-b"
         unmatched = invoke(switch, {"protocol_version": 1, "input": 0})
         assert unmatched["status"] == "completed" and unmatched["result"] == {}
+
+        # Two nested Switches: resume must pin both branches and the Call
+        # site even if process input changes to select the no-effect path.
+        nested_switch = binaries["native-nested-switch-effects"]
+        first = invoke(nested_switch, {"protocol_version": 1, "input": 5})
+        assert first["status"] == "suspended", first
+        assert first["effect"]["node_id"] == "0.0.case0.0.case0.0"
+        assert first["continuation"]["frames"] == [
+            {"node_id": "0.0", "iteration": 0},
+            {"node_id": "0.0.case0.0", "iteration": 0},
+            {"node_id": first["effect"]["node_id"], "iteration": 0},
+        ]
+        second = invoke(nested_switch, {
+            "protocol_version": 1, "input": -100,
+            "continuation": bind(first["continuation"],
+                                 first["effect"]["result_slot"], "nested-first"),
+        })
+        assert second["status"] == "suspended", second
+        assert second["effect"]["node_id"] == "0.0.case0.0.case0.1"
+        assert second["effect"]["args"] == "nested-first"
+        assert second["effect"]["effect_id"] != first["effect"]["effect_id"]
+        assert second["continuation"]["frames"] == [
+            {"node_id": "0.0", "iteration": 0},
+            {"node_id": "0.0.case0.0", "iteration": 0},
+            {"node_id": second["effect"]["node_id"], "iteration": 1},
+        ]
+        assert second["continuation"]["slots"][first["effect"]["result_slot"]] == {
+            "type": "string", "value": "nested-first",
+        }
+        wrong = copy.deepcopy(second["continuation"])
+        wrong["frames"][1]["iteration"] = 1
+        assert "invalid nested Switch continuation site" in invoke(nested_switch, {
+            "protocol_version": 1, "input": -100,
+            "continuation": bind(wrong, second["effect"]["result_slot"], "invalid"),
+        }, fails=True)
+        missing = copy.deepcopy(second["continuation"])
+        del missing["slots"][first["effect"]["result_slot"]]
+        assert "missing continuation slot" in invoke(nested_switch, {
+            "protocol_version": 1, "input": -100,
+            "continuation": bind(missing, second["effect"]["result_slot"], "invalid"),
+        }, fails=True)
+        done = invoke(nested_switch, {
+            "protocol_version": 1, "input": -100,
+            "continuation": bind(second["continuation"],
+                                 second["effect"]["result_slot"], "nested-second"),
+        })
+        assert done == {
+            "protocol_version": 1, "status": "completed", "result": "nested-second",
+        }, done
+        alternate = invoke(nested_switch, {"protocol_version": 1, "input": 2})
+        assert alternate["status"] == "suspended", alternate
+        assert alternate["effect"]["node_id"] == "0.0.case0.0.case1.0"
+        assert alternate["continuation"]["frames"][1]["iteration"] == 1
+        alternate_done = invoke(nested_switch, {
+            "protocol_version": 1, "input": -2,
+            "continuation": bind(alternate["continuation"],
+                                 alternate["effect"]["result_slot"], "alternate"),
+        })
+        assert alternate_done["result"] == "alternate"
+        outer_noop = invoke(nested_switch, {"protocol_version": 1, "input": -5})
+        assert outer_noop == {
+            "protocol_version": 1, "status": "completed", "result": "no-effect",
+        }
         print("native protocol: 2 single-effect resumes, 2-step effect sequence,"
               " three-iteration range, two effects per range iteration,"
-              " pinned two-branch Switch resume, malformed continuation"
+              " pinned two-branch and nested Switch resumes, malformed continuation"
               " and version rejection passed")
 
 
