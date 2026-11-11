@@ -2,6 +2,7 @@
 use std::io::{self, Read};
 use std::collections::BTreeMap;
 use awfl_native_runtime::AwflValue;
+#[allow(unused_imports)]
 use awfl_native_runtime::operations as ops;
 #[allow(unused_imports)]
 use awfl_native_runtime::protocol::{
@@ -12,8 +13,10 @@ fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<
     let _ = input;
     let mut slots: BTreeMap<String, AwflValue> =
         resume.map_or_else(BTreeMap::new, |c| c.slots.clone());
+    // Some pure terminal CFGs need no slots; keep the schema but suppress
+    // needless unused-variable warnings in the generated executable.
+    let _ = &slots;
     let mut pc = resume.map_or(1, |c| c.next_step);
-    // A corrupt graph or unexpectedly expensive pure loop must not run forever.
     for _awfl_budget in 0..1_000_000 {
         match pc {
             0 => {

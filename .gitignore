@@ -11,3 +11,6 @@
 # Generated Python bytecode
 __pycache__/
 *.pyc
+
+# Compiler-generated Cargo fixture directories (tracked golden files remain tracked).
+/fixtures/

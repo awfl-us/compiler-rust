@@ -2,6 +2,7 @@
 use std::io::{self, Read};
 use std::collections::BTreeMap;
 use awfl_native_runtime::AwflValue;
+#[allow(unused_imports)]
 use awfl_native_runtime::operations as ops;
 #[allow(unused_imports)]
 use awfl_native_runtime::protocol::{
@@ -12,8 +13,10 @@ fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<
     let _ = input;
     let mut slots: BTreeMap<String, AwflValue> =
         resume.map_or_else(BTreeMap::new, |c| c.slots.clone());
+    // Some pure terminal CFGs need no slots; keep the schema but suppress
+    // needless unused-variable warnings in the generated executable.
+    let _ = &slots;
     let mut pc = resume.map_or(13, |c| c.next_step);
-    // A corrupt graph or unexpectedly expensive pure loop must not run forever.
     for _awfl_budget in 0..1_000_000 {
         match pc {
             0 => {
@@ -56,7 +59,7 @@ fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<
             7 => {
                     // AWFL 0.0.case0.0.case1.0
                     let __awfl_args = (AwflValue::Map(std::collections::BTreeMap::from([("url".to_owned(), AwflValue::String("https://example.org/deep-b".to_owned()))]))).to_plain_json()?;
-                    let mut __awfl_effect_id = String::from("call_0_0_case0_0_case1_0");
+                    let __awfl_effect_id = String::from("call_0_0_case0_0_case1_0");
 
                     let mut __awfl_saved = std::collections::BTreeMap::new();
                     if let Some(value) = slots.get("s2") {
@@ -89,7 +92,7 @@ fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<
             10 => {
                     // AWFL 0.0.case0.0.case0.1
                     let __awfl_args = (slots.get("s0").cloned().ok_or("missing continuation slot: s0")?).to_plain_json()?;
-                    let mut __awfl_effect_id = String::from("call_0_0_case0_0_case0_1");
+                    let __awfl_effect_id = String::from("call_0_0_case0_0_case0_1");
 
                     let mut __awfl_saved = std::collections::BTreeMap::new();
                     if let Some(value) = slots.get("s1") {
@@ -111,7 +114,7 @@ fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<
             11 => {
                     // AWFL 0.0.case0.0.case0.0
                     let __awfl_args = (AwflValue::Map(std::collections::BTreeMap::from([("url".to_owned(), AwflValue::String("https://example.org/deep-a".to_owned()))]))).to_plain_json()?;
-                    let mut __awfl_effect_id = String::from("call_0_0_case0_0_case0_0");
+                    let __awfl_effect_id = String::from("call_0_0_case0_0_case0_0");
 
                     let mut __awfl_saved = std::collections::BTreeMap::new();
                     if let Some(value) = slots.get("s0") {

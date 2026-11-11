@@ -31,25 +31,34 @@ Local source inventory (requires sibling repository clones):
 python3 scripts/source_inventory.py --output docs/phase0-source-inventory.json
 ```
 
-Runtime unit tests (requires Rust 1.99.1):
+## Local tests in the AWFL compiler-rust environment
+
+Use the AWFL `scala` image profile: Java 21, sbt 1.11.0, Rust 1.99.1,
+Cargo/Clippy, and a working C linker. This profile is equipped with Rust
+through [server PR #77](https://github.com/awfl-us/server/pull/77); existing
+consumers created before its deployment require a one-time local Rust/linker
+setup. **Run locally before triggering CI**, using the same project-scoped
+consumer and workspace:
 
 ```bash
-cargo test --workspace
+cd /workspace/compiler-rust
+scripts/test-local.sh --smoke  # Scala DSL + Rust runtime + real workflow
+scripts/test-local.sh --full   # Also run all compiled CFG/effect-resume fixtures
 ```
 
-Scala → Rust integration smoke test (requires the typed DSL PR published locally):
+The script publishes the existing operation-constants DSL artifact locally,
+loads and compiles an **unchanged** `LoadConversationHistory.scala` from the
+sibling Workflows checkout, builds actual Rust executable crates, tests HTTP
+intent + checkpoint resume **without contacting the endpoint**, and checks
+pure workflow outputs. The full option also tests nested branches, loops,
+folds, effect IDs, checkpoint corruption, and replay using fresh Rust
+processes. No production workflow routing is enabled by these tests.
 
-```bash
-cd frontend
-sbt -batch 'Test / runMain us.awfl.compiler.rust.FrontendSmoke'
-sbt -batch 'Test / runMain us.awfl.compiler.rust.ControlFlowSmoke'
-sbt -batch 'Test / runMain us.awfl.compiler.rust.NativeCliSmoke'
-cd ..
-cargo build --manifest-path fixtures/native-smoke/Cargo.toml
-python3 scripts/test_native_smoke.py
-python3 scripts/test_control_flow.py
-python3 scripts/test_native_protocol.py
-```
+The actual local run on November 11 passed **10 runtime unit tests**, all
+**four Scala frontend suites**, pure workflow inputs, the real HTTP-effect
+workflow's suspend/resume sequence, and both compiled control-flow and
+continuation conformance suites. The first invocation populated Scala/Cargo
+caches; subsequent runs reuse them.
 
 The shared operation identity catalog is maintained in `awfl-us/dsl`, not copied
 into this repository. The YAML backend in `awfl-us/compiler-yaml` must retain

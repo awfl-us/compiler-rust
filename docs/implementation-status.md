@@ -97,6 +97,24 @@ execution disabled until wider equivalence and safety tests pass.
   A glibc-linked pilot failed with `ENOENT` at Alpine process startup; the
   corrected executable has no dynamic ELF interpreter.
 
+## November 11: local compiler test environment (verified)
+
+- The `compiler-rust` project consumer was restarted using the `scala`
+  image profile instead of `lightweight`. Java 21 and sbt 1.11 are available;
+  Rust 1.99.1 / Cargo / Clippy and a verified Zig-backed C linker were
+  installed in this consumer to enable local testing. Future Scala images
+  will include the toolchain from [server PR #77](https://github.com/awfl-us/server/pull/77).
+- Tests were executed **inside the project GKE consumer**, not delegated to
+  GitHub Actions: 10 Rust runtime unit tests, Rustfmt and strict Clippy,
+  `FrontendSmoke`, `ControlFlowLoweringSmoke`, `ControlFlowSmoke`,
+  `NativeCliSmoke`, generated pure Rust executable (three inputs), a real
+  unchanged `LoadConversationHistory` compiled to Rust and tested for
+  HTTP intent and deterministic checkpoint resume (no live network call),
+  and both native control-flow and effect/replay process test suites.
+- Reproduce with `scripts/test-local.sh --smoke` or `--full`. The older
+  CI flow remains final verification; the local script is the preferred
+  feedback loop and does not enable production native routing.
+
 ## Verified live GCP pilot
 
 On November 11, a direct trusted GCP canary created a pure `NativePilot`
