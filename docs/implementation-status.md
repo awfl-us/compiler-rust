@@ -4,6 +4,38 @@
 IPC protocol 2**. The normal Cloud Run API and Jobs revisions retain native
 execution disabled until wider equivalence and safety tests pass.
 
+## November 11: restored original DSL architecture (verified)
+
+- `awfl-us/dsl` PR #2 replaces the accidental typed DSL additions with only
+  `CelFunctions` / `CallOperations` backend-neutral String constants. The
+  original `CelFunc`, `CelOp`, `Call` AST classes and the four global Value
+  placeholders are **byte-for-byte unchanged from the pre-Rust DSL baseline**.
+  DSL helpers only substitute the operation-name constants; no new AST or
+  overloaded constructors are required. DSL test `OperationNamesSmoke` passed
+  when run by the YAML CI job.
+- `awfl-us/compiler-yaml` PR #1 maps 22 function names and 10 call names to
+  their exact previous Google Workflows spellings, preserving pre-existing
+  literal-name support during migration. Its complete 32-operation name matrix
+  and CEL/Call shape tests **passed** in GitHub Actions run
+  [43079160824](https://github.com/awfl-us/compiler-yaml/actions/runs/43079160824).
+- The compiler-rust frontend now consumes the original DSL objects and
+  translates operation-name Strings into **compiler-private** `FunctionId`,
+  `CallId`, `OperatorId` and `GlobalId` enums. Existing CEL operators keep
+  their original `CelOp` form. Unknown names fail closed with node-context
+  errors. There is no separate typed DSL API and no DSL-level registry.
+- Full native CI passed in push run
+  [43078380650](https://github.com/awfl-us/compiler-rust/actions/runs/43078380650)
+  and PR run [43078395004](https://github.com/awfl-us/compiler-rust/actions/runs/43078395004),
+  including a real Scala `NativeMain` → Cargo → Rust execution, generated
+  Rust Clippy and nested effect continuation tests.
+- **Rollout**: this is on feature branches, not a coordinated released
+  DSL/YAML/compiler version. Publish the shared constants and updated YAML
+  mapping as one compatible change before migrating existing workflow name
+  literals or enabling native execution. Native Rust has many registered
+  function-name IDs whose actual code-generation semantics are still
+  explicitly unsupported; the 32-name YAML matrix does **not** imply full
+  Rust function/effect parity.
+
 ## Compiler: implemented
 
 - Scala 3 `frontend/` loads constructed AWFL DSL workflow objects through the
