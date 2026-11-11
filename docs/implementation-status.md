@@ -32,8 +32,11 @@ execution disabled until wider equivalence and safety tests pass.
   Rust test scripts execute pure output and repeatedly suspend/resume actual
   compiled effects in fresh subprocesses. Nested three-level Switch and a
   nested range followed by a sibling effect are also in the test matrix.
-- Current compiler changes are under CI verification; do not treat newly
-  added scenarios as passing until GitHub Actions reports success.
+- **Verified:** CI for compiler head `2ca8a93` passed both Rust and Scala
+  jobs in [push run 43073698052](https://github.com/awfl-us/compiler-rust/actions/runs/43073698052)
+  and [PR run 43073715306](https://github.com/awfl-us/compiler-rust/actions/runs/43073715306).
+  This includes real Cargo-built executable tests, strict Clippy, deep
+  Switch/ForRange continuation tests and malformed checkpoint rejection.
 
 ## Related repositories and production wiring
 
