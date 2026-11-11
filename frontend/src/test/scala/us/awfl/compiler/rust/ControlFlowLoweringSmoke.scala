@@ -2,7 +2,6 @@ package us.awfl.compiler.rust
 
 import us.awfl.compiler.rust.Ir.*
 import us.awfl.compiler.rust.ControlFlowIr.*
-import us.awfl.dsl.CallId
 
 /** Deterministic CFG, nested control-flow and liveness regression checks. */
 object ControlFlowLoweringSmoke {

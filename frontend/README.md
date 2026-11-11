@@ -29,7 +29,7 @@ native routing. See [implementation status](../docs/implementation-status.md).
 
 ## Test commands
 
-The temporary typed operation dependency lives at
+The temporary operation-constants DSL dependency lives at
 `us.awfl:dsl_3:0.1.0-SNAPSHOT` until the coordinated DSL release.
 
 ```bash
@@ -66,11 +66,13 @@ new processes resume without repeating completed control flow or effects.
 See the [protocol](../docs/native-ipc-v2.md) and
 [CFG architecture](../docs/native-control-flow-refactor-plan.md).
 
-The native compiler requires typed `TypedCall`, `CelFunction`, `CelBinary`
-and `CelUnary` nodes with canonical IDs; untyped string-based Calls/functions/
-operators are rejected with node-context diagnostics rather than mapped via
-compatibility registries. The Google/YAML compiler remains independently
-responsible for supporting existing DSL callers during their migration.
+The native compiler consumes the **original** `CelFunc`, `CelOp`, and `Call`
+DSL classes. Use `CelFunctions.Length`, `CallOperations.HttpPost`, and other
+backend-neutral operation-name constants in the existing constructors. The
+Rust frontend converts these strings into **compiler-private** operation IDs
+and compiled expressions. Operators keep their original `CelOp` representation;
+unknown function/call IDs fail with node-context diagnostics. YAML continues
+to compile existing literal Google names while they are migrated.
 
 The current subset covers pure and effectful Switch, ForRange, For, Fold,
 sequential Calls, nested control flow and early Return. `Try`, `Raise`,

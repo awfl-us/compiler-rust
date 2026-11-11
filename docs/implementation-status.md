@@ -10,9 +10,10 @@ execution disabled until wider equivalence and safety tests pass.
   existing `awfl-us/compiler.WorkflowLoader`. It normalizes typed expressions
   and step identities, builds deterministic, statically compiled CFG blocks,
   computes live continuation slots, and emits Rust plus source-hash manifest.
-  No Google Workflows YAML is parsed or interpreted at runtime. Untyped
-  string-based Calls, functions and operators are rejected; only canonical
-  typed operation IDs enter the native IR.
+  No Google Workflows YAML is parsed or interpreted at runtime. The existing
+  `CelFunc`, `CelOp`, and `Call` objects remain the DSL input; constant-name
+  CEL functions/calls are resolved to compiler-internal operation IDs, while
+  existing CEL operators are translated directly to native expressions.
 - **One emitter:** `RustEmitter.emit/write` uses `StateMachineEmitter` for
   *both* pure and effectful workflows. `NativeCompiler.compile` and
   `NativeMain` use this same path. The older standalone emitters, protocol-v1
@@ -42,12 +43,14 @@ execution disabled until wider equivalence and safety tests pass.
 
 ## Related repositories and production wiring
 
-- Typed operation IDs were introduced in [dsl PR #2](https://github.com/awfl-us/dsl/pull/2)
-  and Google/YAML rendering updates in
-  [compiler-yaml PR #1](https://github.com/awfl-us/compiler-yaml/pull/1).
-  The frontend currently pins a temporary typed DSL snapshot. Coordinated
-  artifact publication and migration of remaining string-based DSL calls
-  are still required.
+- [dsl PR #2](https://github.com/awfl-us/dsl/pull/2) now adds only
+  `CelFunctions` and `CallOperations` string constants, preserving original
+  AST classes and helper interfaces. The earlier typed API/registry was
+  reverted. [compiler-yaml PR #1](https://github.com/awfl-us/compiler-yaml/pull/1)
+  renders constants into original Google names while retaining unconverted
+  literal names for existing workflows. The frontend pins that DSL branch
+  until coordinated publishing; downstream workflow calls can be migrated by
+  replacing strings with constants, not constructors.
 - [server PR #72](https://github.com/awfl-us/server/pull/72) merged the
   opt-in shared-launcher selection, IAM-owned GCS artifact lookup, Firestore
   checkpoints/effect journal, Cloud Tasks dispatch, OIDC-protected Jobs route,

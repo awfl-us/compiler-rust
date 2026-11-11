@@ -24,11 +24,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # Temporary pinned dependency until the typed DSL registry is released.
+      # Pin the existing DSL with operation-name constants, no new AST classes.
       - uses: actions/checkout@v4
         with:
           repository: awfl-us/dsl
-          ref: 5b041e1e9c5d153e4ff76a9845bfabbbd7d04628
+          ref: a05ea13
           path: _dsl
       - uses: actions/setup-java@v4
         with:
@@ -38,10 +38,10 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.99.1'
-      - name: Publish pinned typed DSL locally
+      - name: Publish pinned operation-constants DSL locally
         # dsl's dynver uses release tags when CI=true; force the temporary
         # snapshot coordinate expected by frontend/build.sbt.
-        run: cd _dsl && sbt -batch 'set ThisBuild / version := "0.1.0-SNAPSHOT"' publishLocal
+        run: cd _dsl && sbt -batch 'set ThisBuild / version := "0.1.0-SNAPSHOT"' publishLocal 'Test / runMain us.awfl.dsl.OperationNamesSmoke'
       - name: Normalize DSL, test control flow, and load builders via existing compiler
         run: |
           cd frontend

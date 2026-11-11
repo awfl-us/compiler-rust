@@ -32,13 +32,45 @@ Source snapshots (Git tree SHAs, not asserted commit SHAs):
 - server/workflows/callbacks/index.js already dispatches mcp_request callbacks locally, while workflow callbacks forward to Google. Extend the common callback service with a Rust execution kind.
 - server/workflows/exec/stop.js traverses execution relationships and cancels Google executions. Backend-aware cancellation belongs here, not in a second MCP-specific executor.
 
-## 2. First deliverable: typed, backend-neutral operation identities
+## 2. Backend-neutral operation names WITHOUT changing the existing DSL AST
 
-Put the canonical registry in dsl, shared by both backends. Use separate sealed enums/types for FunctionId, CallId, GlobalId, OperatorId and RetryPolicyId. Stable wire IDs below are proposed; Scala constants such as FunctionId.MapGet and CallId.HttpPost are the authoring API. Do not merely move opaque Google strings into differently named String constants.
+**Architecture decision (2026-11-11, supersedes the original typed-DSL plan):**
+`awfl-us/dsl` must retain **exactly** its existing `CelFunc(name: String,
+params: List[Cel])`, `CelOp(left, op: String, right)` and `Call(name, call:
+String, args)` representation, along with its original global Value
+placeholders, CEL operators, and helpers. Do not add `TypedCall`, `CelFunction`,
+`CelBinary`, `CelUnary`, `CelGlobal`, new typed literal AST, DSL-level
+`OperationRegistry`, or operator/return-value rewrites. The commit that added
+these classes was an overextension and has been corrected on the DSL PR.
 
-Each registry entry specifies argument names/arity, accepted value types, result shape, error contract, determinism/effect classification, Google spelling, and Rust implementation capability/version. Keep expression functions separate from effectful Calls. Reject unknown IDs before deployment with workflow/node/source context.
+The **only DSL functionality added** for Rust interoperability is a pair of
+ordinary backend-neutral string constant namespaces:
 
-Retain deprecated String overloads for migration: resolve known legacy names through one alias table; unknown strings remain YAML-only with an explicit unsupported diagnostic for Rust. No arbitrary eval or silent HTTP fallback.
+```scala
+CelFunc(CelFunctions.Length, myList.cel)
+Call("send", CallOperations.HttpPost, obj(args))
+```
+
+Both constructors are the *original* constructors. Migration of existing
+workflows consists of replacing their literal function/call-name strings with
+these constants, without changing the expression/step shape or Scala type
+signatures. `CelOp` is unchanged and remains string-operator based. Helpers in
+`dsl/Value.scala` also only substitute name constants. The original
+`dsl/Global.scala` placeholders remain unchanged; the Rust compiler handles
+trusted context separately, without imposing new DSL classes.
+
+`compiler-yaml` maps each constant's semantic wire string to its original
+Google CEL function or connector name (`value.length` -> `len`, `workflow.run`
+-> `googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run`).
+During migration it **continues to accept the existing literal Google names**.
+The Rust compiler matches the constant strings to an **internal-only**
+operation enum with validated arity and native implementation support.
+Unknown names fail with a workflow/node diagnostic. The Rust compiler does
+not run a general CEL interpreter and does not silently fall back to YAML.
+
+Keep operation semantics, arity/type checks, runtime capabilities, native
+source generation and error parity in the compilers and native runtime, **not
+in the public DSL**. New semantics are added there when backed by tests.
 
 ### Expression inventory and exact proposed mapping
 
@@ -51,7 +83,7 @@ Retain deprecated String overloads for migration: resolve known legacy names thr
 | len | value.length | Lists, maps, strings, bytes as supported |
 | map.get | map.get | Single key and key-path list; missing versus null |
 | map.merge | map.merge | Merge direction and shallow behavior |
-| list.concat | list.append | Appends one value; do not accidentally flatten a list |
+| list.concat | list.concat | Preserve the exact Google concatenation behavior; do not silently change it to single-item append |
 | json.decode | json.decode | String/bytes, numeric representation, errors |
 | json.encode | json.encode_bytes | Produces bytes, not a JSON string |
 | json.encode_to_string | json.encode_string | Escaping and representation |
@@ -91,13 +123,12 @@ HTTP results must retain body and also support code/headers for future consumers
 workflow.run needs synchronous result and asynchronous skip_polling modes. Normalize the Google workflow_id/argument/location/project_id/connector_params shape to a native contract with a compatibility adapter; define and test the asynchronous return shape against the old connector before rollout.
 
 ### Globals, operators and raw syntax
-- WORKFLOW_ID -> GlobalId.WorkflowId; WORKFLOW_EXECUTION_ID -> ExecutionId; PROJECT_ID -> CloudProjectId; LOCATION -> Region.
+- Preserve the four original DSL Value placeholders unchanged (`WORKFLOW_ID`, `WORKFLOW_EXECUTION_ID`, `PROJECT_ID`, `LOCATION`). YAML substitutes them as before; the native compiler recognizes their existing value shapes and defers to trusted server bindings. Never add a DSL `CelGlobal` class.
 - Preserve the distinction between GCP PROJECT_ID and tenant Env.projectId. Inject both from server-owned context. A resumed execution retains its workflow/execution/deployment identity.
-- Implement typed references for globals instead of matching ordinary Value objects by equality.
-- Normalize ==, !=, >, >=, <, <=, +, -, *, //, in, and, or, unary not. Current unary not is encoded as a special CelOp; give it a real unary node.
+- Normalize existing `CelOp` syntax (`==`, `!=`, `>`, `>=`, `<`, `<=`, `+`, `-`, `*`, `//`, `in`, `and`, `or` and special unary `not`) into **compiler-internal** binary/unary IR. Do not replace CEL operators in the DSL.
 - Preserve short-circuit boolean evaluation. Define integer division, overflow, mixed number comparison, negative indexing behavior and errors through conformance tests.
 - Replace Value("sys.now()"), CelConst("sys.now()") and Value("uuid.generate()") in utilities and application workflows.
-- Replace raw list constants (including nested map.get key paths), dotted input.env references, null/numeric literals, CelOps list rendering and string escaping with structured nodes.
+- Interpret existing raw list constants (including nested map.get key paths), dotted input.env references, null/numeric literals, CelOps list rendering and string escaping in the Rust *normalizer*, without extending the DSL AST.
 - CelStr.safe pre-escapes content for YAML. Normalize string contents once and let each backend escape its output; prevent double escaping.
 - Unknown raw CEL fails Rust compilation with a migration suggestion. A small compatibility parser for the known literal/reference subset is acceptable during migration; a general CEL interpreter is not required.
 - Replace WORKFLOW_ENV text substitutions with manifest/deployment bindings, including child workflow names and workflow-file bucket names.
@@ -273,12 +304,13 @@ restructuring or a versioned frontend boundary to avoid a compiler cycle.
 - Record current YAML results/errors and latency for synthetic fixtures and one agent workflow.
 Gate: every observed operation/raw expression classified; baseline artifacts reproducible.
 
-### Phase 1 — Generic constants and structured expressions FIRST
-- Add the registry, aliases, GlobalRef and structured literals/references/operators to dsl.
-- Migrate DSL helpers, workflow-utils, application workflows and YAML-introduced operations.
-- Replace hidden clock/UUID/raw expression paths and deployment substitutions.
-- Update compiler-yaml to render the same Google names from canonical IDs.
-Gate: YAML fixture behavior preserved, no unclassified operations in pilot ASTs, unsupported raw syntax gives actionable errors.
+### Phase 1 — Add operation constants only; preserve the DSL API
+- Add only `CelFunctions` and `CallOperations` constant names to the DSL and substitute them in existing helpers. Revert all introduced typed AST classes and the DSL operation registry.
+- Update YAML to map these constants back to Google names while preserving literal Google names for existing, not-yet-migrated workflows.
+- Migrate application workflows and workflow-utils **by substituting operation-name constants**, not by changing AST constructors or CEL operator nodes.
+- Match constants in the Rust frontend and translate the existing `CelOp` form into compiler-internal IR; keep unknown operations explicitly unsupported.
+- Audit hidden clock/UUID/raw expressions and deployment substitutions separately without modifying DSL AST types.
+Gate: YAML fixture behavior unchanged, existing workflow Scala code compiles, native generated Rust conforms, and unsupported raw syntax produces actionable diagnostics.
 
 ### Phase 2 — Native backend MVP
 - Introduce normalization/IR, stable slots/IDs, Rust emitter and runtime value/error library.

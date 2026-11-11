@@ -1,7 +1,6 @@
 package us.awfl.compiler.rust
 
 import us.awfl.compiler.rust.Ir.*
-import us.awfl.dsl.{FunctionId, OperatorId}
 
 /** Centralized typed expression and string-literal Rust rendering. */
 object ExpressionEmitter {

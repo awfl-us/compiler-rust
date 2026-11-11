@@ -56,26 +56,23 @@ object Normalize {
       case text if text.matches("-?(0|[1-9][0-9]*)\\.[0-9]+([eE][+-]?[0-9]+)?") =>
         text.toDoubleOption.filter(_.isFinite).map(FloatValue(_))
           .getOrElse(fail(where, s"non-finite/invalid floating-point literal: $text"))
-      case other => fail(where, s"unsupported raw CEL/reference '$other'; use typed literals, globals and operations")
+      case other => fail(where, s"unsupported raw CEL/reference '$other'; use valid DSL values or expressions")
     }
 
     def cel(node: Cel, where: String): Expr = node match {
       case CelConst(value) => raw(value, where)
-      case CelStr(value) => StringValue(value)
-      case CelString(value) => StringValue(value)
-      case CelInteger(value) => IntValue(value)
-      case CelBoolean(value) => BoolValue(value)
-      case CelNull => NullValue
-      case CelList(xs) => Ir.ListValue(xs.zipWithIndex.map((x, i) => cel(x, s"$where[$i]")).toVector)
+      case CelStr(value) => GlobalId.resolve(value).map(Global(_)).getOrElse(StringValue(value))
       case CelValue(value) => valueExpr(value, where)
-      case CelGlobal(id) => Global(id)
-      case CelFunction(id, params) => function(id, params, where)
-      case CelFunc(name, _) =>
-        fail(where, s"untyped CEL function '$name'; construct CelFunction with FunctionId")
-      case CelBinary(left, id, right) => Binary(cel(left, where), id, cel(right, where))
-      case CelUnary(id, value) => Unary(id, cel(value, where))
-      case CelOp(_, name, _) =>
-        fail(where, s"untyped CEL binary operator '$name'; construct CelBinary with OperatorId")
+      case CelFunc(name, params) =>
+        val id = FunctionId.resolve(name).getOrElse(
+          fail(where, s"unknown native CEL function '$name'; use CelFunctions constants"))
+        function(id, params, where)
+      case CelOp(CelConst("not"), "", value) =>
+        Unary(OperatorId.Not, cel(value, where))
+      case CelOp(left, symbol, right) =>
+        val id = OperatorId.resolve(symbol, 2).getOrElse(
+          fail(where, s"unknown CEL operator '$symbol'"))
+        Binary(cel(left, where), id, cel(right, where))
       case CelPath(path) =>
         path match {
           case Nil => fail(where, "empty reference path")
@@ -89,9 +86,8 @@ object Normalize {
     }
 
     def function(id: FunctionId, params: List[Cel], where: String): Expr = {
-      val signature = OperationRegistry.functions(id)
-      if (!signature.acceptsArity(params.size))
-        fail(where, s"${id.wireId} expects ${signature.minArity}-${signature.maxArity} arguments, got ${params.size}")
+      if (params.size < id.minArity || params.size > id.maxArity)
+        fail(where, s"${id.wireId} expects ${id.minArity}-${id.maxArity} arguments, got ${params.size}")
       Function(id, params.zipWithIndex.map((x, i) => cel(x, s"$where.arg$i")).toVector)
     }
 
@@ -136,11 +132,11 @@ object Normalize {
         val where = s"workflow=$workflowName node=$nodeId step='${step.name}'"
         step match {
           case call: Call[?, ?] =>
-            fail(where, s"untyped Call '${call.call}'; construct TypedCall with CallId")
-          case call: TypedCall[?, ?] =>
+            val id = CallId.resolve(call.call).getOrElse(
+              fail(where, s"unknown native Call '${call.call}'; use CallOperations constants"))
             val args = valueExpr(call.args, s"$where.args")
             val slot = register(call.resultValue, where)
-            Vector(Effect(nodeId, step.name, call.id, args, slot))
+            Vector(Effect(nodeId, step.name, id, args, slot))
           case ret: Return[?] =>
             Vector(EarlyReturn(nodeId, step.name, valueExpr(ret.value, where)))
           case block: Block[?, ?] =>

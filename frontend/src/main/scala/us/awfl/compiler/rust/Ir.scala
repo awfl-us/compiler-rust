@@ -1,6 +1,5 @@
 package us.awfl.compiler.rust
 
-import us.awfl.dsl.{CallId, FunctionId, GlobalId, OperatorId}
 
 object Ir {
   final case class CompileError(location: String, explanation: String)

@@ -12,6 +12,6 @@ object NativeCliFixture extends CoreWorkflow {
   override def workflowName: String = "cli-fixture"
   override def workflows: List[DslWorkflow[?]] =
     List(DslWorkflow(
-      List.empty[Step[?, ?]] -> Value[Int](inputVal.cel + CelInteger(1)),
+      List.empty[Step[?, ?]] -> Value[Int](inputVal.cel + CelConst("1")),
       Some("increment")))
 }

@@ -10,7 +10,7 @@ object FrontendSmoke {
   def main(args: Array[String]): Unit = {
     val input = Value[Int]("input")
     val output = obj(Map(
-      "score" -> Value[Int](input.cel + CelInteger(7)),
+      "score" -> Value[Int](input.cel + CelConst("7")),
       "name" -> obj("native"),
       "valid" -> obj(true)
     ))
@@ -41,10 +41,10 @@ object FrontendSmoke {
     assert(RustEmitter.emit(Normalize(echo)).source.contains("input.clone()"))
 
     // Effects compile to a versioned suspension request; no HTTP runs locally.
-    val call = TypedCall[Map[String, String], String]("fetch", CallId.HttpPost, obj(Map("url" -> "https://example.org")))
+    val call = Call[Map[String, String], String]("fetch", CallOperations.HttpPost, obj(Map("url" -> "https://example.org")))
     val effectFlow = Workflow((List(call), call.resultValue))
     val effect = Normalize(effectFlow)
-    assert(effect.effects.map(_.id) == Vector(CallId.HttpPost))
+    assert(effect.effects.map(_.id.wireId) == Vector(CallOperations.HttpPost))
     assert(effect.effects.map(_.resultSlot) == Vector("s0"))
     assert(effect == Normalize(effectFlow))
     val protocol = RustEmitter.write(effect,
@@ -54,46 +54,38 @@ object FrontendSmoke {
     assert(protocol.manifest.contains("http.post"))
     assert(protocol.manifest.contains("\"runtime_abi\":3"))
 
-    val invalidCall = Call[Map[String, String], String]("custom", "provider.unclassified", obj(Map("x" -> "y")))
-    val diagnostic2 = try {
-      Normalize(Workflow((List(invalidCall), invalidCall.resultValue)))
-      throw new AssertionError("unknown legacy target should be rejected for Rust")
-    } catch {
-      case e: CompileError => e.getMessage
-    }
-    assert(diagnostic2.contains("provider.unclassified"))
-    assert(diagnostic2.contains("TypedCall"))
+    // The existing CEL/Call constructors work without a parallel typed AST.
+    val known = Value[Int](CelFunc(CelFunctions.Length, CelConst("input")))
+    assert(RustEmitter.emit(Normalize(Workflow((List.empty[Step[?, ?]], known))))
+      .source.contains("ops::length"))
+    val unknownCall = Call[Map[String, String], String]("custom",
+      "provider.unclassified", obj(Map("x" -> "y")))
+    val callDiagnostic = try {
+      Normalize(Workflow((List(unknownCall), unknownCall.resultValue)))
+      throw new AssertionError("expected unknown Call rejection")
+    } catch { case e: CompileError => e.getMessage }
+    assert(callDiagnostic.contains("provider.unclassified"))
+    assert(callDiagnostic.contains("CallOperations"))
 
-    // Even *registered* string names must not silently compile: this module
-    // is new and accepts typed operation IDs only, not legacy DSL adapters.
-    val untypedCall = Call[Map[String, String], String](
-      "untyped", "http.post", obj(Map("url" -> "https://example.org")))
-    val untypedError = try {
-      Normalize(Workflow((List(untypedCall), untypedCall.resultValue)))
-      throw new AssertionError("expected untyped Call rejection")
-    } catch {
-      case e: CompileError => e.getMessage
-    }
-    assert(untypedError.contains("TypedCall") && untypedError.contains("http.post"))
+    val functionDiagnostic = try {
+      Normalize(Workflow((List.empty[Step[?, ?]],
+        Value[Int](CelFunc("len", CelConst("input"))))))
+      throw new AssertionError("expected unknown CEL function rejection")
+    } catch { case e: CompileError => e.getMessage }
+    assert(functionDiagnostic.contains("CelFunctions"))
+    assert(functionDiagnostic.contains("len"))
 
-    val untypedFunction = Value[Int](CelFunc(
-      "len", List(CelList(List(CelInteger(1))))))
-    val untypedFunctionError = try {
-      Normalize(Workflow((List.empty[Step[?, ?]], untypedFunction)))
-      throw new AssertionError("expected untyped CEL function rejection")
-    } catch {
-      case e: CompileError => e.getMessage
-    }
-    assert(untypedFunctionError.contains("CelFunction"))
+    val operatorDiagnostic = try {
+      Normalize(Workflow((List.empty[Step[?, ?]],
+        Value[Int](CelOp(CelConst("1"), "**", CelConst("2"))))))
+      throw new AssertionError("expected unknown CEL operator rejection")
+    } catch { case e: CompileError => e.getMessage }
+    assert(operatorDiagnostic.contains("unknown CEL operator '**'"))
 
-    val untypedOperator = Value[Int](CelOp(CelInteger(1), "+", CelInteger(2)))
-    val untypedOperatorError = try {
-      Normalize(Workflow((List.empty[Step[?, ?]], untypedOperator)))
-      throw new AssertionError("expected untyped CEL operator rejection")
-    } catch {
-      case e: CompileError => e.getMessage
-    }
-    assert(untypedOperatorError.contains("CelBinary"))
+    // Existing CelOp syntax remains valid for native Rust generation.
+    assert(RustEmitter.emit(Normalize(Workflow((List.empty[Step[?, ?]],
+      Value[Int](CelOp(CelConst("1"), "+", CelConst("2")))))))
+      .source.contains("ops::add"))
 
     val scratch = java.nio.file.Files.createTempDirectory("awfl-native-frontend-")
     val artifacts = NativeCompiler.compile(List(wf), "batch", scratch, runtime)

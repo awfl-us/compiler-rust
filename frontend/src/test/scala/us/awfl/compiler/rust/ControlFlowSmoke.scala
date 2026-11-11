@@ -15,8 +15,8 @@ object ControlFlowSmoke {
 
     val input = Value[Int]("input")
     val branch = Switch("choice", List(
-      (input.cel > CelInteger(4)) -> (List.empty[Step[?, ?]] -> obj(100)),
-      CelBoolean(true) -> (List.empty[Step[?, ?]] -> obj(200))
+      (input.cel > CelConst("4")) -> (List.empty[Step[?, ?]] -> obj(100)),
+      CelConst("true") -> (List.empty[Step[?, ?]] -> obj(200))
     ))
     val switchFlow = Workflow((List(branch), branch.resultValue), Some("switch"))
     val switchIR = Normalize(switchFlow)
@@ -25,13 +25,13 @@ object ControlFlowSmoke {
     RustEmitter.write(switchIR, base.resolve("native-switch"), runtime)
 
     val unmatched = Switch("no-match", List(
-      (input.cel > CelInteger(10)) -> (List.empty[Step[?, ?]] -> obj(100))
+      (input.cel > CelConst("10")) -> (List.empty[Step[?, ?]] -> obj(100))
     ))
     RustEmitter.write(Normalize(Workflow((List(unmatched), unmatched.resultValue), Some("no-match"))),
       base.resolve("native-unmatched"), runtime)
 
-    val range = ForRange[Int]("range", CelInteger(-2), CelInteger(2)) { i =>
-      List.empty[Step[?, ?]] -> Value[Int](i + CelInteger(10))
+    val range = ForRange[Int]("range", CelConst("-2"), CelConst("2")) { i =>
+      List.empty[Step[?, ?]] -> Value[Int](i + CelConst("10"))
     }
     val rangeIR = Normalize(Workflow((List(range), range.resultValue), Some("range")))
     assert(rangeIR.steps.head.isInstanceOf[RepeatRange])
@@ -39,16 +39,16 @@ object ControlFlowSmoke {
 
     val iterable = us.awfl.dsl.ListValue[Int](CelConst("input"))
     val each = us.awfl.dsl.For[Int, Int]("each", iterable) { item =>
-      List.empty[Step[?, ?]] -> Value[Int](item.cel + CelInteger(3))
+      List.empty[Step[?, ?]] -> Value[Int](item.cel + CelConst("3"))
     }
     val eachIR = Normalize(Workflow((List(each), each.resultValue), Some("each")))
     assert(eachIR.steps.head.isInstanceOf[RepeatEach])
     RustEmitter.write(eachIR, base.resolve("native-each"), runtime)
 
-    val nested = ForRange[Int]("outer", CelInteger(0), CelInteger(4)) { index =>
+    val nested = ForRange[Int]("outer", CelConst("0"), CelConst("4")) { index =>
       val choose = Switch("inner", List(
-        (index > CelInteger(1)) -> (List.empty[Step[?, ?]] -> obj(9)),
-        CelBoolean(true) -> (List.empty[Step[?, ?]] -> Value[Int](index + CelInteger(2)))
+        (index > CelConst("1")) -> (List.empty[Step[?, ?]] -> obj(9)),
+        CelConst("true") -> (List.empty[Step[?, ?]] -> Value[Int](index + CelConst("2")))
       ))
       List(choose) -> choose.resultValue
     }
@@ -67,9 +67,9 @@ object ControlFlowSmoke {
 
     // Explicit Return exits the workflow even from inside a nested branch.
     val early = Switch("early", List(
-      (input.cel > CelInteger(0)) ->
+      (input.cel > CelConst("0")) ->
         (List[Step[?, ?]](Return("stop", obj(777))) -> obj(0)),
-      CelBoolean(true) -> (List.empty[Step[?, ?]] -> obj(42))
+      CelConst("true") -> (List.empty[Step[?, ?]] -> obj(42))
     ))
     val earlyIR = Normalize(Workflow((List(early), early.resultValue), Some("early-return")))
     assert(earlyIR.nodeIds.contains("0.0.case0.0"))
@@ -82,16 +82,16 @@ object ControlFlowSmoke {
 
     // A selected branch is pinned across subprocess restarts. Its second
     // Call depends on the first; the other branch has an independent Call.
-    val branchFirst = TypedCall[Map[String, String], String](
-      "first-branch", CallId.HttpPost, obj(Map("url" -> "https://example.org/branch-a")))
-    val branchSecond = TypedCall[String, String](
-      "second-branch", CallId.HttpPost, branchFirst.resultValue)
-    val otherBranch = TypedCall[Map[String, String], String](
-      "other-branch", CallId.HttpPost, obj(Map("url" -> "https://example.org/branch-b")))
+    val branchFirst = Call[Map[String, String], String](
+      "first-branch", CallOperations.HttpPost, obj(Map("url" -> "https://example.org/branch-a")))
+    val branchSecond = Call[String, String](
+      "second-branch", CallOperations.HttpPost, branchFirst.resultValue)
+    val otherBranch = Call[Map[String, String], String](
+      "other-branch", CallOperations.HttpPost, obj(Map("url" -> "https://example.org/branch-b")))
     val choiceEffects = Switch("effects-switch", List(
-      (input.cel > CelInteger(0)) ->
+      (input.cel > CelConst("0")) ->
         (List[Step[?, ?]](branchFirst, branchSecond) -> branchSecond.resultValue),
-      (input.cel < CelInteger(0)) ->
+      (input.cel < CelConst("0")) ->
         (List[Step[?, ?]](otherBranch) -> otherBranch.resultValue)
     ))
     val effectChoice = Normalize(Workflow((List[Step[?, ?]](choiceEffects),
@@ -101,22 +101,22 @@ object ControlFlowSmoke {
 
     // Nested Switch: both branch choices are pinned while a dependent second
     // Call resumes; unrelated outer branches do not dispatch effects.
-    val deepFirst = TypedCall[Map[String, String], String](
-      "deep-first", CallId.HttpPost, obj(Map("url" -> "https://example.org/deep-a")))
-    val deepSecond = TypedCall[String, String](
-      "deep-second", CallId.HttpPost, deepFirst.resultValue)
-    val deepAlternate = TypedCall[Map[String, String], String](
-      "deep-alternate", CallId.HttpPost, obj(Map("url" -> "https://example.org/deep-b")))
+    val deepFirst = Call[Map[String, String], String](
+      "deep-first", CallOperations.HttpPost, obj(Map("url" -> "https://example.org/deep-a")))
+    val deepSecond = Call[String, String](
+      "deep-second", CallOperations.HttpPost, deepFirst.resultValue)
+    val deepAlternate = Call[Map[String, String], String](
+      "deep-alternate", CallOperations.HttpPost, obj(Map("url" -> "https://example.org/deep-b")))
     val innerChoice = Switch("inner-choice", List(
-      (input.cel > CelInteger(4)) ->
+      (input.cel > CelConst("4")) ->
         (List[Step[?, ?]](deepFirst, deepSecond) -> deepSecond.resultValue),
-      CelBoolean(true) ->
+      CelConst("true") ->
         (List[Step[?, ?]](deepAlternate) -> deepAlternate.resultValue)
     ))
     val outerChoice = Switch("outer-choice", List(
-      (input.cel > CelInteger(0)) ->
+      (input.cel > CelConst("0")) ->
         (List[Step[?, ?]](innerChoice) -> innerChoice.resultValue),
-      CelBoolean(true) ->
+      CelConst("true") ->
         (List.empty[Step[?, ?]] -> obj("no-effect"))
     ))
     val nestedChoiceProgram = Normalize(Workflow((List[Step[?, ?]](outerChoice),
@@ -127,7 +127,7 @@ object ControlFlowSmoke {
     // A third nested Switch is supported by compiled CFG labels; no replay
     // frame templates or depth-specific backends are required.
     val tooDeep = Switch("third-depth", List(
-      CelBoolean(true) -> (List[Step[?, ?]](outerChoice) -> outerChoice.resultValue)
+      CelConst("true") -> (List[Step[?, ?]](outerChoice) -> outerChoice.resultValue)
     ))
     val deepIR = Normalize(Workflow((List[Step[?, ?]](tooDeep),
       tooDeep.resultValue), Some("third-depth-effects")))
@@ -136,27 +136,27 @@ object ControlFlowSmoke {
 
     // A preceding compiled branch is checkpointed once and restored on resume.
     val beforeEffect = Switch("before-effect", List(
-      (input.cel > CelInteger(0)) -> (List.empty[Step[?, ?]] -> obj(8)),
-      CelBoolean(true) -> (List.empty[Step[?, ?]] -> obj(3))
+      (input.cel > CelConst("0")) -> (List.empty[Step[?, ?]] -> obj(8)),
+      CelConst("true") -> (List.empty[Step[?, ?]] -> obj(3))
     ))
-    val topEffect = TypedCall[Map[String, String], String](
-      "external", CallId.HttpPost, obj(Map("url" -> "https://example.org")))
+    val topEffect = Call[Map[String, String], String](
+      "external", CallOperations.HttpPost, obj(Map("url" -> "https://example.org")))
     val sequence = Workflow((List[Step[?, ?]](beforeEffect, topEffect),
       topEffect.resultValue), Some("resume-after-branch"))
     assert(RustEmitter.emit(Normalize(sequence)).manifest.contains("\"runtime_abi\":3"))
 
-    val firstCall = TypedCall[Map[String, String], String](
-      "first", CallId.HttpPost, obj(Map("url" -> "https://example.org/first")))
-    val secondCall = TypedCall[Map[String, String], String](
-      "second", CallId.HttpPost, obj(Map("url" -> "https://example.org/second")))
+    val firstCall = Call[Map[String, String], String](
+      "first", CallOperations.HttpPost, obj(Map("url" -> "https://example.org/first")))
+    val secondCall = Call[Map[String, String], String](
+      "second", CallOperations.HttpPost, obj(Map("url" -> "https://example.org/second")))
     assert(RustEmitter.emit(Normalize(Workflow((List[Step[?, ?]](firstCall, secondCall),
       secondCall.resultValue), Some("two-effects")))).manifest.contains("\"runtime_abi\":3"))
 
     // A negative-based range tests ordinal iteration IDs, durable prefix
     // results and step-zero resumptions across real native subprocesses.
-    val effectRange = ForRange[String]("effect-range", CelInteger(-2), CelInteger(1)) { _ =>
-      val nestedCall = TypedCall[Map[String, String], String](
-        "nested-call", CallId.HttpPost, obj(Map("url" -> "https://example.org/range")))
+    val effectRange = ForRange[String]("effect-range", CelConst("-2"), CelConst("1")) { _ =>
+      val nestedCall = Call[Map[String, String], String](
+        "nested-call", CallOperations.HttpPost, obj(Map("url" -> "https://example.org/range")))
       List[Step[?, ?]](nestedCall) -> nestedCall.resultValue
     }
     val rangeProgram = Normalize(Workflow((List[Step[?, ?]](effectRange), effectRange.resultValue),
@@ -166,11 +166,11 @@ object ControlFlowSmoke {
 
     // Multiple direct effect sites have distinct structural IDs, even
     // inside the same iteration. The second Call depends on the first.
-    val doubleRange = ForRange[String]("double-range", CelInteger(-1), CelInteger(1)) { _ =>
-      val a = TypedCall[Map[String, String], String](
-        "a", CallId.HttpPost, obj(Map("url" -> "https://example.org/a")))
-      val b = TypedCall[String, String](
-        "b", CallId.HttpPost, a.resultValue)
+    val doubleRange = ForRange[String]("double-range", CelConst("-1"), CelConst("1")) { _ =>
+      val a = Call[Map[String, String], String](
+        "a", CallOperations.HttpPost, obj(Map("url" -> "https://example.org/a")))
+      val b = Call[String, String](
+        "b", CallOperations.HttpPost, a.resultValue)
       List[Step[?, ?]](a, b) -> b.resultValue
     }
     val multiRange = Normalize(Workflow((List[Step[?, ?]](doubleRange), doubleRange.resultValue),
@@ -182,13 +182,13 @@ object ControlFlowSmoke {
     // prefixes, and resumes a dependent second Call within the same inner
     // iteration. The negative outer bound tests ordinal (not raw) IDs.
     val nestedRange = ForRange[String]("outer-effect-range",
-      CelInteger(-1), CelInteger(1)) { _ =>
+      CelConst("-1"), CelConst("1")) { _ =>
       val innerRange = ForRange[String]("inner-effect-range",
-        CelInteger(0), CelInteger(2)) { _ =>
-        val first = TypedCall[Map[String, String], String](
-          "inner-first", CallId.HttpPost, obj(Map("url" -> "https://example.org/nested-range")))
-        val second = TypedCall[String, String](
-          "inner-second", CallId.HttpPost, first.resultValue)
+        CelConst("0"), CelConst("2")) { _ =>
+        val first = Call[Map[String, String], String](
+          "inner-first", CallOperations.HttpPost, obj(Map("url" -> "https://example.org/nested-range")))
+        val second = Call[String, String](
+          "inner-second", CallOperations.HttpPost, first.resultValue)
         List[Step[?, ?]](first, second) -> second.resultValue
       }
       List[Step[?, ?]](innerRange) -> innerRange.resultValue
@@ -200,9 +200,9 @@ object ControlFlowSmoke {
 
     // Mixed effectful outer steps and nested ranges use a single compiled CFG.
     val mixedNestedRange = ForRange[String]("mixed-outer-range",
-      CelInteger(0), CelInteger(1)) { _ =>
-      val unrelated = TypedCall[Map[String, String], String](
-        "unrelated", CallId.HttpPost, obj(Map("url" -> "https://example.org/extra")))
+      CelConst("0"), CelConst("1")) { _ =>
+      val unrelated = Call[Map[String, String], String](
+        "unrelated", CallOperations.HttpPost, obj(Map("url" -> "https://example.org/extra")))
       List[Step[?, ?]](nestedRange, unrelated) -> nestedRange.resultValue
     }
     val mixedNestedIR = Normalize(Workflow((List[Step[?, ?]](mixedNestedRange),
@@ -214,7 +214,7 @@ object ControlFlowSmoke {
     // type. Exercise effectful For/Fold and a Switch inside a ForRange.
     val effectfulEach = us.awfl.dsl.For[String, String]("each-effects",
       us.awfl.dsl.ListValue[String](CelConst("input"))) { item =>
-      val call = TypedCall[String, String]("each-call", CallId.HttpPost, item)
+      val call = Call[String, String]("each-call", CallOperations.HttpPost, item)
       List[Step[?, ?]](call) -> call.resultValue
     }
     val eachEffectsIR = Normalize(Workflow((List[Step[?, ?]](effectfulEach),
@@ -223,7 +223,7 @@ object ControlFlowSmoke {
 
     val effectfulFold = Fold[String, String]("fold-effects", obj("start"),
       us.awfl.dsl.ListValue[String](CelConst("input"))) { (acc, _) =>
-      val call = TypedCall[String, String]("fold-call", CallId.HttpPost, acc)
+      val call = Call[String, String]("fold-call", CallOperations.HttpPost, acc)
       List[Step[?, ?]](call) -> call.resultValue
     }
     val foldEffectsIR = Normalize(Workflow((List[Step[?, ?]](effectfulFold),
@@ -231,12 +231,12 @@ object ControlFlowSmoke {
     assert(foldEffectsIR.effects.size == 1)
 
     val mixedRange = ForRange[String]("range-with-branch",
-      CelInteger(0), CelInteger(2)) { index =>
-      val branchCall = TypedCall[Map[String, String], String](
-        "branch-call", CallId.HttpPost, obj(Map("url" -> "https://example.org/range-branch")))
+      CelConst("0"), CelConst("2")) { index =>
+      val branchCall = Call[Map[String, String], String](
+        "branch-call", CallOperations.HttpPost, obj(Map("url" -> "https://example.org/range-branch")))
       val choose = Switch("choice-in-range", List(
-        (index > CelInteger(0)) -> (List[Step[?, ?]](branchCall) -> branchCall.resultValue),
-        CelBoolean(true) -> (List.empty[Step[?, ?]] -> obj("skipped"))
+        (index > CelConst("0")) -> (List[Step[?, ?]](branchCall) -> branchCall.resultValue),
+        CelConst("true") -> (List.empty[Step[?, ?]] -> obj("skipped"))
       ))
       List[Step[?, ?]](choose) -> choose.resultValue
     }
