@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = [
     "native-effect", "native-resume", "native-two-effects",
     "native-range-effect", "native-range-two-effects", "native-switch-effects",
-    "native-nested-switch-effects",
+    "native-nested-switch-effects", "native-nested-range-effects",
 ]
 
 
@@ -336,9 +336,80 @@ def check():
         assert outer_noop == {
             "protocol_version": 1, "status": "completed", "result": "no-effect",
         }
+
+        # Two nested ranges with dependent Calls inside each inner iteration.
+        # Completed prefixes for BOTH loop levels must survive every process
+        # restart. Negative outer range bounds use zero-based ordinals.
+        nested_range = binaries["native-nested-range-effects"]
+        current = invoke(nested_range, {"protocol_version": 1, "input": None})
+        expected = []
+        for outer in range(2):
+            row = []
+            for inner in range(2):
+                first = current
+                assert first["status"] == "suspended", first
+                assert first["effect"]["node_id"] == "0.0.each.0.each.0"
+                assert first["continuation"]["next_step"] == 0
+                assert first["continuation"]["frames"] == [
+                    {"node_id": "0.0", "iteration": outer},
+                    {"node_id": "0.0.each.0", "iteration": inner},
+                    {"node_id": first["effect"]["node_id"], "iteration": 0},
+                ]
+                saved = first["continuation"]["slots"]
+                assert len(saved["__awfl_loop_0_items"]["value"]) == outer
+                assert len(saved["__awfl_loop_0_inner_items"]["value"]) == inner
+                assert first["effect"]["effect_id"].endswith("_" + str(outer) + "_" + str(inner))
+                first_result = "first-" + str(outer) + "-" + str(inner)
+                second = invoke(nested_range, {
+                    "protocol_version": 1, "input": None,
+                    "continuation": bind(first["continuation"],
+                                         first["effect"]["result_slot"], first_result),
+                })
+                assert second["status"] == "suspended", second
+                assert second["effect"]["node_id"] == "0.0.each.0.each.1"
+                assert second["effect"]["args"] == first_result
+                assert second["effect"]["effect_id"] != first["effect"]["effect_id"]
+                assert second["continuation"]["frames"][-1]["iteration"] == 1
+                assert second["continuation"]["slots"][first["effect"]["result_slot"]] == {
+                    "type": "string", "value": first_result,
+                }
+                if outer == 1 and inner == 1:
+                    invalid_prefix = copy.deepcopy(second["continuation"])
+                    invalid_prefix["slots"]["__awfl_loop_0_inner_items"]["value"] = []
+                    assert "invalid nested range continuation prefix" in invoke(nested_range, {
+                        "protocol_version": 1, "input": None,
+                        "continuation": bind(invalid_prefix,
+                                             second["effect"]["result_slot"], "bad"),
+                    }, fails=True)
+                    invalid_site = copy.deepcopy(second["continuation"])
+                    invalid_site["frames"][2]["iteration"] = 99
+                    assert "invalid nested range continuation site" in invoke(nested_range, {
+                        "protocol_version": 1, "input": None,
+                        "continuation": bind(invalid_site,
+                                             second["effect"]["result_slot"], "bad"),
+                    }, fails=True)
+                    invalid_prior = copy.deepcopy(second["continuation"])
+                    del invalid_prior["slots"][first["effect"]["result_slot"]]
+                    assert "missing continuation slot" in invoke(nested_range, {
+                        "protocol_version": 1, "input": None,
+                        "continuation": bind(invalid_prior,
+                                             second["effect"]["result_slot"], "bad"),
+                    }, fails=True)
+                second_result = "second-" + str(outer) + "-" + str(inner)
+                row.append(second_result)
+                current = invoke(nested_range, {
+                    "protocol_version": 1, "input": None,
+                    "continuation": bind(second["continuation"],
+                                         second["effect"]["result_slot"], second_result),
+                })
+            expected.append(row)
+        assert current == {
+            "protocol_version": 1, "status": "completed", "result": expected,
+        }, current
         print("native protocol: 2 single-effect resumes, 2-step effect sequence,"
               " three-iteration range, two effects per range iteration,"
-              " pinned two-branch and nested Switch resumes, malformed continuation"
+              " pinned two-branch and nested Switch, nested-range resumes,"
+              " malformed continuation"
               " and version rejection passed")
 
 

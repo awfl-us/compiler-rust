@@ -55,8 +55,13 @@ statements; the server owns all effects, state transitions and persistence.
   supported. Three validated invocation frames pin both chosen branches
   and the exact direct Call site. Results from preceding Calls are restored
   after worker takeover without re-evaluating conditions.
-- **Still unsupported:** Calls beyond two Switch levels, effects inside
-  nested loops, effectful For/Fold, Try and Parallel. Mixed pure steps and
+- **Nested ForRange slice:** A top-level range containing one inner range
+  with direct Calls can suspend and resume at each inner Call. Three frames
+  pin outer iteration, inner iteration and Call site; two independent tagged
+  output prefixes restore both loops without replaying completed effects.
+- **Still unsupported:** Calls beyond two Switch or ForRange levels, mixed
+  nested branch/loop bodies, effectful For/Fold, Try and Parallel. Mixed pure
+  steps and
   Calls in one effectful Switch branch fail closed. Complete CEL, Google
   retry/error semantics and YAML fallback remain pending.
 - `NativeCompiler.compile` consumes constructed DSL workflows.
@@ -79,6 +84,9 @@ statements; the server owns all effects, state transitions and persistence.
     and malformed continuation site/missing-slot rejection. A two-level
     nested Switch fixture passed pinned branches, dependent Calls, alternate
     and no-effect paths, malformed frames and missing-slot rejection.
+    A two-level nested range fixture passed eight dependent Call
+    suspensions, both output prefix recoveries and malformed checkpoint
+    rejection.
   - Rustfmt and strict Clippy checks apply to the Rust crate and generated
     fixtures in CI.
 
@@ -108,11 +116,12 @@ statements; the server owns all effects, state transitions and persistence.
   cancellation versus recording, process/store reconstruction around
   pending intents, uncertain outcome reconciliation, a generated Rust
   suspension with recorded server outcome, and a two-effect Rust sequence.
-  All ten emulator integration tests passed, including a generated Rust
-  range resuming after worker takeover without duplicating its three effects,
-  a two-Call-per-iteration range recovering mid-iteration, and effectful
-  Switches at one and two levels resuming after worker takeover. The entire
-  Node native suite passed 24/24 with all real-binary integrations
+  All twelve emulator integration tests passed, including compiled Rust
+  ranges and Switches resuming after worker takeovers. The nested range test
+  survives two worker replacements and journals eight effects exactly once.
+  A separate regression proves arbitrary nested JSON inputs, arguments,
+  outcomes and final results persist and hydrate correctly. The entire
+  Node native suite passed 26/26 with all real-binary integrations
   enabled; two additional
   local tests verify subcollection scaling and persistence-size rejection.
 - This is **not** wired to production `createWorkflowExecution`, cloud
@@ -122,8 +131,8 @@ statements; the server owns all effects, state transitions and persistence.
 
 ## Remaining gates before a pilot
 
-1. Extend bounded frames beyond the two-level Switch case to nested loops,
-   deeper branches, For and Fold, with precise live-slot
+1. Extend the bounded two-level Switch/ForRange frames to arbitrary nested
+   branches and loops, effectful For and Fold, with precise live-slot
    capture and branch-safe replay.
 2. Test every crash window (prepare, dispatch, unknown remote outcome,
    result commit, post-commit resume), transaction contention at realistic

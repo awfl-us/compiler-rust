@@ -212,7 +212,7 @@ Run equal-input benchmarks: 1,000 pure operations, 100 local mock HTTP steps, ne
 
 ## 6. Implementation phases and completion gates
 
-### Implementation checkpoint — 2026-11-10 (tested, still experimental)
+### Implementation checkpoint — 2026-11-11 (tested, still experimental)
 
 The architectural plan below is the target design, **not** a claim of completed
 features. The Scala frontend emits pure native `Switch`, `ForRange`, `For`,
@@ -220,7 +220,11 @@ features. The Scala frontend emits pure native `Switch`, `ForRange`, `For`,
 It also emits a **versioned native IPC** for top-level typed `Call` effects:
 the Rust executable suspends, the server journals the requested effect and
 its outcome, and the executable resumes from tagged live slots.
-Nested effects remain compile-time rejected until dynamic frames exist.
+Dynamic invocation frames now support direct Calls inside top-level
+Switch/ForRange and the limited two-level Switch/ForRange shapes. Completed
+branch selections and both levels of range output prefixes survive worker
+recovery. Deeper arbitrary nesting, effects inside For/Fold, Try, Parallel
+and complete CEL/Google semantics still fail closed.
 Companion draft PRs are
 [dsl #2](https://github.com/awfl-us/dsl/pull/2) and
 [compiler-yaml #1](https://github.com/awfl-us/compiler-yaml/pull/1).
@@ -229,11 +233,14 @@ Companion draft PRs are
 **unconnected experimental implementation**. The Firestore execution store now
 persists results in a bounded per-effect subcollection journal, with epoch
 fencing, lease expiry, cancellation, prepared intents and tagged continuations.
+Plain JSON input, arguments, outcomes and final results use bounded JSON
+string persistence because Firestore disallows direct array-in-array values.
 Real Firestore emulator integration tests exercise competing claims, crash
 recovery, cancellation and compiled Rust suspend/resume; no Google Cloud
 production deployment or real remote HTTP delivery has been tested.
 
-**Enforced next gate:** nested effect frames, deeper crash/side-effect
+**Enforced next gate:** arbitrary nested effect frames and effectful
+For/Fold, deeper crash/side-effect
 reconciliation tests, a secure artifact registry and sandbox, authenticated
 real HTTP handlers, then **shared-launcher integration and workload parity**.
 Do not enable native production routing until these gates pass.

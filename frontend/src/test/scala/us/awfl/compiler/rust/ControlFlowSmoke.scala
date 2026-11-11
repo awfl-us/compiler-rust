@@ -189,6 +189,43 @@ object ControlFlowSmoke {
     assert(multiGenerated.source.contains("invalid native range continuation site"))
     assert(multiGenerated.source.contains("state.frames.len() != 2"))
 
+    // A real effectful nested range retains completed outer and inner
+    // prefixes, and resumes a dependent second Call within the same inner
+    // iteration. The negative outer bound tests ordinal (not raw) IDs.
+    val nestedRange = ForRange[String]("outer-effect-range",
+      CelInteger(-1), CelInteger(1)) { _ =>
+      val innerRange = ForRange[String]("inner-effect-range",
+        CelInteger(0), CelInteger(2)) { _ =>
+        val first = TypedCall[Map[String, String], String](
+          "inner-first", CallId.HttpPost, obj(Map("url" -> "https://example.org/nested-range")))
+        val second = TypedCall[String, String](
+          "inner-second", CallId.HttpPost, first.resultValue)
+        List[Step[?, ?]](first, second) -> second.resultValue
+      }
+      List[Step[?, ?]](innerRange) -> innerRange.resultValue
+    }
+    val nestedRangeIR = Normalize(Workflow((List[Step[?, ?]](nestedRange),
+      nestedRange.resultValue), Some("nested-range-effects")))
+    assert(nestedRangeIR.effects.size == 2)
+    val nestedRangeSource = RustEmitter.write(nestedRangeIR,
+      base.resolve("native-nested-range-effects"), runtime)
+    assert(nestedRangeSource.source.contains("invalid nested range continuation site"))
+    assert(nestedRangeSource.source.contains("__awfl_loop_0_inner_items"))
+
+    // Additional steps in the outer effectful range are still unsupported.
+    val invalidNestedRange = ForRange[String]("mixed-outer-range",
+      CelInteger(0), CelInteger(1)) { _ =>
+      val unrelated = TypedCall[Map[String, String], String](
+        "unrelated", CallId.HttpPost, obj(Map("url" -> "https://example.org/extra")))
+      List[Step[?, ?]](nestedRange, unrelated) -> nestedRange.resultValue
+    }
+    val deniedMixedRange = try {
+      RustEmitter.emit(Normalize(Workflow((List[Step[?, ?]](invalidNestedRange),
+        invalidNestedRange.resultValue))))
+      throw new AssertionError("mixed nested range effects were not rejected")
+    } catch { case e: CompileError => e.getMessage }
+    assert(deniedMixedRange.contains("exactly one inner ForRange"))
+
     println("Scala control-flow fixtures passed")
   }
 }

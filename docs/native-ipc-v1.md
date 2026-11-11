@@ -53,6 +53,11 @@ evaluation and restores prior Call results from the tagged slots.
 A two-level nested Switch (one inner Switch as the only step in the effectful
 outer branch) uses three frames for outer branch, inner branch and direct
 Call site. Both branch conditions remain pinned on resume.
+For a nested ForRange containing one inner range with direct Calls, three
+frames identify the outer iteration, inner iteration and active Call site.
+The completed output prefixes are separately tagged in slots
+__awfl_loop_<step>_items and __awfl_loop_<step>_inner_items. Resume
+validates both prefix lengths against their ordinal frame indices.
 
 ## Response
 
@@ -97,8 +102,13 @@ multiple effect sites in the same iteration, and the ordinal is zero-based
 even for negative range starts. A Switch branch Call uses the stable
 ID `call_<step>_<result-slot>_b<branch-index>`. A two-level nested Switch
 uses `call_<step>_<result-slot>_b<outer-branch>_b<inner-branch>`.
-Effects beyond two Switch levels or inside nested loops still fail
-compilation until those frame paths and live slots are implemented.
+A nested range Call uses the stable key
+call_<step>_<result-slot>_<outer-ordinal>_<inner-ordinal>.
+Deeper nested effects and mixed loop/branch control flow still fail closed.
+The Firestore store persists plain JSON inputs, effect arguments/outcomes
+and final results as size-bounded JSON strings to support arbitrary nested
+arrays; public store reads decode them back to plain JSON. Tagged
+continuation slots remain structured values.
 
 ## Safety constraints and limitations
 

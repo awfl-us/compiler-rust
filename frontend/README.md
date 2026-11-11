@@ -86,9 +86,11 @@ Call results are restored without re-evaluating branch conditions.
 Pure and unmatched branches still complete without dispatching effects.
 A two-level nested Switch also supports direct Calls in its inner branches.
 Three frames pin the outer choice, inner choice and active Call site.
+A two-level ForRange can likewise suspend at direct Calls inside its inner
+range, with separate saved prefixes for completed outer and inner iterations.
 
-Known limitations: Effects beyond two Switch levels, effects in nested
-loops and effectful For/Fold remain explicitly rejected. Pure and
+Known limitations: Effects beyond two Switch or ForRange levels, mixed
+nested control-flow bodies and effectful For/Fold remain rejected. Pure and
 effectful steps mixed within the same Switch branch also fail closed.
 Try, Parallel and complete Google/CEL semantics are not implemented.
 Unsupported expressions fail compilation with node context rather than
