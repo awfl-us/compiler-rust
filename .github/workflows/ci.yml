@@ -28,7 +28,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: awfl-us/dsl
-          ref: a05ea13
+          ref: a05ea130be826a81094c0f0bfd0ac5faa79baa69
           path: _dsl
       - uses: actions/setup-java@v4
         with:
