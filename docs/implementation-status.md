@@ -40,22 +40,27 @@ statements; the server owns all effects, state transitions and persistence.
   (`runtime_abi=1`). Effectful binaries require versioned JSON IPC
   (`runtime_abi=2`, protocol version 1). Both are opt-in. Manifest lists
   structural node IDs, effect operations and generated-source SHA-256.
-- **Limit:** Effects inside loops, branches or folds are still **rejected
-  at compile time**, because unique dynamic invocation keys and nested frame
-  resumptions are not implemented. `Try`, `Parallel`, complete CEL and
-  full Google error/retry semantics remain unsupported. There is no
-  fallback to YAML.
+- **Limited nested effect slice:** A top-level ForRange with exactly one
+  direct Call in its body now suspends and resumes per iteration. Bounded
+  checkpoints preserve completed output and a zero-based invocation frame;
+  previously completed effects are not replayed. Dynamic effect IDs include
+  the top-level step, result slot and iteration ordinal.
+- **Still unsupported:** Multiple calls per iteration, nested branch/range
+  effects, For, Fold, Try and Parallel. They fail closed; complete CEL,
+  Google retry/error semantics and YAML fallback are pending.
 - `NativeCompiler.compile` consumes constructed DSL workflows.
   `NativeMain` reuses `awfl-us/compiler.WorkflowLoader` to load existing
   Scala objects. Integration with `compiler --target rust` is pending.
 - Verified locally in the AWFL Scala cloud workspace:
   - All three Scala frontend/loader smoke applications passed.
-  - Nine Rust runtime unit tests passed.
+  - Ten Rust runtime unit tests passed.
   - Pure Rust smoke executable passed three inputs.
   - Eight pure control-flow/early-return fixtures passed sixteen assertions.
   - Actual generated native effect binaries passed suspend/resume,
     two sequential effects, continuation restoration, missing-slot rejection,
-    malformed PC rejection and protocol-version rejection.
+    malformed PC rejection and protocol-version rejection. A generated
+    three-iteration range binary passed repeated suspend/resume with
+    preserved results and malformed prefix/frame rejection.
   - Rustfmt and strict Clippy checks apply to the Rust crate and generated
     fixtures in CI.
 
@@ -85,8 +90,10 @@ statements; the server owns all effects, state transitions and persistence.
   cancellation versus recording, process/store reconstruction around
   pending intents, uncertain outcome reconciliation, a generated Rust
   suspension with recorded server outcome, and a two-effect Rust sequence.
-  All six emulator integration tests passed. The entire Node native suite
-  passed 20/20 with all real-binary integrations enabled; two additional
+  All seven emulator integration tests passed, including a generated Rust
+  range resuming after worker takeover without duplicating its three effects.
+  The entire Node native suite passed 21/21 with all real-binary integrations
+  enabled; two additional
   local tests verify subcollection scaling and persistence-size rejection.
 - This is **not** wired to production `createWorkflowExecution`, cloud
   consumers, APIs, or agent session routing. There is no deployed native
@@ -95,9 +102,8 @@ statements; the server owns all effects, state transitions and persistence.
 
 ## Remaining gates before a pilot
 
-1. Implement dynamic invocation frames and stable effect IDs for nested
-   `Switch` / loops / folds, including bounded live-slot capture and
-   restart at each nested effect boundary.
+1. Extend the bounded range frame to multiple effects per iteration,
+   nested branches, For and Fold, with precise live-slot capture.
 2. Test every crash window (prepare, dispatch, unknown remote outcome,
    result commit, post-commit resume), transaction contention at realistic
    scale, lease heartbeats and lifecycle sweeping.

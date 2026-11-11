@@ -1,6 +1,6 @@
 # AWFL native IPC v1 (experimental)
 
-This is the initial **top-level effect** protocol between a trusted generated
+This is the experimental effect protocol between a trusted generated
 Rust artifact and the existing AWFL server. It is not a public SDK or a
 production execution API.
 
@@ -34,8 +34,13 @@ production execution API.
 `continuation` is omitted on first execution. `input` remains plain JSON.
 The continuation stores tagged `AwflValue` data: `integer`, `float`,
 `string`, `bool`, `null`, `list`, `map`, or `bytes`; the `slots` map
-omits unbound slots instead of equating absence with a bound null. For now,
-`frames` **must be empty**; nested effect suspensions are not supported.
+omits unbound slots instead of equating absence with a bound null. For direct top-level effects, the frames array remains empty. In the first
+supported nested case, a top-level ForRange with exactly one direct Call,
+the continuation carries a single frame with its range node ID and
+zero-based iteration ordinal. The completed output prefix is serialized
+as a tagged list in the reserved slot named `__awfl_loop_<step>_items`.
+A framed continuation may use next_step 0 for the first top-level step;
+frame-free continuations must advance beyond a completed step.
 
 ## Response
 
@@ -72,16 +77,19 @@ persistently prepares the effect intent under the execution's fenced lease
 execute the effect; an ambiguous outcome must be reconciled and never blindly
 replayed. The result is journaled in a separate Firestore effect document, and
 the `result_slot` gets a tagged value in the checkpoint in the same transaction.
-The next native invocation uses the checkpoint as `continuation`, restores
-top-level slots and skips already completed steps.
-
-`call_<n>` is only stable for direct top-level nodes. **Never extend it to
-nested loops/branches without adding dynamic invocation frames and tests.**
+The next native invocation uses the checkpoint to restore the completed
+slots, and skips finished steps or range iterations instead of replaying
+effects. Direct top-level effect IDs use call_<step>. The supported
+single-Call range uses call_<step>_<result-slot>_<ordinal>; the ordinal is
+zero-based even for negative range starts. Other nested effect sites
+fail compilation until multi-site frames and live-slot capture exist.
 
 ## Safety constraints and limitations
 
 - Protocol version, continuation program counter, tagged values, missing
-  slots and empty frame stack are validated by the native runtime.
+  slots, bounded frame stacks and safe integer iteration indices are
+  validated by the native runtime. Generated code validates the frame target
+  and the completed iteration prefix.
 - The server verifies the trusted executable SHA and execution-pinned digest,
   bounds input/output data, and uses transactional lease epochs and checkpoints.
 - All API authentication/authorization and executable selection must happen

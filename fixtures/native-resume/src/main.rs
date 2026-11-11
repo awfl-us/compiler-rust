@@ -3,15 +3,23 @@ use std::io::{self, Read};
 use awfl_native_runtime::AwflValue;
 #[allow(unused_imports)]
 use awfl_native_runtime::operations as ops;
+#[allow(unused_imports)]
 use awfl_native_runtime::protocol::{
-    Request, Response, Outcome, EffectIntent, Continuation,
+    Request, Response, Outcome, EffectIntent, Continuation, InvocationFrame,
 };
 
 // Generated lexical scopes intentionally bind and return the same AWFL slot.
-#[allow(clippy::let_and_return, unreachable_code)]
+// The DSL may declare loop index slots that user code never reads.
+#[allow(clippy::let_and_return, unreachable_code, unused_variables)]
 fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<dyn std::error::Error>> {
     let _ = input;
     let pc = resume.map_or(0, |state| state.next_step);
+    if resume.is_some_and(|s| {
+        let valid_target = false;
+        !s.frames.is_empty() && !valid_target
+    }) {
+        return Err("invalid native continuation frame target".into());
+    }
     let s0 = if pc > 0 {
         resume.ok_or("missing native continuation")?.slot("s0")?
     } else {

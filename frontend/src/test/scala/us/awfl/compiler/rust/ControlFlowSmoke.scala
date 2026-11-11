@@ -114,6 +114,34 @@ object ControlFlowSmoke {
       secondCall.resultValue), Some("two-effects"))),
       base.resolve("native-two-effects"), runtime)
 
+    // A negative-based range tests ordinal iteration IDs, durable prefix
+    // results and step-zero resumptions across real native subprocesses.
+    val effectRange = ForRange[String]("effect-range", CelInteger(-2), CelInteger(1)) { _ =>
+      val nestedCall = TypedCall[Map[String, String], String](
+        "nested-call", CallId.HttpPost, obj(Map("url" -> "https://example.org/range")))
+      List[Step[?, ?]](nestedCall) -> nestedCall.resultValue
+    }
+    val rangeProgram = Normalize(Workflow((List[Step[?, ?]](effectRange), effectRange.resultValue),
+      Some("range-effects")))
+    assert(rangeProgram.effects.size == 1)
+    val rangeGenerated = RustEmitter.write(rangeProgram, base.resolve("native-range-effect"), runtime)
+    assert(rangeGenerated.source.contains("invalid native range continuation prefix"))
+    assert(rangeGenerated.source.contains("call_0_"))
+
+    // Multiple effect sites cannot share the same per-iteration frame.
+    val doubleRange = ForRange[String]("double-range", CelInteger(0), CelInteger(2)) { _ =>
+      val a = TypedCall[Map[String, String], String](
+        "a", CallId.HttpPost, obj(Map("url" -> "https://example.org/a")))
+      val b = TypedCall[Map[String, String], String](
+        "b", CallId.HttpPost, obj(Map("url" -> "https://example.org/b")))
+      List[Step[?, ?]](a, b) -> b.resultValue
+    }
+    val rejectedMultiple = try {
+      RustEmitter.emit(Normalize(Workflow((List[Step[?, ?]](doubleRange), doubleRange.resultValue))))
+      throw new AssertionError("multiple nested Calls were not rejected")
+    } catch { case e: CompileError => e.getMessage }
+    assert(rejectedMultiple.contains("exactly one direct Call"))
+
     println("Scala control-flow fixtures passed")
   }
 }

@@ -7,8 +7,7 @@ use std::collections::BTreeMap;
 
 pub const VERSION: u32 = 1;
 
-/// Reserved for compiled nested loops/branches. The first effect-capable
-/// emitter deliberately rejects nested effect sites until frames are supported.
+/// A validated dynamic invocation location for resumable control flow.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct InvocationFrame {
@@ -39,8 +38,26 @@ impl Continuation {
         if self.next_step > step_count {
             return Err("continuation step outside compiled workflow".into());
         }
-        if !self.frames.is_empty() {
-            return Err("nested effect continuation frames not implemented".into());
+        // Nested continuation frames are allowed in v1 for compiler-managed
+        // resumable control flow. Validate bounds and identifier shapes.
+        if self.frames.len() > 64 {
+            return Err("continuation exceeds structural limits".into());
+        }
+        for frame in &self.frames {
+            if frame.node_id.is_empty()
+                || frame.node_id.len() > 120
+                || !frame
+                    .node_id
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
+            {
+                return Err("invalid continuation frame identifier".into());
+            }
+            // The server stores JSON numbers in JavaScript, so frame indices
+            // must round-trip without precision loss.
+            if frame.iteration > 9_007_199_254_740_991 {
+                return Err("continuation frame iteration exceeds safe integer range".into());
+            }
         }
         if self.slots.len() > 10000 {
             return Err("continuation exceeds structural limits".into());
@@ -175,5 +192,61 @@ mod tests {
         });
         let output = serde_json::to_string(&response).unwrap();
         assert_eq!(serde_json::from_str::<Response>(&output).unwrap(), response);
+    }
+
+    #[test]
+    fn validates_nested_frames_within_bounds() {
+        let mut slots = BTreeMap::new();
+        slots.insert("s0".into(), AwflValue::Integer(1));
+        let ok = Continuation {
+            next_step: 1,
+            slots,
+            frames: vec![InvocationFrame {
+                node_id: "0.2".into(),
+                iteration: 3,
+            }],
+        };
+        assert!(ok.validate(3).is_ok());
+
+        let bad_id = Continuation {
+            next_step: 1,
+            slots: BTreeMap::new(),
+            frames: vec![InvocationFrame {
+                node_id: "bad id!".into(),
+                iteration: 0,
+            }],
+        };
+        assert!(bad_id.validate(2).unwrap_err().contains("frame identifier"));
+
+        let too_many = Continuation {
+            next_step: 0,
+            slots: BTreeMap::new(),
+            frames: (0..65)
+                .map(|i| InvocationFrame {
+                    node_id: format!("n{i}"),
+                    iteration: i,
+                })
+                .collect(),
+        };
+        assert!(
+            too_many
+                .validate(10)
+                .unwrap_err()
+                .contains("exceeds structural limits")
+        );
+        let unsafe_iteration = Continuation {
+            next_step: 0,
+            slots: BTreeMap::new(),
+            frames: vec![InvocationFrame {
+                node_id: "0.0".into(),
+                iteration: 9_007_199_254_740_992,
+            }],
+        };
+        assert!(
+            unsafe_iteration
+                .validate(2)
+                .unwrap_err()
+                .contains("safe integer")
+        );
     }
 }

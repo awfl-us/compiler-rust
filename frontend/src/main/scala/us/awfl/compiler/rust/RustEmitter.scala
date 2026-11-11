@@ -142,7 +142,7 @@ ${children(body)}
 ${pad}    $resultSlot = ${expr(result)};
 ${pad}}"""
       case effect: Effect =>
-        unsupported(effect, s"effect ${effect.id.wireId} needs server-managed continuation, checkpoint and outcome handling")
+        unsupported(effect, s"nested effect ${effect.id.wireId} needs compiled continuation lowering for this nesting")
     }
   }
 
@@ -155,14 +155,91 @@ ${pad}}"""
     case _ => None
   }
 
-  /** First continuation slice: direct Rust computation with top-level effect
-    * boundaries. Completed top-level results are restored rather than replayed.
-    * Nested effects require loop invocation frames and fail closed for now.
+  /** First supported nested boundary: one direct Call per range iteration.
+    * Store only completed iteration outputs and resume at the unfinished one.
+    * Other nested effects fail closed until multi-site frames are implemented.
     */
+  private def emitEffectRange(loop: RepeatRange, index: Int,
+                              prior: Vector[String]): String = {
+    val where = s"node=${loop.nodeId} step='${loop.displayName}'"
+    val nested = Program("range-effects", loop.body, Vector.empty).effects
+    val direct = loop.body.collect { case effect: Effect => effect }
+    if (nested.size != 1 || direct.size != 1)
+      throw CompileError(where, "effectful ForRange requires exactly one direct Call; nested or multiple Calls unsupported")
+    val itemsKey = q(s"__awfl_loop_${index}_items")
+    val local = s"index_${loop.indexSlot}"
+    val saved = prior.map(slot =>
+      s"""                slots.insert(${q(slot)}.to_owned(), $slot.clone());""").mkString("\n")
+    val body = loop.body.map {
+      case e: Effect =>
+        s"""            // AWFL ${e.nodeId} ${e.displayName}: one invocation per iteration
+            let ${e.resultSlot} = if __awfl_resuming_here && __awfl_iter == __awfl_resume_iter {
+                resume.ok_or("missing native continuation")?.slot(${q(e.resultSlot)})?
+            } else {
+                let mut slots = std::collections::BTreeMap::new();
+$saved
+                slots.insert($itemsKey.to_owned(), AwflValue::List(__awfl_items.clone()));
+                return Ok(Outcome::Suspended {
+                    effect: EffectIntent {
+                        effect_id: format!("call_${index}_${e.resultSlot}_{}", __awfl_iter),
+                        node_id: ${q(e.nodeId)}.to_owned(),
+                        operation: ${q(e.id.wireId)}.to_owned(),
+                        result_slot: ${q(e.resultSlot)}.to_owned(),
+                        args: (${render(e.arguments, where)}).to_plain_json()?,
+                    },
+                    continuation: Continuation {
+                        next_step: $index, slots,
+                        frames: vec![InvocationFrame {
+                            node_id: ${q(loop.nodeId)}.to_owned(),
+                            iteration: __awfl_iter,
+                        }],
+                    },
+                });
+            };"""
+      case other => emitStep(other, 12, effectful = true)
+    }.mkString("\n")
+    s"""    // AWFL ${loop.nodeId} ${loop.displayName} (resumable ForRange)
+    let ${loop.resultSlot} = if pc > $index {
+        resume.ok_or("missing native continuation")?.slot(${q(loop.resultSlot)})?
+    } else {
+        let __awfl_start = ops::int_value(&(${render(loop.from, where)}))?;
+        let __awfl_end = ops::int_value(&(${render(loop.until, where)}))?;
+        let __awfl_span = ((__awfl_end as i128) - (__awfl_start as i128)).max(0) as u64;
+        let __awfl_resuming_here = resume.is_some_and(|s| !s.frames.is_empty() && pc == $index);
+        let (__awfl_resume_iter, mut __awfl_items): (u64, Vec<AwflValue>) =
+            if __awfl_resuming_here {
+                let state = resume.ok_or("missing native continuation")?;
+                if state.frames.len() != 1 || state.frames[0].node_id != ${q(loop.nodeId)} {
+                    return Err("invalid native range continuation frame".into());
+                }
+                let iteration = state.frames[0].iteration;
+                let items = ops::list_value(&state.slot($itemsKey)?)?;
+                if iteration >= __awfl_span || items.len() as u64 != iteration {
+                    return Err("invalid native range continuation prefix".into());
+                }
+                (iteration, items)
+            } else { (0, Vec::new()) };
+        let __awfl_next = i64::try_from((__awfl_start as i128) + (__awfl_resume_iter as i128))?;
+        for $local in __awfl_next..__awfl_end {
+            let __awfl_iter = (($local as i128) - (__awfl_start as i128)) as u64;
+            let ${loop.indexSlot} = AwflValue::Integer($local);
+$body
+            __awfl_items.push(${render(loop.result, where)});
+        }
+        AwflValue::List(__awfl_items)
+    };"""
+  }
+
+  /** Direct Rust computation with server-managed effect boundaries. */
   private def effectfulSource(program: Program): String = {
-    val topLevelEffects = program.steps.collect { case e: Effect => e }
-    program.effects.find(e => !topLevelEffects.exists(_.nodeId == e.nodeId)).foreach { e =>
-      unsupported(e, "nested effect needs invocation frames and compiled continuation lowering")
+    val frameConditions = program.steps.zipWithIndex.collect {
+      case (loop: RepeatRange, i) if Program("range-effects", loop.body, Vector.empty).effects.nonEmpty =>
+        s"pc == $i && s.frames.len() == 1 && s.frames[0].node_id == ${q(loop.nodeId)}"
+    }
+    val frameTargets = frameConditions match {
+      case Vector() => "false"
+      case Vector(one) => one
+      case many => many.map(expr => s"($expr)").mkString(" || ")
     }
     val statements = program.steps.zipWithIndex.map { (step, index) =>
       val where = s"node=${step.nodeId} step='${step.displayName}'"
@@ -195,6 +272,17 @@ $saved
           s"""    if pc <= $index {
 ${emitStep(early, 8, effectful = true)}
     }"""
+        case loop: RepeatRange =>
+          val slot = loop.resultSlot
+          val prior = program.steps.take(index).flatMap(topLevelSlot)
+          if (Program("range-effects", loop.body, Vector.empty).effects.nonEmpty)
+            emitEffectRange(loop, index, prior)
+          else s"""    let $slot = if pc > $index {
+        resume.ok_or("missing native continuation")?.slot(${q(slot)})?
+    } else {
+${emitStep(loop, 8, effectful = true)}
+        $slot
+    };"""
         case other =>
           val slot = topLevelSlot(other).getOrElse(
             throw CompileError(where, "unsupported top-level native statement"))
@@ -212,15 +300,23 @@ use std::io::{self, Read};
 use awfl_native_runtime::AwflValue;
 #[allow(unused_imports)]
 use awfl_native_runtime::operations as ops;
+#[allow(unused_imports)]
 use awfl_native_runtime::protocol::{
-    Request, Response, Outcome, EffectIntent, Continuation,
+    Request, Response, Outcome, EffectIntent, Continuation, InvocationFrame,
 };
 
 // Generated lexical scopes intentionally bind and return the same AWFL slot.
-#[allow(clippy::let_and_return, unreachable_code)]
+// The DSL may declare loop index slots that user code never reads.
+#[allow(clippy::let_and_return, unreachable_code, unused_variables)]
 fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<dyn std::error::Error>> {
     let _ = input;
     let pc = resume.map_or(0, |state| state.next_step);
+    if resume.is_some_and(|s| {
+        let valid_target = $frameTargets;
+        !s.frames.is_empty() && !valid_target
+    }) {
+        return Err("invalid native continuation frame target".into());
+    }
 $statements
 }
 

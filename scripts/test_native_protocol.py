@@ -14,7 +14,7 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURES = ["native-effect", "native-resume", "native-two-effects"]
+FIXTURES = ["native-effect", "native-resume", "native-two-effects", "native-range-effect"]
 
 
 def invoke(executable, payload, *, fails=False):
@@ -112,8 +112,50 @@ def check():
         assert c == {
             "protocol_version": 1, "status": "completed", "result": "second-ok",
         }
+
+        # An effect inside ForRange suspends once per iteration. The native
+        # binary is a new process every time, and completed values must be
+        # restored from the continuation rather than replayed or discarded.
+        ranged = binaries["native-range-effect"]
+        current = invoke(ranged, {"protocol_version": 1, "input": None})
+        for iteration, result in enumerate(("first", "second", "third")):
+            assert current["status"] == "suspended", current
+            assert current["effect"]["effect_id"].startswith("call_0_s")
+            assert current["effect"]["effect_id"].endswith("_" + str(iteration))
+            assert current["continuation"]["next_step"] == 0
+            assert current["continuation"]["frames"] == [
+                {"node_id": "0.0", "iteration": iteration}
+            ]
+            slots = current["continuation"]["slots"]
+            prefix = slots["__awfl_loop_0_items"]
+            assert prefix["type"] == "list"
+            assert [v["value"] for v in prefix["value"]] == \
+                list(("first", "second", "third")[:iteration])
+            if iteration == 1:
+                invalid = copy.deepcopy(current["continuation"])
+                invalid["slots"]["__awfl_loop_0_items"]["value"] = []
+                assert "invalid native range continuation prefix" in invoke(ranged, {
+                    "protocol_version": 1, "input": None,
+                    "continuation": bind(invalid, current["effect"]["result_slot"], result),
+                }, fails=True)
+                wrong_frame = copy.deepcopy(current["continuation"])
+                wrong_frame["frames"][0]["node_id"] = "0.wrong"
+                assert "invalid native continuation frame target" in invoke(ranged, {
+                    "protocol_version": 1, "input": None,
+                    "continuation": bind(wrong_frame, current["effect"]["result_slot"], result),
+                }, fails=True)
+            current = invoke(ranged, {
+                "protocol_version": 1, "input": None,
+                "continuation": bind(current["continuation"],
+                                     current["effect"]["result_slot"], result),
+            })
+        assert current == {
+            "protocol_version": 1, "status": "completed",
+            "result": ["first", "second", "third"],
+        }, current
         print("native protocol: 2 single-effect resumes, 2-step effect sequence,"
-              " malformed continuation and version rejection passed")
+              " three-iteration native range resume, malformed continuation"
+              " and version rejection passed")
 
 
 if __name__ == "__main__":
