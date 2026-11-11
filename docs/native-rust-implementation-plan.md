@@ -223,8 +223,18 @@ its outcome, and the executable resumes from tagged live slots.
 Dynamic invocation frames now support direct Calls inside top-level
 Switch/ForRange and the limited two-level Switch/ForRange shapes. Completed
 branch selections and both levels of range output prefixes survive worker
-recovery. Deeper arbitrary nesting, effects inside For/Fold, Try, Parallel
-and complete CEL/Google semantics still fail closed.
+recovery. This original ABI 2 backend remains the default.
+
+An **opt-in generalized CFG backend** now lowers nested control flow, `For`,
+`Fold` and effectful Calls to deterministic Rust state-machine blocks. It
+uses `ContinuationAnalysis` to save only live slots at the successor program
+counter, and runtime ABI 3 / IPC protocol 2 to resume directly after an
+effect. Real generated Rust tests cover effectful `For`/`Fold`, mixed nested
+`Switch`/`ForRange`, nested effects, and rejected malformed continuations.
+The Firestore execution store pins the protocol version and passes the
+new backend's nested-range worker-takeover test. See
+`docs/native-ipc-v2.md` for the wire contract. `Try`/`Parallel` and complete
+CEL/Google semantics are still unsupported in the new backend.
 Companion draft PRs are
 [dsl #2](https://github.com/awfl-us/dsl/pull/2) and
 [compiler-yaml #1](https://github.com/awfl-us/compiler-yaml/pull/1).
@@ -239,10 +249,11 @@ Real Firestore emulator integration tests exercise competing claims, crash
 recovery, cancellation and compiled Rust suspend/resume; no Google Cloud
 production deployment or real remote HTTP delivery has been tested.
 
-**Enforced next gate:** arbitrary nested effect frames and effectful
-For/Fold, deeper crash/side-effect
-reconciliation tests, a secure artifact registry and sandbox, authenticated
-real HTTP handlers, then **shared-launcher integration and workload parity**.
+**Enforced next gate:** deeper crash/side-effect reconciliation tests, a
+secure artifact registry and sandbox, authenticated real HTTP handlers,
+`Try`/`Parallel` parity, then **shared-launcher integration and workload
+parity**. The generalized CFG backend remains opt-in; no production launcher
+or deployment routing is changed.
 Do not enable native production routing until these gates pass.
 See `docs/implementation-status.md` for the verified status.
 

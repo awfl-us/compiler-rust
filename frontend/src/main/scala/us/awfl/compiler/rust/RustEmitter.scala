@@ -22,4 +22,18 @@ object RustEmitter {
 
   def write(program: Program, directory: Path, runtime: Path): Emitted =
     ArtifactWriter.write(directory, runtime, emit(program))
+
+  /** Explicit opt-in to the generic CFG backend. Existing ABI 1/2 callers
+    * retain the original wire contract until server migration is verified.
+    */
+  def emitV2(program: Program): Emitted = {
+    if (program.steps.isEmpty || !program.steps.last.isInstanceOf[Finish] ||
+        program.steps.init.exists(_.isInstanceOf[Finish]))
+      throw CompileError("workflow=" + program.name,
+        "workflow requires exactly one terminal return after control flow")
+    ArtifactWriter.pack(program, StateMachineEmitter.source(program), runtimeAbi = 3)
+  }
+
+  def writeV2(program: Program, directory: Path, runtime: Path): Emitted =
+    ArtifactWriter.write(directory, runtime, emitV2(program))
 }

@@ -226,6 +226,62 @@ object ControlFlowSmoke {
     } catch { case e: CompileError => e.getMessage }
     assert(deniedMixedRange.contains("exactly one inner ForRange"))
 
+    // ABI 3 no longer needs a separate continuation template for each loop
+    // type. Exercise effectful For/Fold and a Switch inside a ForRange.
+    val effectfulEach = us.awfl.dsl.For[String, String]("each-effects",
+      us.awfl.dsl.ListValue[String](CelConst("input"))) { item =>
+      val call = TypedCall[String, String]("each-call", CallId.HttpPost, item)
+      List[Step[?, ?]](call) -> call.resultValue
+    }
+    val eachEffectsIR = Normalize(Workflow((List[Step[?, ?]](effectfulEach),
+      effectfulEach.resultValue), Some("each-effects")))
+    assert(eachEffectsIR.effects.size == 1)
+
+    val effectfulFold = Fold[String, String]("fold-effects", obj("start"),
+      us.awfl.dsl.ListValue[String](CelConst("input"))) { (acc, _) =>
+      val call = TypedCall[String, String]("fold-call", CallId.HttpPost, acc)
+      List[Step[?, ?]](call) -> call.resultValue
+    }
+    val foldEffectsIR = Normalize(Workflow((List[Step[?, ?]](effectfulFold),
+      effectfulFold.resultValue), Some("fold-effects")))
+    assert(foldEffectsIR.effects.size == 1)
+
+    val mixedRange = ForRange[String]("range-with-branch",
+      CelInteger(0), CelInteger(2)) { index =>
+      val branchCall = TypedCall[Map[String, String], String](
+        "branch-call", CallId.HttpPost, obj(Map("url" -> "https://example.org/range-branch")))
+      val choose = Switch("choice-in-range", List(
+        (index > CelInteger(0)) -> (List[Step[?, ?]](branchCall) -> branchCall.resultValue),
+        CelBoolean(true) -> (List.empty[Step[?, ?]] -> obj("skipped"))
+      ))
+      List[Step[?, ?]](choose) -> choose.resultValue
+    }
+    val mixedRangeIR = Normalize(Workflow((List[Step[?, ?]](mixedRange),
+      mixedRange.resultValue), Some("range-switch-effects")))
+    assert(mixedRangeIR.effects.size == 1)
+
+    // The generic state machine has a separate ABI 3/protocol v2 contract.
+    // Its explicit CFG resumes directly after effects; no lexical replay
+    // frames or special-case nested templates are used.
+    val v2Fixtures = Vector(
+      "native-v2-switch-effects" -> effectChoice,
+      "native-v2-nested-switch-effects" -> nestedChoiceProgram,
+      "native-v2-range-two-effects" -> multiRange,
+      "native-v2-nested-range-effects" -> nestedRangeIR,
+      "native-v2-each" -> eachIR,
+      "native-v2-fold" -> foldIR,
+      "native-v2-each-effects" -> eachEffectsIR,
+      "native-v2-fold-effects" -> foldEffectsIR,
+      "native-v2-range-switch-effects" -> mixedRangeIR,
+      "native-v2-pure-nested" -> nestedIR
+    )
+    v2Fixtures.foreach { (name, workflow) =>
+      val emitted = RustEmitter.writeV2(workflow, base.resolve(name), runtime)
+      assert(emitted.manifest.contains("\"runtime_abi\":3"))
+      assert(emitted.source.contains("native ABI 3"))
+      assert(emitted.source.contains("validate_version("))
+    }
+
     println("Scala control-flow fixtures passed")
   }
 }

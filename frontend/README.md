@@ -12,6 +12,24 @@ interpret the workflow graph at runtime.
 - The existing `awfl-us/compiler` remains responsible for input/output schema
   generation. A coordinated `--target rust` switch in its CLI is still pending.
 
+## Opt-in generalized control-flow backend
+
+The default `RustEmitter.emit/write` retains the legacy pure ABI 1 and
+effectful ABI 2 (IPC version 1). The new `RustEmitter.emitV2/writeV2` entry
+points explicitly select runtime **ABI 3** and **IPC protocol 2**.
+`ControlFlowLowering` compiles nested branches, `ForRange`, `For`, `Fold`,
+`Return` and Calls into deterministic CFG blocks. `ContinuationAnalysis`
+calculates live slots across loop backedges. Each effect saves the successor
+CFG block and only the live tagged slots, so a new native subprocess resumes
+without replaying earlier branches or completed calls.
+
+The new backend supports effectful `For` and `Fold` and mixed nested
+`ForRange`/`Switch` trees, as exercised by generated Rust conformance
+fixtures. The server has an opt-in `protocolVersion: 2` execution setting
+that pins the chosen wire version. This is an experimental library interface,
+**not** production launcher integration or a new CLI default. See
+[the v2 IPC specification](../docs/native-ipc-v2.md).
+
 ## Dependencies
 
 The frontend currently depends on `us.awfl:compiler_3:0.3.1` and the typed
@@ -42,6 +60,7 @@ sbt -batch publishLocal
 # In compiler-rust/frontend:
 sbt -batch \
   'Test / runMain us.awfl.compiler.rust.FrontendSmoke' \
+  'Test / runMain us.awfl.compiler.rust.ControlFlowLoweringSmoke' \
   'Test / runMain us.awfl.compiler.rust.ControlFlowSmoke' \
   'Test / runMain us.awfl.compiler.rust.NativeCliSmoke'
 
@@ -50,6 +69,7 @@ cargo test --workspace --locked
 cargo build --manifest-path fixtures/native-smoke/Cargo.toml --locked
 python3 scripts/test_native_smoke.py
 python3 scripts/test_control_flow.py
+python3 scripts/test_native_protocol_v2.py
 python3 scripts/test_native_protocol.py
 ```
 

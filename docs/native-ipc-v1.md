@@ -1,5 +1,9 @@
 # AWFL native IPC v1 (experimental)
 
+The generalized opt-in CFG backend uses a **different**, incompatible wire
+protocol (v2) and runtime ABI (3). See [native-ipc-v2.md](native-ipc-v2.md).
+The v1 protocol below is retained for existing compiled artifacts.
+
 This is the experimental effect protocol between a trusted generated
 Rust artifact and the existing AWFL server. It is not a public SDK or a
 production execution API.

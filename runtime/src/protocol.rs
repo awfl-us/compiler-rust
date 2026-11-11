@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 pub const VERSION: u32 = 1;
+pub const STATE_MACHINE_VERSION: u32 = 2;
 
 /// A validated dynamic invocation location for resumable control flow.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -84,7 +85,16 @@ pub struct Request {
 
 impl Request {
     pub fn validate(&self, step_count: usize) -> Result<(), String> {
-        if self.protocol_version != VERSION {
+        self.validate_version(step_count, VERSION)
+    }
+
+    /// New state-machine artifacts use v2 PC labels; old artifacts still
+    /// explicitly require v1. A v2 continuation has no replay frames.
+    pub fn validate_version(&self, step_count: usize, version: u32) -> Result<(), String> {
+        if version != VERSION && version != STATE_MACHINE_VERSION {
+            return Err("unsupported native artifact protocol version".into());
+        }
+        if self.protocol_version != version {
             return Err(format!(
                 "unsupported native protocol version {}",
                 self.protocol_version
@@ -92,6 +102,11 @@ impl Request {
         }
         if let Some(continuation) = &self.continuation {
             continuation.validate(step_count)?;
+            if version == STATE_MACHINE_VERSION
+                && (continuation.next_step >= step_count || !continuation.frames.is_empty())
+            {
+                return Err("invalid native v2 continuation target or frames".into());
+            }
         }
         Ok(())
     }
@@ -130,8 +145,12 @@ pub struct Response {
 
 impl Response {
     pub fn new(outcome: Outcome) -> Self {
+        Self::new_version(outcome, VERSION)
+    }
+
+    pub fn new_version(outcome: Outcome, version: u32) -> Self {
         Self {
-            protocol_version: VERSION,
+            protocol_version: version,
             outcome,
         }
     }
@@ -248,5 +267,40 @@ mod tests {
                 .unwrap_err()
                 .contains("safe integer")
         );
+    }
+
+    #[test]
+    fn v2_state_machine_continuations_are_strictly_versioned_and_frame_free() {
+        let make = |version, next_step, frames| Request {
+            protocol_version: version,
+            input: serde_json::Value::Null,
+            continuation: Some(Continuation {
+                next_step,
+                slots: BTreeMap::new(),
+                frames,
+            }),
+        };
+        assert!(make(2, 2, vec![]).validate_version(3, 2).is_ok());
+        assert!(make(1, 2, vec![]).validate_version(3, 2).is_err());
+        assert!(make(2, 3, vec![]).validate_version(3, 2).is_err());
+        assert!(
+            make(
+                2,
+                0,
+                vec![InvocationFrame {
+                    node_id: "0.0".into(),
+                    iteration: 0,
+                }]
+            )
+            .validate_version(3, 2)
+            .is_err()
+        );
+        let response = Response::new_version(
+            Outcome::Completed {
+                result: serde_json::json!([1, 2]),
+            },
+            STATE_MACHINE_VERSION,
+        );
+        assert_eq!(response.protocol_version, 2);
     }
 }

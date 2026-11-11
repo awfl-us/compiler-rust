@@ -1,0 +1,1 @@
+{"schema_version":2,"workflow":"each-effects","source_sha256":"c62bb622b8326e7898c6c91c5db22348cd9d1fd38e98c9bc8b873388954b5fa4","runtime_abi":3,"node_ids":["0.0","0.0.each.0","0.return"],"effects":[{"node_id":"0.0.each.0","operation":"http.post"}]}

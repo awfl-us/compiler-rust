@@ -1,0 +1,11 @@
+[package]
+name = "awfl_native_v2_range_two_effects_dfd0a437"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+awfl-native-runtime = { path = "../../runtime" }
+serde_json = "1"
+
+[workspace]

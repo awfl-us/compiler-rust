@@ -1,0 +1,11 @@
+[package]
+name = "awfl_native_v2_range_switch_effects_a6c8d3bb"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[dependencies]
+awfl-native-runtime = { path = "../../runtime" }
+serde_json = "1"
+
+[workspace]

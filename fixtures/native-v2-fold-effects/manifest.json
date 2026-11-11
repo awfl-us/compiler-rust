@@ -1,0 +1,1 @@
+{"schema_version":2,"workflow":"fold-effects","source_sha256":"c53221bab296c03ba436b6afa99f107ae0adfc03643eb2ce60fe316d9900fe09","runtime_abi":3,"node_ids":["0.0","0.0.each.0","0.return"],"effects":[{"node_id":"0.0.each.0","operation":"http.post"}]}

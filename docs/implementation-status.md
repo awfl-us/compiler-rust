@@ -59,17 +59,28 @@ statements; the server owns all effects, state transitions and persistence.
   with direct Calls can suspend and resume at each inner Call. Three frames
   pin outer iteration, inner iteration and Call site; two independent tagged
   output prefixes restore both loops without replaying completed effects.
-- **Still unsupported:** Calls beyond two Switch or ForRange levels, mixed
-  nested branch/loop bodies, effectful For/Fold, Try and Parallel. Mixed pure
-  steps and
-  Calls in one effectful Switch branch fail closed. Complete CEL, Google
-  retry/error semantics and YAML fallback remain pending.
+- **New opt-in generalized backend:** `ControlFlowLowering` builds one typed,
+  deterministic CFG for nested branches, `ForRange`, `For`, `Fold` and `Return`.
+  `ContinuationAnalysis` computes live slots over loop backedges. The new
+  `StateMachineEmitter` (manifest `runtime_abi: 3`, IPC `protocol_version: 2`)
+  suspends with the *successor CFG block* as its continuation, not a
+  replayable lexical branch/loop frame. It handles sequential dependent
+  effects inside `For` and `Fold` and mixed range/branch nesting. The old
+  ABI 1/2 emitters remain the default; callers must explicitly opt into
+  `RustEmitter.emitV2` or `writeV2`.
+- **Legacy ABI 2 limitations:** Calls beyond two Switch/ForRange levels,
+  mixed nested branches/loops, effectful For/Fold and mixed pure/effect
+  steps in a branch still fail closed. These combinations are covered by
+  the new experimental CFG backend instead.
+- **Still unsupported in either backend:** `Try`/`Parallel`, complete CEL,
+  Google retry/error parity and YAML fallback.
 - `NativeCompiler.compile` consumes constructed DSL workflows.
   `NativeMain` reuses `awfl-us/compiler.WorkflowLoader` to load existing
   Scala objects. Integration with `compiler --target rust` is pending.
 - Verified locally in the AWFL Scala cloud workspace:
   - All three Scala frontend/loader smoke applications passed.
-  - Ten Rust runtime unit tests passed.
+  - Eleven Rust runtime unit tests passed, including strict v1/v2
+    continuation-version separation.
   - Pure Rust smoke executable passed three inputs.
   - Eight pure control-flow/early-return fixtures passed sixteen assertions.
   - Actual generated native effect binaries passed suspend/resume,
@@ -89,6 +100,11 @@ statements; the server owns all effects, state transitions and persistence.
     rejection.
   - Rustfmt and strict Clippy checks apply to the Rust crate and generated
     fixtures in CI.
+  - The opt-in ABI 3 protocol suite compiles real Rust fixtures and checks
+    effectful `For`/`Fold`, mixed `ForRange`/`Switch`, nested effectful
+    ranges/branches, distinct idempotency IDs, corrupt continuations and
+    resumption without replaying earlier choices. The dedicated CFG and
+    liveness Scala smoke test checks deterministic labels and loop backedges.
 
 ## Phase 3 — experimental server integration, still opt-in
 
@@ -111,18 +127,25 @@ statements; the server owns all effects, state transitions and persistence.
   explicitly injected, allowlisted operation handlers and uses a stable
   per-execution/per-effect idempotency key. An aged unresolved intent requires
   operation-specific reconciliation after takeover; blind retries are blocked.
+- **New opt-in v2 route:** The store pins `protocolVersion` at execution
+  creation (default 1). The server checks the corresponding native request
+  and response version, accepts a frame-free v2 continuation at CFG PC zero,
+  and rejects effect intents using another protocol. The Firestore emulator
+  verified a v2 compiled nested-range workflow with eight journaled effects
+  and worker takeover.
 - **Verified using a real local Firestore emulator**, not just fake
   transactions: 12 concurrent workers racing to claim, takeover fencing,
   cancellation versus recording, process/store reconstruction around
   pending intents, uncertain outcome reconciliation, a generated Rust
   suspension with recorded server outcome, and a two-effect Rust sequence.
-  All twelve emulator integration tests passed, including compiled Rust
+  All fourteen emulator integration tests passed, including compiled Rust
   ranges and Switches resuming after worker takeovers. The nested range test
   survives two worker replacements and journals eight effects exactly once.
   A separate regression proves arbitrary nested JSON inputs, arguments,
   outcomes and final results persist and hydrate correctly. The entire
-  Node native suite passed 26/26 with all real-binary integrations
-  enabled; two additional
+  Node native suite passed 28/28 with all real-binary integrations
+  enabled, including the new ABI 3 CFG recovery and protocol-pinning
+  checks; two additional
   local tests verify subcollection scaling and persistence-size rejection.
 - This is **not** wired to production `createWorkflowExecution`, cloud
   consumers, APIs, or agent session routing. There is no deployed native

@@ -19,8 +19,9 @@ object ExpressionEmitter {
     out.append('"').toString
   }
 
-  def render(value: Expr, where: String): String = {
-    def inner(v: Expr): String = render(v, where)
+  def render(value: Expr, where: String,
+             slot: String => String = id => s"$id.clone()"): String = {
+    def inner(v: Expr): String = render(v, where, slot)
     value match {
       case NullValue => "AwflValue::Null"
       case BoolValue(v) => s"AwflValue::Bool($v)"
@@ -34,7 +35,7 @@ object ExpressionEmitter {
         val pairs = xs.map((k, v) => s"(${q(k)}.to_owned(), ${inner(v)})").mkString(", ")
         s"AwflValue::Map(std::collections::BTreeMap::from([$pairs]))"
       case Input => "input.clone()"
-      case SlotRef(id) => s"$id.clone()"
+      case SlotRef(id) => slot(id)
       case Field(v, name) => s"ops::field(&(${inner(v)}), ${q(name)})?"
       case Index(v, index) => s"ops::index(&(${inner(v)}), &(${inner(index)}))?"
       case Global(id) => throw CompileError(where, s"global ${id.wireId} requires trusted server bindings; not available in pure runner")
