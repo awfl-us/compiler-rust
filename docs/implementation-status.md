@@ -6,14 +6,14 @@ execution disabled until wider equivalence and safety tests pass.
 
 ## November 11: restored original DSL architecture (verified)
 
-- `awfl-us/dsl` PR #2 replaces the accidental typed DSL additions with only
+- Merged `awfl-us/dsl` PR #2 and released `v0.3.4`, replacing the accidental typed DSL additions with only
   `CelFunctions` / `CallOperations` backend-neutral String constants. The
   original `CelFunc`, `CelOp`, `Call` AST classes and the four global Value
   placeholders are **byte-for-byte unchanged from the pre-Rust DSL baseline**.
   DSL helpers only substitute the operation-name constants; no new AST or
   overloaded constructors are required. DSL test `OperationNamesSmoke` passed
   when run by the YAML CI job.
-- `awfl-us/compiler-yaml` PR #1 maps 22 function names and 10 call names to
+- Merged `awfl-us/compiler-yaml` PR #1 maps 22 function names and 10 call names to
   their exact previous Google Workflows spellings, preserving pre-existing
   literal-name support during migration. Its complete 32-operation name matrix
   and CEL/Call shape tests **passed** in GitHub Actions run
@@ -28,10 +28,11 @@ execution disabled until wider equivalence and safety tests pass.
   and PR run [43078395004](https://github.com/awfl-us/compiler-rust/actions/runs/43078395004),
   including a real Scala `NativeMain` → Cargo → Rust execution, generated
   Rust Clippy and nested effect continuation tests.
-- **Rollout**: this is on feature branches, not a coordinated released
-  DSL/YAML/compiler version. Publish the shared constants and updated YAML
-  mapping as one compatible change before migrating existing workflow name
-  literals or enabling native execution. Native Rust has many registered
+- **Rollout**: the additive DSL `v0.3.4` and updated YAML compiler are now
+  merged/published. This native compiler explicitly pins DSL `v0.3.4` and
+  no longer needs a locally published development snapshot. The native
+  compiler itself remains gated on broader workflow parity; existing
+  workflow literals can be migrated later without changing their AST. Native Rust has many registered
   function-name IDs whose actual code-generation semantics are still
   explicitly unsupported; the 32-name YAML matrix does **not** imply full
   Rust function/effect parity.
@@ -75,14 +76,14 @@ execution disabled until wider equivalence and safety tests pass.
 
 ## Related repositories and production wiring
 
-- [dsl PR #2](https://github.com/awfl-us/dsl/pull/2) now adds only
+- Merged [dsl PR #2](https://github.com/awfl-us/dsl/pull/2) adds only
   `CelFunctions` and `CallOperations` string constants, preserving original
   AST classes and helper interfaces. The earlier typed API/registry was
-  reverted. [compiler-yaml PR #1](https://github.com/awfl-us/compiler-yaml/pull/1)
+  reverted. Merged [compiler-yaml PR #1](https://github.com/awfl-us/compiler-yaml/pull/1)
   renders constants into original Google names while retaining unconverted
-  literal names for existing workflows. The frontend pins that DSL branch
-  until coordinated publishing; downstream workflow calls can be migrated by
-  replacing strings with constants, not constructors.
+  literal names for existing workflows. The frontend pins published DSL
+  `v0.3.4`; downstream workflow calls can be migrated by replacing strings
+  with constants, not constructors.
 - [server PR #72](https://github.com/awfl-us/server/pull/72) merged the
   opt-in shared-launcher selection, IAM-owned GCS artifact lookup, Firestore
   checkpoints/effect journal, Cloud Tasks dispatch, OIDC-protected Jobs route,

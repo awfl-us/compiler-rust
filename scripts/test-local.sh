@@ -10,22 +10,16 @@ if [[ "$MODE" != '--smoke' && "$MODE" != '--full' ]]; then
 fi
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DSL="${AWFL_DSL_ROOT:-$ROOT/../dsl}"
 WORKFLOWS="${AWFL_WORKFLOWS_ROOT:-$ROOT/../workflows}"
 export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
 for tool in java sbt cargo rustc cc python3; do
   command -v "$tool" >/dev/null || { echo "Missing $tool. Use AWFL Scala+Rust consumer." >&2; exit 1; }
 done
-[[ -f "$DSL/build.sbt" ]] || { echo "Missing sibling AWFL DSL at $DSL" >&2; exit 1; }
 [[ -f "$WORKFLOWS/src/main/scala/us/awfl/workflows/LoadConversationHistory.scala" ]] || {
   echo "Missing unmodified LoadConversationHistory source at $WORKFLOWS" >&2; exit 1;
 }
 
-echo '== Publish original-shape DSL with operation constants locally =='
-(cd "$DSL" && sbt -batch \
-  'set ThisBuild / version := "0.1.0-SNAPSHOT"' publishLocal \
-  'Test / runMain us.awfl.dsl.OperationNamesSmoke')
-
+echo '== Use published additive DSL v0.3.4 (no local DSL build required) =='
 echo '== Scala AST normalization, CFG liveness, and NativeMain =='
 (cd "$ROOT/frontend" && sbt -batch \
   'Test / runMain us.awfl.compiler.rust.FrontendSmoke' \

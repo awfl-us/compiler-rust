@@ -46,9 +46,9 @@ scripts/test-local.sh --smoke  # Scala DSL + Rust runtime + real workflow
 scripts/test-local.sh --full   # Also run all compiled CFG/effect-resume fixtures
 ```
 
-The script publishes the existing operation-constants DSL artifact locally,
-loads and compiles an **unchanged** `LoadConversationHistory.scala` from the
-sibling Workflows checkout, builds actual Rust executable crates, tests HTTP
+The script resolves the published additive DSL **v0.3.4**, loads and
+compiles an **unchanged** `LoadConversationHistory.scala` from the sibling
+Workflows checkout, builds actual Rust executable crates, tests HTTP
 intent + checkpoint resume **without contacting the endpoint**, and checks
 pure workflow outputs. The full option also tests nested branches, loops,
 folds, effect IDs, checkpoint corruption, and replay using fresh Rust
@@ -60,7 +60,8 @@ workflow's suspend/resume sequence, and both compiled control-flow and
 continuation conformance suites. The first invocation populated Scala/Cargo
 caches; subsequent runs reuse them.
 
-The shared operation identity catalog is maintained in `awfl-us/dsl`, not copied
-into this repository. The YAML backend in `awfl-us/compiler-yaml` must retain
-compatibility while that migration proceeds.
+The shared operation-name constants are maintained in `awfl-us/dsl` v0.3.4,
+not duplicated in the DSL AST or this compiler. The merged
+`awfl-us/compiler-yaml` backend maps these names back to Google operations
+and preserves original literals during gradual workflow migration.
 
