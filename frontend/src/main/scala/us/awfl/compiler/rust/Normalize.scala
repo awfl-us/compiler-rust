@@ -50,6 +50,19 @@ object Normalize {
       case "true" => BoolValue(true)
       case "false" => BoolValue(false)
       case name if symbols.contains(name) => SlotRef(symbols(name))
+      // Existing AWFL `Value("input.env")` references are dotted paths in
+      // CelConst, not a different DSL AST. Resolve only known input/step
+      // symbols, and validate path segments to avoid interpreting CEL code.
+      case path if path.contains('.') && {
+        val segments = path.split("\\.").toVector
+        segments.size > 1 &&
+          (segments.head == "input" || symbols.contains(segments.head)) &&
+          segments.forall(_.matches("[A-Za-z_][A-Za-z0-9_]*"))
+      } =>
+        val segments = path.split("\\.").toVector
+        val root: Expr = if (segments.head == "input") Input
+                         else SlotRef(symbols(segments.head))
+        segments.tail.foldLeft(root)((value, field) => Field(value, field))
       case text if text.matches("-?(0|[1-9][0-9]*)") =>
         text.toLongOption.map(IntValue(_))
           .getOrElse(fail(where, s"integer outside signed 64-bit range: $text"))

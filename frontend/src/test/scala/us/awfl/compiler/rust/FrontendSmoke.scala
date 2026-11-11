@@ -39,6 +39,14 @@ object FrontendSmoke {
     val echo = Workflow((List.empty[Step[?, ?]], Value[Int]("input")))
     assert(Normalize(echo).steps.map(_.nodeId) == Vector("0.return"))
     assert(RustEmitter.emit(Normalize(echo)).source.contains("input.clone()"))
+    // Production HTTP helpers use the original dotted input-env reference.
+    val dotted = Workflow((List.empty[Step[?, ?]],
+      Value[String]("input.env.BASE_URL")))
+    val dottedRust = RustEmitter.emit(Normalize(dotted)).source
+    assert(dottedRust.contains("ops::field"))
+    assert(dottedRust.contains("\"env\""))
+    assert(dottedRust.contains("\"BASE_URL\""))
+
 
     // Effects compile to a versioned suspension request; no HTTP runs locally.
     val call = Call[Map[String, String], String]("fetch", CallOperations.HttpPost, obj(Map("url" -> "https://example.org")))
