@@ -28,7 +28,8 @@ echo '== Scala AST normalization, CFG liveness, and NativeMain =='
   'Test / runMain us.awfl.compiler.rust.NativeCliSmoke' \
   'Test / runMain us.awfl.compiler.rust.CelStdlibSmoke' \
   'Test / runMain us.awfl.compiler.rust.LiteralCollectionsSmoke' \
-  'Test / runMain us.awfl.compiler.rust.CelOperatorsSmoke')
+  'Test / runMain us.awfl.compiler.rust.CelOperatorsSmoke' \
+  'Test / runMain us.awfl.compiler.rust.TryRaiseSmoke')
 
 echo '== Compile unmodified production workflow source =='
 (cd "$ROOT/frontend" && sbt -batch \
@@ -60,6 +61,12 @@ echo '== Compile existing CEL membership and floor-division operators =='
 (cd "$ROOT" && cargo build --manifest-path fixtures/native-cel-operators/Cargo.toml \
   && cargo clippy --manifest-path fixtures/native-cel-operators/Cargo.toml --all-targets --locked -- -D warnings \
   && python3 scripts/test_cel_operators.py)
+
+echo '== Compile nested Try/Raise, recoverable effects and explicit errors =='
+(cd "$ROOT" && for name in catch-raise success nested-catch uncaught runtime-error effect-catch; do
+  cargo build --manifest-path "fixtures/native-try-raise/$name/Cargo.toml" --target-dir /tmp/awfl-try-target
+  cargo clippy --manifest-path "fixtures/native-try-raise/$name/Cargo.toml" --all-targets --locked --target-dir /tmp/awfl-try-target -- -D warnings
+done && python3 scripts/test_try_raise.py)
 
 if [[ "$MODE" == '--full' ]]; then
   echo '== Real Rust process control-flow and effect/replay conformance =='

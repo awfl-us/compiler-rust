@@ -100,6 +100,32 @@ failure, and strict Clippy. No DSL or YAML compiler modifications, and native
 production routing remains disabled. Extended numeric/heterogeneous CEL
 operators are still unsupported pending Google differential fixtures.
 
+## November 11: compiled Try/Raise and durable error continuations
+
+The native CFG now lowers **existing DSL** `Try` and `Raise` nodes without
+changing the DSL or parsing YAML. Static exception edges are compiled for
+nested handlers/rethrows, and runtime CEL errors and explicit raised error
+objects take the nearest handler. Handler bodies route rethrows to their
+*enclosing* handler. Uncaught raises return a versioned `status: failed`
+response; continuation-invalidity and internal infrastructure errors are
+not converted into catchable workflow errors.
+
+For HTTP effects inside Try, suspension carries an optional, validated
+`on_error: {next_step,error_slot}` alongside the normal success continuation.
+Checkpoints preserve the live slots needed by either path. The existing
+server-side native engine must **atomically journal confirmed HTTP failures**
+with the error slot/handler PC before this behavior is production-ready.
+Unknown transport results, authentication failures and timeouts must never be
+caught as confirmed HTTP errors or automatically replayed.
+
+Verification: `TryRaiseSmoke` generates **six real Cargo executables**, and
+`test_try_raise.py` verifies normal completion, explicit catches, uncaught
+errors, nested rethrow, runtime CEL failure, effect intent and both resumed
+success/error paths, plus deterministic output. The Python effect-failure
+checkpoint is a controlled simulation; server-side integration must be
+verified separately before enabling native production routing. CI and
+`scripts/test-local.sh --full` exercise all six generated crates under Clippy.
+
 ## Compiler: implemented
 
 - Scala 3 `frontend/` loads constructed AWFL DSL workflow objects through the

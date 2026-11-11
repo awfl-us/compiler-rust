@@ -195,7 +195,13 @@ Extract shared normalization/registry support into dsl or a small shared compile
 - For/ForRange: persist source list/range, cursor and accumulator. Scala upper bound is exclusive; YAML currently subtracts one. Cover empty and reversed ranges.
 - Fold: initialize accumulator once; checkpoint cursor/accumulator without duplicating updates after resume.
 - Switch: first true case, record chosen branch; preserve current no-match semantics initially and diagnose type mismatches.
-- Try/Raise: explicit persisted exception frames; an effect failure resumes into the nearest handler. Distinguish terminal cancellation from catchable workflow errors.
+- Try/Raise: **compiler implemented** using statically linked exceptional CFG edges,
+  not lexical exception frames. Native Rust emits deterministic error catch
+  routes and recoverable-effect continuation metadata (ABI 3/IPC v2). A
+  confirmed remote HTTP failure must be journaled and atomically redirected
+  to the nearest compiled catch in the server; uncertain effects, cancellation
+  and internal infrastructure failures must never be silently caught. Full
+  Google exception taxonomy and crash/reconciliation tests remain required.
 - Block/FlatMap: preserve output aliasing; FlatMap is a projection of an existing step, not an additional remote invocation.
 - Parallel: isolated branch frames, shared result slots and durable join.
 - ParallelFor: bounded concurrency, per-iteration frame, atomic result collection. Existing YAML appends into a shared list, so do not assume input-order results. Preserve observed ordering semantics or introduce an explicitly versioned ordered mode.

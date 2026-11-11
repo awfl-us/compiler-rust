@@ -17,12 +17,17 @@ object StateMachineEmitter {
     // A CFG whose blocks only suspend or complete never mutates the PC.
     // Emit a direct match so Clippy does not flag an unnecessary loop or
     // final-position `return` in the generated Rust.
+    val hasErrors = plan.blocks.exists(b =>
+      b.onError.nonEmpty || b.op.isInstanceOf[ThrowError])
     val advancesPc = plan.blocks.exists(_.op match {
-      case _: Done | _: Invoke => false
+      case _: Done | _: Invoke | _: ThrowError => false
       case _ => true
     })
-    val terminalPrefix = if (advancesPc) "return " else ""
-    val terminalSuffix = if (advancesPc) ";" else ""
+    val terminalPrefix = if (hasErrors) "Ok(Some(Outcome::"
+                         else if (advancesPc) "return Ok(Outcome::"
+                         else "Ok(Outcome::"
+    val terminalSuffix = if (hasErrors) "))"
+                         else if (advancesPc) ");" else ")"
     def slot(id: String): String =
       s"""slots.get(${q(id)}).cloned().ok_or(${q("missing continuation slot: " + id)})?"""
     def expr(value: Expr, node: String): String =
@@ -108,51 +113,132 @@ object StateMachineEmitter {
                     if __awfl_ordinal < 0 { return Err("invalid effect iteration ordinal".into()); }
                     __awfl_effect_id.push_str(&__awfl_ordinal.to_string());"""
           }.mkString("\n                    ")
-          val keep = liveness.resumeSlots(next).toVector.sorted
+          // The checkpoint must have enough state for either the successful
+          // next CFG block or the statically compiled exception handler.
+          val onError = block.onError
+          val keep = (liveness.resumeSlots(next) ++
+            onError.toSet.flatMap(c => liveness.resumeSlots(c.next)))
+            .toVector.sorted
           val saved = keep.map(id =>
             s"""if let Some(value) = slots.get(${q(id)}) {
                         __awfl_saved.insert(${q(id)}.to_owned(), value.clone());
                     }""").mkString("\n                    ")
           val effectIdBinding = if (ancestors.isEmpty) "let" else "let mut"
           val savedBinding = if (keep.isEmpty) "let" else "let mut"
+          val errorHandler = onError match {
+            case Some(c) => s"Some(EffectErrorHandler { next_step: ${c.next}, error_slot: ${q(c.slot)}.to_owned() })"
+            case None => "None"
+          }
           s"""let __awfl_args = (${expr(effect.arguments, block.sourceNode)}).to_plain_json()?;
                     $effectIdBinding __awfl_effect_id = String::from($effectId);
                     $dynamicId
                     $savedBinding __awfl_saved = std::collections::BTreeMap::new();
                     $saved
-                    ${terminalPrefix}Ok(Outcome::Suspended {
+                    ${terminalPrefix}Suspended {
                         effect: EffectIntent {
                             effect_id: __awfl_effect_id,
                             node_id: ${q(effect.nodeId)}.to_owned(),
                             operation: ${q(effect.id.wireId)}.to_owned(),
                             result_slot: ${q(effect.resultSlot)}.to_owned(),
                             args: __awfl_args,
+                            on_error: $errorHandler,
                         },
                         continuation: Continuation {
                             next_step: $next, slots: __awfl_saved, frames: vec![],
                         },
-                    })$terminalSuffix"""
+                    }$terminalSuffix"""
         case Done(value) =>
-          s"""${terminalPrefix}Ok(Outcome::Completed {
+          s"""${terminalPrefix}Completed {
                         result: (${expr(value, block.sourceNode)}).to_plain_json()?,
-                    })$terminalSuffix"""
+                    }$terminalSuffix"""
+        case ThrowError(value) =>
+          s"""Err(Box::new(AwflRaisedError(${expr(value, block.sourceNode)}))
+                        as Box<dyn std::error::Error>)"""
       }
+      val tail = if (hasErrors && !block.op.isInstanceOf[Done] &&
+                     !block.op.isInstanceOf[Invoke] &&
+                     !block.op.isInstanceOf[ThrowError]) "Ok(None)" else ""
       s"""            ${block.id} => {
                     // AWFL ${block.sourceNode}
                     $code
+                    $tail
                 }"""
     }
     val arms = plan.blocks.map(renderBlock).mkString("\n")
     // Single terminal/effect blocks return without changing the program
     // counter; generating a loop would be both unnecessary and a Clippy
     // `never_loop` error. These are common for constant-return workflows.
-    val mutatesSlots = plan.blocks.exists(_.op match {
-      case _: Done | _: Invoke | _: Test => false
+    val errorRoutes = plan.blocks.flatMap { block =>
+      block.onError.map { route =>
+        s"""${block.id} => {
+                  slots.insert(${q(route.slot)}.to_owned(), __awfl_error);
+                  pc = ${route.next};
+                }"""
+      }
+    }.mkString("\n                ")
+    val extraTypes = if (hasErrors) """
+#[derive(Debug)]
+struct AwflRaisedError(AwflValue);
+impl std::fmt::Display for AwflRaisedError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("workflow raised an error")
+    }
+}
+impl std::error::Error for AwflRaisedError {}
+
+fn awfl_error_value(error: &(dyn std::error::Error + 'static)) -> AwflValue {
+    if let Some(explicit) = error.downcast_ref::<AwflRaisedError>() {
+        return explicit.0.clone();
+    }
+    AwflValue::Map(BTreeMap::from([
+        ("message".to_owned(), AwflValue::String(error.to_string())),
+        ("code".to_owned(), AwflValue::Null),
+    ]))
+}
+""" else ""
+    val mutatesSlots = errorRoutes.nonEmpty || plan.blocks.exists(_.op match {
+      case _: Done | _: Invoke | _: Test | _: ThrowError => false
       case _ => true
     })
     val slotsBinding = if (mutatesSlots) "let mut slots" else "let slots"
     val pcBinding = if (advancesPc) "let mut pc" else "let pc"
-    val dispatch = if (advancesPc) s"""for _awfl_budget in 0..1_000_000 {
+    val failureRoute = if (errorRoutes.isEmpty)
+      """return Ok(Outcome::Failed { error: __awfl_error.to_plain_json()? });"""
+    else s"""match pc {
+                    $errorRoutes
+                    _ => return Ok(Outcome::Failed {
+                        error: __awfl_error.to_plain_json()?,
+                    }),
+                }"""
+    // Per-block closure is deliberate: it confines Rust `?` propagation to
+    // the statically chosen exception handler rather than terminating main.
+    val generatedClippy = if (hasErrors) "#[allow(clippy::redundant_closure_call)]\n" else ""
+    val dispatch = if (hasErrors) s"""for _awfl_budget in 0..1_000_000 {
+        let __awfl_step: Result<Option<Outcome>, Box<dyn std::error::Error>> =
+            (|| -> Result<Option<Outcome>, Box<dyn std::error::Error>> {
+            match pc {
+$arms
+                _ => Err("invalid native CFG program counter".into()),
+            }
+        })();
+        match __awfl_step {
+            Ok(Some(outcome)) => return Ok(outcome),
+            Ok(None) => {},
+            Err(error) => {
+                // Only explicit Raise and CEL value evaluation failures are
+                // catchable. Missing/corrupt continuation state, ID overflow
+                // and runtime invariant violations must not become user errors.
+                if error.downcast_ref::<AwflRaisedError>().is_none() &&
+                   error.downcast_ref::<awfl_native_runtime::ValueError>().is_none() {
+                    return Err(error);
+                }
+                let __awfl_error = awfl_error_value(error.as_ref());
+                $failureRoute
+            },
+        }
+    }
+    Err("native CFG instruction budget exceeded".into())"""
+    else if (advancesPc) s"""for _awfl_budget in 0..1_000_000 {
         match pc {
 $arms
             _ => return Err("invalid native CFG program counter".into()),
@@ -171,10 +257,12 @@ use awfl_native_runtime::AwflValue;
 use awfl_native_runtime::operations as ops;
 #[allow(unused_imports)]
 use awfl_native_runtime::protocol::{
-    Request, Response, Outcome, EffectIntent, Continuation,
+    Request, Response, Outcome, EffectIntent, EffectErrorHandler, Continuation,
 };
+$extraTypes
 
-fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<dyn std::error::Error>> {
+#[allow(clippy::never_loop)]
+${generatedClippy}fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<dyn std::error::Error>> {
     let _ = input;
     $slotsBinding: BTreeMap<String, AwflValue> =
         resume.map_or_else(BTreeMap::new, |c| c.slots.clone());

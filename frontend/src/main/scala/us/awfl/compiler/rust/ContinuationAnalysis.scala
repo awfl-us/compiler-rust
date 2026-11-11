@@ -39,6 +39,7 @@ object ContinuationAnalysis {
       references(value) ++ Set(result, ordinal)
     case Invoke(effect, ancestors, _) => references(effect.arguments) ++ ancestors
     case Done(value) => references(value)
+    case ThrowError(value) => references(value)
   }
 
   private def defines(op: Op): Set[String] = op match {
@@ -71,7 +72,7 @@ object ContinuationAnalysis {
       changed = false
       for (pc <- plan.blocks.indices.reverse) {
         val op = plan.blocks(pc).op
-        val outgoing = op.targets.iterator.flatMap(in(_)).toSet
+        val outgoing = plan.blocks(pc).successors.iterator.flatMap(in(_)).toSet
         val incoming = uses(op) ++ (outgoing -- defines(op))
         if (outgoing != out(pc) || incoming != in(pc)) {
           out(pc) = outgoing

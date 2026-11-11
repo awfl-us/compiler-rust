@@ -6,9 +6,11 @@ use awfl_native_runtime::AwflValue;
 use awfl_native_runtime::operations as ops;
 #[allow(unused_imports)]
 use awfl_native_runtime::protocol::{
-    Request, Response, Outcome, EffectIntent, Continuation,
+    Request, Response, Outcome, EffectIntent, EffectErrorHandler, Continuation,
 };
 
+
+#[allow(clippy::never_loop)]
 fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<dyn std::error::Error>> {
     let _ = input;
     let mut slots: BTreeMap<String, AwflValue> =
@@ -24,6 +26,7 @@ fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<
                     return Ok(Outcome::Completed {
                         result: (slots.get("s3").cloned().ok_or("missing continuation slot: s3")?).to_plain_json()?,
                     });
+
                 }
             1 => {
                     // AWFL 0.0
@@ -32,6 +35,7 @@ fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<
                     slots.insert("__awfl_pc_1_ordinal".to_owned(), AwflValue::Integer(0));
                     slots.insert("s3".to_owned(), AwflValue::List(Vec::new()));
                     pc = 2;
+
                 }
             2 => {
                     // AWFL 0.0
@@ -44,6 +48,7 @@ fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<
                         slots.insert("s0".to_owned(), AwflValue::Integer(i64::try_from(__awfl_cursor)?));
                         pc = 9;
                     } else { pc = 0; }
+
                 }
             3 => {
                     // AWFL 0.0
@@ -54,27 +59,32 @@ fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<
                     }
                     slots.insert("__awfl_pc_1_ordinal".to_owned(), AwflValue::Integer(ops::int_value(&(slots.get("__awfl_pc_1_ordinal").cloned().ok_or("missing continuation slot: __awfl_pc_1_ordinal")?))?.checked_add(1).ok_or("loop ordinal overflow")?));
                     pc = 2;
+
                 }
             4 => {
                     // AWFL 0.0.each.0
                     slots.insert("s2".to_owned(), AwflValue::Map(std::collections::BTreeMap::from([])));
                     pc = 3;
+
                 }
             5 => {
                     // AWFL 0.0.each.0
                     slots.insert("s2".to_owned(), AwflValue::String("skipped".to_owned()));
                     pc = 3;
+
                 }
             6 => {
                     // AWFL 0.0.each.0
                     if ops::bool_value(&(AwflValue::Bool(true)))? {
                         pc = 5;
                     } else { pc = 4; }
+
                 }
             7 => {
                     // AWFL 0.0.each.0
                     slots.insert("s2".to_owned(), slots.get("s1").cloned().ok_or("missing continuation slot: s1")?);
                     pc = 3;
+
                 }
             8 => {
                     // AWFL 0.0.each.0.case0.0
@@ -107,17 +117,20 @@ fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<
                             operation: "http.post".to_owned(),
                             result_slot: "s1".to_owned(),
                             args: __awfl_args,
+                            on_error: None,
                         },
                         continuation: Continuation {
                             next_step: 7, slots: __awfl_saved, frames: vec![],
                         },
                     });
+
                 }
             9 => {
                     // AWFL 0.0.each.0
                     if ops::bool_value(&(AwflValue::Bool(ops::compare(&(slots.get("s0").cloned().ok_or("missing continuation slot: s0")?), &(AwflValue::Integer(0i64)))? == std::cmp::Ordering::Greater)))? {
                         pc = 8;
                     } else { pc = 6; }
+
                 }
             _ => return Err("invalid native CFG program counter".into()),
         }

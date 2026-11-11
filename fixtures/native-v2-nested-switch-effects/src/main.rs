@@ -6,9 +6,11 @@ use awfl_native_runtime::AwflValue;
 use awfl_native_runtime::operations as ops;
 #[allow(unused_imports)]
 use awfl_native_runtime::protocol::{
-    Request, Response, Outcome, EffectIntent, Continuation,
+    Request, Response, Outcome, EffectIntent, EffectErrorHandler, Continuation,
 };
 
+
+#[allow(clippy::never_loop)]
 fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<dyn std::error::Error>> {
     let _ = input;
     let mut slots: BTreeMap<String, AwflValue> =
@@ -24,37 +26,44 @@ fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<
                     return Ok(Outcome::Completed {
                         result: (slots.get("s4").cloned().ok_or("missing continuation slot: s4")?).to_plain_json()?,
                     });
+
                 }
             1 => {
                     // AWFL 0.0
                     slots.insert("s4".to_owned(), AwflValue::Map(std::collections::BTreeMap::from([])));
                     pc = 0;
+
                 }
             2 => {
                     // AWFL 0.0
                     slots.insert("s4".to_owned(), AwflValue::String("no-effect".to_owned()));
                     pc = 0;
+
                 }
             3 => {
                     // AWFL 0.0
                     if ops::bool_value(&(AwflValue::Bool(true)))? {
                         pc = 2;
                     } else { pc = 1; }
+
                 }
             4 => {
                     // AWFL 0.0
                     slots.insert("s4".to_owned(), slots.get("s3").cloned().ok_or("missing continuation slot: s3")?);
                     pc = 0;
+
                 }
             5 => {
                     // AWFL 0.0.case0.0
                     slots.insert("s3".to_owned(), AwflValue::Map(std::collections::BTreeMap::from([])));
                     pc = 4;
+
                 }
             6 => {
                     // AWFL 0.0.case0.0
                     slots.insert("s3".to_owned(), slots.get("s2").cloned().ok_or("missing continuation slot: s2")?);
                     pc = 4;
+
                 }
             7 => {
                     // AWFL 0.0.case0.0.case1.0
@@ -72,22 +81,26 @@ fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<
                             operation: "http.post".to_owned(),
                             result_slot: "s2".to_owned(),
                             args: __awfl_args,
+                            on_error: None,
                         },
                         continuation: Continuation {
                             next_step: 6, slots: __awfl_saved, frames: vec![],
                         },
                     });
+
                 }
             8 => {
                     // AWFL 0.0.case0.0
                     if ops::bool_value(&(AwflValue::Bool(true)))? {
                         pc = 7;
                     } else { pc = 5; }
+
                 }
             9 => {
                     // AWFL 0.0.case0.0
                     slots.insert("s3".to_owned(), slots.get("s1").cloned().ok_or("missing continuation slot: s1")?);
                     pc = 4;
+
                 }
             10 => {
                     // AWFL 0.0.case0.0.case0.1
@@ -105,11 +118,13 @@ fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<
                             operation: "http.post".to_owned(),
                             result_slot: "s1".to_owned(),
                             args: __awfl_args,
+                            on_error: None,
                         },
                         continuation: Continuation {
                             next_step: 9, slots: __awfl_saved, frames: vec![],
                         },
                     });
+
                 }
             11 => {
                     // AWFL 0.0.case0.0.case0.0
@@ -127,23 +142,27 @@ fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<
                             operation: "http.post".to_owned(),
                             result_slot: "s0".to_owned(),
                             args: __awfl_args,
+                            on_error: None,
                         },
                         continuation: Continuation {
                             next_step: 10, slots: __awfl_saved, frames: vec![],
                         },
                     });
+
                 }
             12 => {
                     // AWFL 0.0.case0.0
                     if ops::bool_value(&(AwflValue::Bool(ops::compare(&(input.clone()), &(AwflValue::Integer(4i64)))? == std::cmp::Ordering::Greater)))? {
                         pc = 11;
                     } else { pc = 8; }
+
                 }
             13 => {
                     // AWFL 0.0
                     if ops::bool_value(&(AwflValue::Bool(ops::compare(&(input.clone()), &(AwflValue::Integer(0i64)))? == std::cmp::Ordering::Greater)))? {
                         pc = 12;
                     } else { pc = 3; }
+
                 }
             _ => return Err("invalid native CFG program counter".into()),
         }

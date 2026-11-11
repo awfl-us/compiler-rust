@@ -48,6 +48,15 @@ object Ir {
                               iterable: Expr, itemSlot: String,
                               body: Vector[Instruction], result: Expr,
                               resultSlot: String) extends Instruction
+  /** Try and Raise use the original DSL, with a compile-time error edge.
+    * Errors are not reimplemented in Scala: native Rust owns catch dispatch.
+    */
+  final case class Rescue(nodeId: String, displayName: String,
+                          attempt: Vector[Instruction], success: Expr,
+                          errorSlot: String, handler: Vector[Instruction],
+                          recovery: Expr, resultSlot: String) extends Instruction
+  final case class Throw(nodeId: String, displayName: String, value: Expr)
+      extends Instruction
   /** Explicit DSL Return stops the entire workflow, including nested control flow. */
   final case class EarlyReturn(nodeId: String, displayName: String, value: Expr) extends Instruction
   final case class Finish(nodeId: String, displayName: String, value: Expr) extends Instruction
@@ -57,6 +66,7 @@ object Ir {
     def nodeIds: Vector[String] = {
       def walk(all: Vector[Instruction]): Vector[String] = all.flatMap {
         case choice: Choose => Vector(choice.nodeId) ++ choice.cases.flatMap(c => walk(c.body))
+        case rescue: Rescue => Vector(rescue.nodeId) ++ walk(rescue.attempt) ++ walk(rescue.handler)
         case loop: RepeatRange => Vector(loop.nodeId) ++ walk(loop.body)
         case loop: RepeatEach => Vector(loop.nodeId) ++ walk(loop.body)
         case loop: ReduceEach => Vector(loop.nodeId) ++ walk(loop.body)
@@ -68,6 +78,7 @@ object Ir {
       def walk(all: Vector[Instruction]): Vector[Effect] = all.flatMap {
         case effect: Effect => Vector(effect)
         case choice: Choose => choice.cases.flatMap(c => walk(c.body))
+        case rescue: Rescue => walk(rescue.attempt) ++ walk(rescue.handler)
         case loop: RepeatRange => walk(loop.body)
         case loop: RepeatEach => walk(loop.body)
         case loop: ReduceEach => walk(loop.body)
