@@ -1,1 +1,1 @@
-{"schema_version":2,"workflow":"fold-effects","source_sha256":"ee6fad4c937f284c7952d08feb1f53d2f86d7a772b286326256e56eb49551e3a","runtime_abi":3,"node_ids":["0.0","0.0.each.0","0.return"],"effects":[{"node_id":"0.0.each.0","operation":"http.post"}]}
+{"schema_version":2,"workflow":"fold-effects","source_sha256":"ac9dd441a641922a05da96f54893f698f889d77044b75509631fee58953d75d7","runtime_abi":3,"node_ids":["0.0","0.0.each.0","0.return"],"effects":[{"node_id":"0.0.each.0","operation":"http.post"}]}

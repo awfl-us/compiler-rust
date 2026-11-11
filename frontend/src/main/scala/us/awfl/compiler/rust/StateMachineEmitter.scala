@@ -212,7 +212,7 @@ fn awfl_error_value(error: &(dyn std::error::Error + 'static)) -> AwflValue {
                 }"""
     // Per-block closure is deliberate: it confines Rust `?` propagation to
     // the statically chosen exception handler rather than terminating main.
-    val generatedClippy = if (hasErrors) "#[allow(clippy::redundant_closure_call)]" else ""
+    val generatedClippy = if (hasErrors) "#[allow(clippy::redundant_closure_call)]\n" else ""
     val dispatch = if (hasErrors) s"""for _awfl_budget in 0..1_000_000 {
         let __awfl_step: Result<Option<Outcome>, Box<dyn std::error::Error>> =
             (|| -> Result<Option<Outcome>, Box<dyn std::error::Error>> {
@@ -262,8 +262,7 @@ use awfl_native_runtime::protocol::{
 $extraTypes
 
 #[allow(clippy::never_loop)]
-$generatedClippy
-fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<dyn std::error::Error>> {
+${generatedClippy}fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<dyn std::error::Error>> {
     let _ = input;
     $slotsBinding: BTreeMap<String, AwflValue> =
         resume.map_or_else(BTreeMap::new, |c| c.slots.clone());

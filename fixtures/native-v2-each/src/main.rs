@@ -6,9 +6,11 @@ use awfl_native_runtime::AwflValue;
 use awfl_native_runtime::operations as ops;
 #[allow(unused_imports)]
 use awfl_native_runtime::protocol::{
-    Request, Response, Outcome, EffectIntent, Continuation,
+    Request, Response, Outcome, EffectIntent, EffectErrorHandler, Continuation,
 };
 
+
+#[allow(clippy::never_loop)]
 fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<dyn std::error::Error>> {
     let _ = input;
     let mut slots: BTreeMap<String, AwflValue> =
@@ -24,6 +26,7 @@ fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<
                     return Ok(Outcome::Completed {
                         result: (slots.get("s1").cloned().ok_or("missing continuation slot: s1")?).to_plain_json()?,
                     });
+
                 }
             1 => {
                     // AWFL 0.0
@@ -31,6 +34,7 @@ fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<
                     slots.insert("__awfl_pc_1_ordinal".to_owned(), AwflValue::Integer(0));
                     slots.insert("s1".to_owned(), AwflValue::List(Vec::new()));
                     pc = 2;
+
                 }
             2 => {
                     // AWFL 0.0
@@ -43,6 +47,7 @@ fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<
                         slots.insert("s0".to_owned(), item);
                         pc = 3;
                     } else { pc = 0; }
+
                 }
             3 => {
                     // AWFL 0.0
@@ -53,6 +58,7 @@ fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<
                     }
                     slots.insert("__awfl_pc_1_ordinal".to_owned(), AwflValue::Integer(ops::int_value(&(slots.get("__awfl_pc_1_ordinal").cloned().ok_or("missing continuation slot: __awfl_pc_1_ordinal")?))?.checked_add(1).ok_or("loop ordinal overflow")?));
                     pc = 2;
+
                 }
             _ => return Err("invalid native CFG program counter".into()),
         }
