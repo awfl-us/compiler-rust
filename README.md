@@ -53,7 +53,8 @@ compiles an **unchanged** `LoadConversationHistory.scala` from the sibling
 Workflows checkout, builds actual Rust executable crates, tests HTTP
 intent + checkpoint resume **without contacting the endpoint**, and checks
 pure workflow outputs, generated native CEL standard-library semantics,
-and original DSL literal collections compiled to Rust.
+original DSL literal collections compiled to Rust, and native `in` and
+`//` operator semantics (including negative floor division and errors).
 The full option also tests nested branches, loops,
 folds, effect IDs, checkpoint corruption, and replay using fresh Rust
 processes. No production workflow routing is enabled by these tests.

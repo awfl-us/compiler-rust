@@ -234,6 +234,44 @@ pub fn json_encode_bytes(value: &AwflValue) -> Result<AwflValue, ValueError> {
     Ok(AwflValue::Bytes(encoded))
 }
 
+/// CEL/Google Workflows `a in b`: value membership in a list, or a string
+/// key's existence in a map. Do not interpret substring containment.
+pub fn contains(item: &AwflValue, collection: &AwflValue) -> Result<AwflValue, ValueError> {
+    match collection {
+        AwflValue::List(values) => Ok(AwflValue::Bool(values.contains(item))),
+        AwflValue::Map(values) => match item {
+            AwflValue::String(key) => Ok(AwflValue::Bool(values.contains_key(key))),
+            _ => Err(ValueError::Type(
+                "map membership requires a string key".into(),
+            )),
+        },
+        _ => Err(ValueError::Type("membership requires list or map".into())),
+    }
+}
+
+/// CEL `//` is floor division, *not* Rust's truncating signed division.
+/// Return errors on zero and i64::MIN/-1 rather than panic or wrap.
+pub fn floor_divide(left: &AwflValue, right: &AwflValue) -> Result<AwflValue, ValueError> {
+    match (left, right) {
+        (AwflValue::Integer(a), AwflValue::Integer(b)) => {
+            if *b == 0 {
+                return Err(ValueError::Type("division by zero".into()));
+            }
+            let quotient = a.checked_div(*b).ok_or(ValueError::Overflow)?;
+            let remainder = a.checked_rem(*b).ok_or(ValueError::Overflow)?;
+            let result = if remainder != 0 && (remainder < 0) != (*b < 0) {
+                quotient.checked_sub(1).ok_or(ValueError::Overflow)?
+            } else {
+                quotient
+            };
+            Ok(AwflValue::Integer(result))
+        }
+        _ => Err(ValueError::Type(
+            "integer floor division requires two integers".into(),
+        )),
+    }
+}
+
 fn finite(n: f64) -> Result<AwflValue, ValueError> {
     if !n.is_finite() {
         return Err(ValueError::NonFiniteFloat);
@@ -381,5 +419,60 @@ mod tests {
         assert!(json_decode(&AwflValue::Integer(42)).is_err());
         assert!(json_encode_string(&AwflValue::Bytes(vec![255])).is_err());
         assert!(json_encode_string(&AwflValue::Float(f64::INFINITY)).is_err());
+    }
+    #[test]
+    fn floor_division_rounds_toward_negative_infinity_and_checks_errors() {
+        let div = |a, b| floor_divide(&AwflValue::Integer(a), &AwflValue::Integer(b));
+        assert_eq!(div(5, 2).unwrap(), AwflValue::Integer(2));
+        assert_eq!(div(-5, 2).unwrap(), AwflValue::Integer(-3));
+        assert_eq!(div(5, -2).unwrap(), AwflValue::Integer(-3));
+        assert_eq!(div(-5, -2).unwrap(), AwflValue::Integer(2));
+        assert_eq!(div(0, -2).unwrap(), AwflValue::Integer(0));
+        assert!(
+            div(1, 0)
+                .unwrap_err()
+                .to_string()
+                .contains("division by zero")
+        );
+        assert!(matches!(div(i64::MIN, -1), Err(ValueError::Overflow)));
+        assert!(floor_divide(&AwflValue::Float(2.0), &AwflValue::Integer(2)).is_err());
+    }
+
+    #[test]
+    fn membership_checks_list_elements_and_map_keys_without_string_matching() {
+        let list = AwflValue::List(vec![
+            AwflValue::Integer(1),
+            AwflValue::Integer(2),
+            AwflValue::List(vec![AwflValue::Integer(3)]),
+        ]);
+        assert_eq!(
+            contains(&AwflValue::Integer(2), &list).unwrap(),
+            AwflValue::Bool(true)
+        );
+        assert_eq!(
+            contains(&AwflValue::Integer(4), &list).unwrap(),
+            AwflValue::Bool(false)
+        );
+        assert_eq!(
+            contains(&AwflValue::List(vec![AwflValue::Integer(3)]), &list).unwrap(),
+            AwflValue::Bool(true)
+        );
+        let map = AwflValue::Map([("key".into(), AwflValue::Null)].into());
+        assert_eq!(
+            contains(&AwflValue::String("key".into()), &map).unwrap(),
+            AwflValue::Bool(true)
+        );
+        assert_eq!(
+            contains(&AwflValue::String("missing".into()), &map).unwrap(),
+            AwflValue::Bool(false)
+        );
+        assert!(contains(&AwflValue::Integer(1), &map).is_err());
+        assert!(
+            contains(
+                &AwflValue::String("abc".into()),
+                &AwflValue::String("abcdef".into())
+            )
+            .is_err()
+        );
     }
 }

@@ -41,6 +41,8 @@ object ExpressionEmitter {
       case Binary(left, id, right) =>
         val l = inner(left); val r = inner(right)
         id match {
+          case OperatorId.Contains => s"ops::contains(&($l), &($r))?"
+          case OperatorId.DivideInt => s"ops::floor_divide(&($l), &($r))?"
           case OperatorId.Add => s"ops::add($l, $r)?"
           case OperatorId.Subtract => s"ops::subtract($l, $r)?"
           case OperatorId.Multiply => s"ops::multiply($l, $r)?"
