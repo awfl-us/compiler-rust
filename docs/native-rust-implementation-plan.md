@@ -1,7 +1,7 @@
 # Native Rust workflow compiler and server execution plan
 
-Status: proposed implementation plan; no runtime/compiler changes in this commit.
-Date: 2026-11-10
+Status: actively implemented; pure GCP canary verified, broader parity and rollout remain gated.
+Original plan: 2026-11-10; progress review: 2026-11-11.
 Goal: preserve Scala workflow authoring, compile workflow control flow and expressions to native Rust, and move durable execution, step/value persistence, callbacks and recovery into AWFL server.
 
 ## 1. Findings from the current source
@@ -239,23 +239,32 @@ Companion draft PRs are
 [dsl #2](https://github.com/awfl-us/dsl/pull/2) and
 [compiler-yaml #1](https://github.com/awfl-us/compiler-yaml/pull/1).
 
-[server PR #72](https://github.com/awfl-us/server/pull/72) remains an
-**unconnected experimental implementation**. The Firestore execution store now
-persists results in a bounded per-effect subcollection journal, with epoch
-fencing, lease expiry, cancellation, prepared intents and tagged continuations.
-Plain JSON input, arguments, outcomes and final results use bounded JSON
-string persistence because Firestore disallows direct array-in-array values.
-Real Firestore emulator integration tests exercise competing claims, crash
-recovery, cancellation and compiled Rust suspend/resume; no Google Cloud
-production deployment or real remote HTTP delivery has been tested.
+[server PR #72](https://github.com/awfl-us/server/pull/72) is merged and
+its opt-in native path is deployed. The server's existing shared launcher now
+selects an IAM-published GCS artifact only for opted-in native workflows,
+then creates a pinned Firestore execution and a single Cloud Task for the
+OIDC-protected Jobs worker. Ordinary API/Jobs revisions still have native
+execution **disabled**. Firestore persists bounded values and a per-effect
+journal with epoch fencing, cancellation, and checkpoint recovery.
 
-**Enforced next gate:** deeper crash/side-effect reconciliation tests, a
-secure artifact registry and sandbox, authenticated real HTTP handlers,
-`Try`/`Parallel` parity, then **shared-launcher integration and workload
-parity**. The generalized CFG backend remains opt-in; no production launcher
-or deployment routing is changed.
-Do not enable native production routing until these gates pass.
-See `docs/implementation-status.md` for the verified status.
+**November 11 verified GCP checkpoint:** the first live pilot request
+reached Jobs but failed because its glibc-linked ELF could not spawn in
+Alpine. [Workflows PR #3](https://github.com/awfl-us/workflows/pull/3)
+merged the verified musl-static publisher. `NativePilot` now pins the static
+SHA-256 `109b82a73175a46ada8b4c5f5059b724f40017a8321b2c76edec9e62396f984e`.
+A second live Cloud Tasks → tagged Jobs → Firestore canary **completed**
+with `[2,3,9,9]`, 6,836 ms observed end-to-end in one sample; duplicate
+delivery did not advance the completed execution. The route had no external
+effects. This proves the isolated pure canary only, **not** the public
+end-user-authenticated launcher or workflow parity. The scripted canary is
+in `scripts/live_native_pilot.py`; detailed evidence and remaining gates
+are in `docs/implementation-status.md`.
+
+**Enforced next gate:** end-user-authenticated shared-launcher/status tests,
+crash/retry reconciliation, secure OS process sandbox, real authenticated HTTP
+effect semantics, callback/child orchestration, `Try`/`Parallel` parity and
+meaningful differential performance measurements. Do not enable native
+production routing until these gates pass.
 
 ### Phase 0 — Freeze baseline and executable inventory
 - Capture exact commit SHAs and dependency versions for a reproducible fixture bundle.
@@ -290,7 +299,7 @@ Gate: resume yields correct results, committed effects do not repeat, stale work
 Gate: early/duplicate/late callbacks, timeout/restart, duplicate child-start, racing branches and cancellation fixtures pass.
 
 ### Phase 5 — Integrate and pilot
-- Build/publish pinned native artifacts in CI and register manifests through server.
+- Build and publish digest-pinned native artifacts through existing GCP IAM/WIF deployment authority, never an end-user-facing server registration API. Static musl publication and a pure canary are verified; automated manual-dispatch access remains to be confirmed.
 - Keep YAML/native backend choice per workflow deployment; pin active execution versions.
 - Start with a deterministic small workflow, then ProjectManager with its complete helper dependency closure.
 - Avoid duplicating live LLM/tool side effects in shadow runs; replay captured effects or use isolated test targets.

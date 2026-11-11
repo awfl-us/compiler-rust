@@ -1,8 +1,51 @@
-# Native Rust implementation status — 2026-11-10
+# Native Rust implementation status — 2026-11-11
 
 This branch is a **partial, experimental implementation**, not approval to
 replace Google Workflows in production. The Scala frontend emits real Rust
 statements; the server owns all effects, state transitions and persistence.
+
+## November 11: deployed pure-workflow canary (verified)
+
+- [`awfl-us/server` PR #72](https://github.com/awfl-us/server/pull/72)
+  merged as `a797377` and deployed to Cloud Run (API `api-00137-hjd`,
+  Jobs `jobs-00119-7gr`). The existing `createWorkflowExecution` launcher
+  now has an **opt-in** GCS release lookup, Firestore execution store,
+  Cloud Tasks enqueue, IAM/OIDC-protected Jobs worker, and per-execution
+  status/cancel adapters. The API and normal Jobs revisions remain at
+  `AWFL_NATIVE_EXECUTION_ENABLED=0`.
+- [`awfl-us/workflows` PR #3](https://github.com/awfl-us/workflows/pull/3)
+  merged the Rust 1.99.1 Alpine (`x86_64-unknown-linux-musl`) publisher.
+  A first live Cloud Task reached the tagged Jobs worker but failed
+  `spawn ... ENOENT`: the old artifact requested glibc's
+  `/lib64/ld-linux-x86-64.so.2`, absent from `node:22-alpine`.
+  That failed Cloud Task was deleted. A replacement static ELF built and
+  executed in Alpine CI was checked for **no PT_INTERP**, uploaded to the
+  dedicated native bucket, read back, and activated for `NativePilot`:
+  SHA-256 `109b82a73175a46ada8b4c5f5059b724f40017a8321b2c76edec9e62396f984e`.
+- **Live GCP canary succeeded:** an isolated `NativePilot` record was
+  created in Firestore, a single Cloud Task was sent with OIDC to the
+  **zero-traffic** `native-rust-pilot` Jobs revision (`jobs-00121-jaz`),
+  and the real Rust binary completed with persisted result `[2,3,9,9]`.
+  End-to-end single-sample latency was **6,836 ms** from enqueue to
+  observation, not a p50/p95 production benchmark. Duplicate task delivery
+  did not change the completed execution epoch or replay work. No HTTP or
+  other external effects were attempted (`allowedOperations: []`).
+- Reproducible test driver: `scripts/live_native_pilot.py` using the
+  compiler-rust cloud environment's injected GCP token, `google-cloud-firestore`,
+  `google-cloud-tasks` and `gcloud`. It performs a direct trusted canary
+  setup; it is **not** a successful end-user-authenticated
+  `/workflows/execute` smoke test. The tagged revision handles only explicit
+  canary requests; normal Jobs traffic remains at 100% on the disabled
+  revision.
+- **Publisher automation caveat:** the attempted manual GitHub Actions
+  dispatch was denied with HTTP 403 for the GitHub App installation.
+  The validated CI artifact was instead published using the existing
+  injected GCP IAM identity. The manual `workflow_dispatch` permission or
+  owner-run publication path needs verification; do not claim that the
+  GitHub App can dispatch the workflow yet.
+
+This proves the pure execution plumbing and duplicate completion fencing,
+**not** general native workflow production readiness or user-facing parity.
 
 ## Phase 0 — incomplete
 
@@ -147,27 +190,32 @@ statements; the server owns all effects, state transitions and persistence.
   enabled, including the new ABI 3 CFG recovery and protocol-pinning
   checks; two additional
   local tests verify subcollection scaling and persistence-size rejection.
-- This is **not** wired to production `createWorkflowExecution`, cloud
-  consumers, APIs, or agent session routing. There is no deployed native
-  worker, executable sandbox, trusted artifact registry, secure real HTTP
-  adapter, production credential policy, or workload-wide parity claim.
+- The **pure-path** native worker, shared launcher and IAM-backed GCS
+  release selection are deployed but disabled for general traffic. Neither a
+  restricted OS-level execution sandbox nor a live general-purpose external
+  effect adapter exists. Historical emulator fixture counts above refer to
+  local tests, **not** to live Cloud Run effect execution.
 
-## Remaining gates before a pilot
+## Remaining gates before a broader pilot
 
-1. Extend the bounded two-level Switch/ForRange frames to arbitrary nested
-   branches and loops, effectful For and Fold, with precise live-slot
-   capture and branch-safe replay.
-2. Test every crash window (prepare, dispatch, unknown remote outcome,
-   result commit, post-commit resume), transaction contention at realistic
-   scale, lease heartbeats and lifecycle sweeping.
-3. Introduce trusted manifest/artifact registration, code-signing or
-   equivalent verification, process isolation, real authenticated/allowlisted
-   handlers and explicit remote idempotency/reconciliation contracts.
-4. Wire opt-in native routing **into the existing shared AWFL launcher and
-   status/callback flow**; keep the Google backend as default.
-5. Complete `Try`, `Parallel`, CEL and retry semantics with comparative
-   Google Workflows differential cases, then benchmark actual p50/p95/p99
-   workloads under realistic load.
+1. Exercise the **existing authenticated** public `/workflows/execute`
+   launcher end to end, including session registration, status/history,
+   cancellation, agent/MCP surfaces and Google fallback behavior; today's
+   successful canary injected the Firestore execution and Cloud Task directly.
+2. Add crash-window and retry coverage with recoverable error states,
+   lease heartbeats, uncertain-effect reconciliation and orphan sweeping.
+   Prevent noisy 503 retries while another worker holds a valid lease.
+3. Validate OS-level confinement for downloaded executables, production
+   artifact approval/provenance, real allowlisted HTTP effect handlers,
+   per-operation idempotency and trust boundaries under adversarial inputs.
+4. Complete `Try`, `Parallel`, callbacks/children, CEL, Google
+   error/retry semantics, and representative workflow dependency closures.
+5. Verify automated **IAM-authorized** publishing and rollback without a
+   GitHub App workflow-dispatch permission gap; run differential tests and
+   measured p50/p95/p99 performance under representative load.
+
+The ABI 3 generalized CFG compiler already covers the tested effectful For,
+Fold, Switch and nested-range subset; this does not imply full DSL parity.
 
 See `frontend/README.md`, `docs/native-ipc-v1.md`, and
 `server/workflows/native/README.md` in [server PR #72](https://github.com/awfl-us/server/pull/72).

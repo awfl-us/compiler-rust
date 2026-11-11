@@ -18,8 +18,11 @@ functions. See `docs/implementation-status.md` for the precise capability gates.
 
 The pure subset now includes compiled `Switch`, `ForRange`, `For` and `Fold`, including
 nested control flow. The Scala CLI in `frontend/` reuses the existing compiler
-workflow loader. General folds/exceptions, server checkpointing, external
-effects, and production deployment are not implemented.
+workflow loader. Full exception/retry parity, real network effects, and general production
+routing remain unavailable. The existing server now supports an **opt-in**
+native Jobs/Firestore backend; a pure ABI 3 `NativePilot` GCP canary passed
+on November 11, 2026. See `docs/implementation-status.md` for evidence,
+deployment boundaries and remaining blockers.
 
 Local source inventory (requires sibling repository clones):
 
