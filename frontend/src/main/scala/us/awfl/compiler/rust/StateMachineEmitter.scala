@@ -201,7 +201,11 @@ fn awfl_error_value(error: &(dyn std::error::Error + 'static)) -> AwflValue {
       case _ => true
     })
     val slotsBinding = if (mutatesSlots) "let mut slots" else "let slots"
-    val pcBinding = if (advancesPc) "let mut pc" else "let pc"
+    // Even without a normal CFG jump, a catch edge must update the program
+    // counter after an explicit Raise or CEL evaluation failure. Uncaught-only
+    // workflows remain immutable so generated Clippy does not warn.
+    val pcBinding = if (advancesPc || plan.blocks.exists(_.onError.nonEmpty))
+      "let mut pc" else "let pc"
     val failureRoute = if (errorRoutes.isEmpty)
       """return Ok(Outcome::Failed { error: __awfl_error.to_plain_json()? });"""
     else s"""match pc {
