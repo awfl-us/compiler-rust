@@ -1,0 +1,1 @@
+{"schema_version":2,"workflow":"nested-range-effects","source_sha256":"fc286ce9cebfba65154c289206dc136125f4c3e1318a9d286818d69a783550ee","runtime_abi":3,"node_ids":["0.0","0.0.each.0","0.0.each.0.each.0","0.0.each.0.each.1","0.return"],"effects":[{"node_id":"0.0.each.0.each.0","operation":"http.post"},{"node_id":"0.0.each.0.each.1","operation":"http.post"}]}

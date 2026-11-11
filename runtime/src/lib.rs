@@ -7,6 +7,28 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use std::fmt;
 
+pub mod operations;
+pub mod protocol;
+
+#[derive(Debug, PartialEq)]
+pub enum ValueError {
+    Type(String),
+    MissingField(String),
+    Overflow,
+    NonFiniteFloat,
+}
+impl fmt::Display for ValueError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Type(message) => write!(f, "{message}"),
+            Self::MissingField(name) => write!(f, "missing field or element: {name}"),
+            Self::Overflow => write!(f, "signed 64-bit integer overflow"),
+            Self::NonFiniteFloat => write!(f, "non-finite floating point number"),
+        }
+    }
+}
+impl std::error::Error for ValueError {}
+
 /// The persistent representation must distinguish bytes from text, integers from
 /// floating point, and a missing slot from an explicitly bound null value.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -62,6 +84,66 @@ impl From<serde_json::Error> for CodecError {
 }
 
 impl AwflValue {
+    /// Public JSON boundary. Unlike persisted tagged values, JSON has no bytes
+    /// representation. Reject bytes and out-of-range integers rather than
+    /// accidentally coercing them to strings or floating point.
+    pub fn from_plain_json(json: &serde_json::Value) -> Result<Self, ValueError> {
+        use serde_json::Value;
+        match json {
+            Value::Null => Ok(Self::Null),
+            Value::Bool(b) => Ok(Self::Bool(*b)),
+            Value::String(s) => Ok(Self::String(s.clone())),
+            Value::Number(n) => {
+                if let Some(i) = n.as_i64() {
+                    Ok(Self::Integer(i))
+                } else if n.as_u64().is_some() {
+                    Err(ValueError::Overflow)
+                } else {
+                    let v = n.as_f64().ok_or(ValueError::NonFiniteFloat)?;
+                    if v.is_finite() {
+                        Ok(Self::Float(v))
+                    } else {
+                        Err(ValueError::NonFiniteFloat)
+                    }
+                }
+            }
+            Value::Array(a) => a
+                .iter()
+                .map(Self::from_plain_json)
+                .collect::<Result<Vec<_>, _>>()
+                .map(Self::List),
+            Value::Object(m) => m
+                .iter()
+                .map(|(k, v)| Ok((k.clone(), Self::from_plain_json(v)?)))
+                .collect::<Result<BTreeMap<_, _>, _>>()
+                .map(Self::Map),
+        }
+    }
+
+    pub fn to_plain_json(&self) -> Result<serde_json::Value, ValueError> {
+        use serde_json::Value;
+        match self {
+            Self::Null => Ok(Value::Null),
+            Self::Bool(b) => Ok(Value::Bool(*b)),
+            Self::Integer(i) => Ok(Value::Number((*i).into())),
+            Self::Float(f) => serde_json::Number::from_f64(*f)
+                .map(Value::Number)
+                .ok_or(ValueError::NonFiniteFloat),
+            Self::String(s) => Ok(Value::String(s.clone())),
+            Self::Bytes(_) => Err(ValueError::Type("bytes require tagged encoding".into())),
+            Self::List(a) => a
+                .iter()
+                .map(Self::to_plain_json)
+                .collect::<Result<Vec<_>, _>>()
+                .map(Value::Array),
+            Self::Map(m) => m
+                .iter()
+                .map(|(k, v)| Ok((k.clone(), v.to_plain_json()?)))
+                .collect::<Result<serde_json::Map<_, _>, _>>()
+                .map(Value::Object),
+        }
+    }
+
     pub fn validate(&self) -> Result<(), CodecError> {
         match self {
             AwflValue::Float(n) if !n.is_finite() => Err(CodecError::NonFiniteFloat),

@@ -1,4 +1,4 @@
-name: Native Rust foundation
+name: Native Rust compiler
 
 on:
   push:
@@ -19,3 +19,85 @@ jobs:
         run: cargo test --workspace --locked
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  scala-to-native-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: awfl-us/workflows
+          ref: 59ed80232d8e742fcc6f4520199f56fe5bbd4d19
+          path: _workflows
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: sbt/setup-sbt@v1
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.99.1'
+      - name: Normalize DSL, test control flow, and load builders via existing compiler
+        run: |
+          cd frontend
+          sbt -batch \
+            'Test / runMain us.awfl.compiler.rust.FrontendSmoke' \
+            'Test / runMain us.awfl.compiler.rust.ControlFlowLoweringSmoke' \
+            'Test / runMain us.awfl.compiler.rust.ControlFlowSmoke' \
+            'Test / runMain us.awfl.compiler.rust.NativeCliSmoke'
+      - name: Compile and execute NativeMain deployable ABI 3 artifact
+        run: |
+          cd frontend
+          sbt -batch 'Test / runMain us.awfl.compiler.rust.NativeMain us.awfl.compiler.rust.NativeCliFixture ../fixtures/native-cli-v2 ../runtime'
+          cd ..
+          manifest=fixtures/native-cli-v2/cli-fixture-increment/manifest.json
+          test "$(jq -r '.runtime_abi' "$manifest")" = 3
+          test "$(jq -r '.workflow' "$manifest")" = cli-fixture-increment
+          cargo build --manifest-path fixtures/native-cli-v2/cli-fixture-increment/Cargo.toml --target-dir "$RUNNER_TEMP/native-cli-target"
+          python3 - <<'PYTHON'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import subprocess
+          import tomllib
+
+          directory = pathlib.Path('fixtures/native-cli-v2/cli-fixture-increment')
+          manifest = json.loads((directory / 'manifest.json').read_text())
+          source = (directory / 'src/main.rs').read_bytes()
+          assert hashlib.sha256(source).hexdigest() == manifest['source_sha256']
+          with (directory / 'Cargo.toml').open('rb') as stream:
+              package = tomllib.load(stream)['package']['name']
+          binary = pathlib.Path(os.environ['RUNNER_TEMP']) / 'native-cli-target/debug' / package
+          response = subprocess.run(
+              [str(binary)], input=json.dumps({'protocol_version': 2, 'input': 41}),
+              text=True, capture_output=True, timeout=20, check=True)
+          assert json.loads(response.stdout) == {
+              'protocol_version': 2, 'status': 'completed', 'result': 42,
+          }, response.stdout
+          print('NativeMain generated a publishable ABI 3 crate, compiled and executed Rust')
+          PYTHON
+      - name: Compile an unchanged production workflow into native Rust
+        run: |
+          cd frontend
+          sbt -batch \
+            'set Test / unmanagedSources += file("../_workflows/src/main/scala/us/awfl/workflows/LoadConversationHistory.scala")' \
+            'Test / runMain us.awfl.compiler.rust.RealWorkflowSmoke'
+          cd ..
+          # Test uses original Scala source; no HTTP request is executed here.
+          ls fixtures/real-load-history/*/src/main.rs
+          for crate in fixtures/real-load-history/*/Cargo.toml; do
+            cargo build --manifest-path "$crate" --target-dir "$RUNNER_TEMP/real-workflow-target"
+          done
+          python3 scripts/test_real_workflow.py "$RUNNER_TEMP/real-workflow-target"
+      - name: Build and lint all generated Rust fixtures
+        run: |
+          for name in native-smoke native-switch native-unmatched native-range native-each native-nested native-fold native-early-return native-top-return native-v2-switch-effects native-v2-nested-switch-effects native-v2-range-two-effects native-v2-nested-range-effects native-v2-each native-v2-fold native-v2-each-effects native-v2-fold-effects native-v2-range-switch-effects native-v2-pure-nested native-v2-deep-switch-effects native-v2-mixed-nested-range; do
+            cargo build --manifest-path "fixtures/$name/Cargo.toml"
+            cargo clippy --manifest-path "fixtures/$name/Cargo.toml" --all-targets --locked -- -D warnings
+          done
+      - name: Execute compiled AWFL workflows
+        run: |
+          python3 scripts/test_native_smoke.py
+          python3 scripts/test_control_flow.py
+          python3 scripts/test_native_protocol.py

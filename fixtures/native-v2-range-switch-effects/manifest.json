@@ -1,0 +1,1 @@
+{"schema_version":2,"workflow":"range-switch-effects","source_sha256":"28185b817831b9b19bf8688af8d9a2b166ac5e66fe097211c04de654f78c5bde","runtime_abi":3,"node_ids":["0.0","0.0.each.0","0.0.each.0.case0.0","0.return"],"effects":[{"node_id":"0.0.each.0.case0.0","operation":"http.post"}]}
