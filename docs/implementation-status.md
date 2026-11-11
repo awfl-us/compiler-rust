@@ -1,5 +1,14 @@
 # Native Rust implementation status — November 11, 2026
 
+**Current authoritative summary:** [verified state and ordered roadmap](current-state-and-roadmap.md).
+**Release state:** compiler-rust PRs #1–#7, server PRs #72/#78/#79,
+DSL #2, compiler-yaml #1 and workflows #3 are **merged**. Compiler #7 is
+`588dc2f`; server #79 is `250f57e`. The restricted `log.write` dispatcher
+passed real compiled Rust/Node/journal tests before merge, including a
+simulated post-journal crash. **Normal native production routing remains
+disabled**; merging code is not a traffic rollout. The live GCP canary was
+an isolated pure artifact, not an effectful production test.
+
 **Experimental.** The compiler now has one native backend, **runtime ABI 3 /
 IPC protocol 2**. The normal Cloud Run API and Jobs revisions retain native
 execution disabled until wider equivalence and safety tests pass.
@@ -166,7 +175,14 @@ handler emits a genuine persisted `log.write` effect, then re-raises the
 original error after the effect completes. `test_try_raise.py` asserts the
 serialized log intent, checkpoint state, resumed terminal failure, and
 repeatability. The crate is compiled and linted in local and CI suites.
-The native server's log dispatcher/journal integration is tested separately.
+The native server's restricted logger/journal integration is verified on a
+separate server PR #79, since merged with a real Cargo-compiled Rust binary.
+A post-journal-commit simulated crash resumed to terminal `Failed` without
+redispatching the log. The focused Node selection passed **34/37 tests**
+(three optional binary-dependent tests skipped, zero failures); tests use
+in-memory Firestore transaction APIs, **not** live Firestore or Cloud Logging.
+The full AWFL Scala/Cargo local suite passed `--full` on the compiler branch.
+This is not a global exactly-once log guarantee or production approval.
 No DSL or YAML changes, and production native routing remains disabled.
 
 ## Compiler: implemented
@@ -200,11 +216,13 @@ No DSL or YAML changes, and production native routing remains disabled.
   Rust test scripts execute pure output and repeatedly suspend/resume actual
   compiled effects in fresh subprocesses. Nested three-level Switch and a
   nested range followed by a sibling effect are also in the test matrix.
-- **Verified:** CI for compiler head `2ca8a93` passed both Rust and Scala
-  jobs in [push run 43073698052](https://github.com/awfl-us/compiler-rust/actions/runs/43073698052)
+- **Historical CI evidence:** compiler head `2ca8a93` passed both Rust and
+  Scala jobs in [push run 43073698052](https://github.com/awfl-us/compiler-rust/actions/runs/43073698052)
   and [PR run 43073715306](https://github.com/awfl-us/compiler-rust/actions/runs/43073715306).
-  This includes real Cargo-built executable tests, strict Clippy, deep
-  Switch/ForRange continuation tests and malformed checkpoint rejection.
+  **Current merged evidence:** compiler PR #7 passed full local
+  `scripts/test-local.sh --full` and GitHub Scala/Rust jobs; this includes
+  seven generated `Try` fixtures plus Product and LoadConversationHistory.
+  Historical head `2ca8a93` is not presented as proof for the latest patch.
 
 ## Related repositories and production wiring
 
@@ -216,6 +234,11 @@ No DSL or YAML changes, and production native routing remains disabled.
   literal names for existing workflows. The frontend pins published DSL
   `v0.3.4`; downstream workflow calls can be migrated by replacing strings
   with constants, not constructors.
+- Merged [server PR #78](https://github.com/awfl-us/server/pull/78)
+  implements original DSL `Try`/`Raise` error recovery across confirmed HTTP
+  4xx/5xx effects, atomic error journaling, terminal `Failed` and tenant-safe
+  status. The later `log.write` handler is tested **locally on a branch** and
+  was subsequently merged in server PR #79.
 - [server PR #72](https://github.com/awfl-us/server/pull/72) merged the
   opt-in shared-launcher selection, IAM-owned GCS artifact lookup, Firestore
   checkpoints/effect journal, Cloud Tasks dispatch, OIDC-protected Jobs route,
@@ -267,21 +290,31 @@ canary was isolated and allowed **zero** external operations. A GitHub App
 attempt to trigger the release workflow returned HTTP 403; the validated
 artifact was published using the existing injected GCP IAM credentials.
 
-## Outstanding gates
+## Outstanding gates (priority order)
 
-1. Finish DSL/operation inventory, constructed-AST coverage and Google
-   differential test fixtures. Preserve typed operation semantics and avoid
-   silent fallback to YAML when encountering unsupported expressions.
-2. Implement `Try`, `Raise`, `Parallel`/`ParallelFor`, callbacks, child
-   workflow execution, broader CEL/global semantics, error and retry parity.
-3. Test authenticated shared-launcher/session/history/status/cancel APIs,
-   real effect allowlisting, trusted identity and OS-level sandboxing.
-4. Test crash windows, effect outcome uncertainty/reconciliation, lease
-   heartbeats, concurrent workers, orphan cleanup, and large data paths.
-5. Verify GCP IAM automated artifact publication/rollback and compare real
-   workloads, including ProjectManager's full dependency closure, before
-   enabling production routing. Preserve pinned artifacts for active runs.
+1. **Completed current delivery:** compiler [PR #7](https://github.com/awfl-us/compiler-rust/pull/7)
+   (catch-only Rust PC) and server [PR #79](https://github.com/awfl-us/server/pull/79)
+   (`log.write` and journaled original `Try` rethrow) are merged after CI.
+   Both keep the DSL unchanged and **do not** enable native production
+   traffic. The `default-log` and post-journal-crash tests are green, while
+   pre-journal crash uncertainty and live Cloud Logging remain unproven.
+2. **Real workflow inventory and differential parity:** constructed-AST
+   coverage and golden Google/native fixtures, including `Product`,
+   `LoadConversationHistory`, then dependent queue/dispatcher/agent workflows;
+   complete missing CEL/text/base64/time/UUID functions as usage requires.
+3. **Durable effect and orchestration coverage:** retries, remote uncertain
+   outcome reconciliation, callbacks, child workflows, provider-specific
+   storage/messaging, proper cancel propagation. Implement `Parallel` and
+   `ParallelFor` with server-owned fork/join; **not** a sequential rewrite.
+4. **Security and reliability:** real Firestore contention/lease takeover,
+   sweeper, process sandbox, token isolation, authenticated public launcher,
+   tenant/status/session integration, artifact and active-release provenance.
+5. **Measure and pilot:** benchmark equal-workload Google versus Rust
+   p50/p95/p99 plus storage/CPU/cost; demonstrate publisher rollback and
+   stable artifact resume; only then consider a limited traffic opt-in.
 
+Full acceptance gates and their order are in
+[current-state-and-roadmap.md](current-state-and-roadmap.md).
 See [compiler architecture](native-control-flow-refactor-plan.md),
 [wire protocol](native-ipc-v2.md), and the
 [full implementation plan](native-rust-implementation-plan.md).

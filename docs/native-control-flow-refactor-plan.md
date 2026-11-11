@@ -5,7 +5,7 @@ Status: implemented for the tested subset (November 11, 2026).
 There is **one** native backend. `Normalize` traverses constructed Scala AWFL
 DSL objects, translating existing `CelFunc`, `CelOp` and `Call` nodes into compiler-internal expressions/instructions with
 stable structural node/slot IDs. `ControlFlowLowering` builds a deterministic
-CFG for `Switch`, `ForRange`, `For`, sequential `Fold`, `Call`, `Return` and
+CFG for `Switch`, `ForRange`, `For`, sequential `Fold`, `Try`, `Raise`, `Call`, `Return` and
 terminal results. `Plan.compact` prunes dead blocks after early returns;
 `Plan.validate` rejects inconsistent labels, missing exits and unreachable
 blocks. The executable contains statically generated Rust CFG match arms,
@@ -34,17 +34,36 @@ alternate emitters or compatibility switches.
   across fresh processes, including nested Switch and For/Fold.
 - Negative checks: wrong protocol number, missing slots, invalid PC, nonempty
   frames, and duplicate/unstable effect IDs.
+- `TryRaiseSmoke` emits seven real Rust executables: success, caught and
+  uncaught raise, nested rethrow, runtime CEL error, HTTP failure catch, and
+  the original DSL default-`Try` logger. The latter suspends on `log.write`
+  and resumes to an uncaught terminal `Failed` after a journaled null result.
+- The full local `scripts/test-local.sh --full` passed in the AWFL Scala
+  consumer (November 11, 2026). A separate Node server test with this Rust
+  binary and a Firestore-compatible transaction store passed **34 of 37**
+  tests (3 optional other-binary tests skipped): including tenant fencing,
+  terminal errors and a simulated crash **after** an effect journal commit.
 - The GCP pure canary (Cloud Tasks → Jobs → Firestore) completed and was
   duplicate-delivery fenced. It is not proof of external effect parity.
 
 ### Remaining compiler work
 
-- Add typed lowering and native CFG execution for `Try`, `Raise`, `Parallel`,
-  `ParallelFor`, callbacks and child workflows, with durable semantics owned
-  by the server rather than Rust subprocesses.
+- `Try`/`Raise` is implemented and tested for the current subset, including
+  compiled error edges and confirmed HTTP failure. Complete Google error
+  taxonomy, retry semantics and uncertain remote outcome reconciliation.
+- Add compiler-private lowering and durable server scheduling for `Parallel`,
+  `ParallelFor`, callbacks and child workflows. **Do not** add public DSL
+  variants or silently execute declared parallel branches sequentially.
 - Expand constructed-AST expression/operation coverage and deterministic
   error/retry behavior; run differential fixtures against the existing YAML
   compiler before switching any real workflows.
 - Integrate the Rust backend into the regular Scala compiler entry point
   without introducing a cyclic module dependency.
 - Run adversarial continuation, overflow, large-value and concurrency tests.
+
+### Implementation status and gates
+
+This document describes a **completed compiler CFG refactor**, not general
+production workflow parity. See the [current verified state, exact repository
+PRs, and next-step acceptance gates](current-state-and-roadmap.md).
+Normal native production routing remains disabled.
