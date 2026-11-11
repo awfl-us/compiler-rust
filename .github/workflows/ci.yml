@@ -99,6 +99,7 @@ jobs:
           for crate in fixtures/real-load-history/*/Cargo.toml; do
             cargo build --manifest-path "$crate" --target-dir "$RUNNER_TEMP/real-workflow-target"
           done
+          python3 scripts/test_real_workflow.py "$RUNNER_TEMP/real-workflow-target"
       - name: Build and lint all generated Rust fixtures
         run: |
           for name in native-smoke native-switch native-unmatched native-range native-each native-nested native-fold native-early-return native-top-return native-v2-switch-effects native-v2-nested-switch-effects native-v2-range-two-effects native-v2-nested-range-effects native-v2-each native-v2-fold native-v2-each-effects native-v2-fold-effects native-v2-range-switch-effects native-v2-pure-nested native-v2-deep-switch-effects native-v2-mixed-nested-range; do
