@@ -76,18 +76,19 @@ object FrontendSmoke {
     }
     assert(untypedError.contains("TypedCall") && untypedError.contains("http.post"))
 
+    val untypedFunction = Value[Int](CelFunc(
+      "len", List(CelList(List(CelInteger(1))))))
     val untypedFunctionError = try {
-      Normalize(Workflow((List.empty[Step[?, ?]], Value[Int](
-        CelFunc("len", List(CelList(List(CelInteger(1))))))))
+      Normalize(Workflow((List.empty[Step[?, ?]], untypedFunction)))
       throw new AssertionError("expected untyped CEL function rejection")
     } catch {
       case e: CompileError => e.getMessage
     }
     assert(untypedFunctionError.contains("CelFunction"))
 
+    val untypedOperator = Value[Int](CelOp(CelInteger(1), "+", CelInteger(2)))
     val untypedOperatorError = try {
-      Normalize(Workflow((List.empty[Step[?, ?]], Value[Int](
-        CelOp(CelInteger(1), "+", CelInteger(2))))))
+      Normalize(Workflow((List.empty[Step[?, ?]], untypedOperator)))
       throw new AssertionError("expected untyped CEL operator rejection")
     } catch {
       case e: CompileError => e.getMessage
