@@ -73,6 +73,13 @@ impl Request {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct EffectErrorHandler {
+    pub next_step: usize,
+    pub error_slot: String,
+}
+
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct EffectIntent {
@@ -83,6 +90,10 @@ pub struct EffectIntent {
     /// the remote outcome. Never treat a missing result as a bound null.
     pub result_slot: String,
     pub args: serde_json::Value,
+    /// Optional compiled exception edge, persisted by the server when
+    /// preparing a recoverable effect. Never catch uncertain outcomes.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub on_error: Option<EffectErrorHandler>,
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -90,6 +101,9 @@ pub struct EffectIntent {
 pub enum Outcome {
     Completed {
         result: serde_json::Value,
+    },
+    Failed {
+        error: serde_json::Value,
     },
     Suspended {
         effect: EffectIntent,
@@ -162,6 +176,7 @@ mod tests {
                 operation: "http.post".into(),
                 result_slot: "s0".into(),
                 args: serde_json::json!({"url":"https://example.test"}),
+                on_error: None,
             },
             continuation: Continuation {
                 next_step: 2,

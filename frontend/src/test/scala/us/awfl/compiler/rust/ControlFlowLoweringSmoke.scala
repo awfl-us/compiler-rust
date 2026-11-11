@@ -25,7 +25,7 @@ object ControlFlowLoweringSmoke {
     assert(plan.entry >= 0 && plan.blocks.size > 8)
     assert(plan.blocks.map(_.id) == plan.blocks.indices.toVector)
     assert(plan.validate() == plan)
-    val calls = plan.blocks.collect { case Block(id, _, invoke: Invoke) => id -> invoke }
+    val calls = plan.blocks.collect { case Block(id, _, invoke: Invoke, _) => id -> invoke }
     assert(calls.size == 2)
     assert(calls.map(_._2.ancestors).forall(_.size == 1))
     assert(calls.map(_._2.effect.nodeId).distinct.size == 2)

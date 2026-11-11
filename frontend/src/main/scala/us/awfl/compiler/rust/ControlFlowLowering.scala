@@ -17,30 +17,32 @@ object ControlFlowLowering {
       blocks += None
       id
     }
-    def set(label: Int, node: String, op: Op): Unit = {
+    def set(label: Int, node: String, op: Op,
+            handler: Option[Catch]): Unit = {
       if (blocks(label).nonEmpty)
         throw CompileError(s"node=$node", "CFG label assigned twice")
-      blocks(label) = Some(Block(label, node, op))
+      blocks(label) = Some(Block(label, node, op, handler))
     }
-    def place(node: String, op: Op): Int = {
+    def place(node: String, op: Op, handler: Option[Catch]): Int = {
       val label = reserve()
-      set(label, node, op)
+      set(label, node, op, handler)
       label
     }
     def sequence(all: Vector[Instruction], next: Int,
-                 loops: Vector[String]): Int =
-      all.foldRight(next)((instruction, after) => lower(instruction, after, loops))
+                 loops: Vector[String], handler: Option[Catch]): Int =
+      all.foldRight(next)((instruction, after) => lower(instruction, after, loops, handler))
 
-    def lower(instruction: Instruction, next: Int, loops: Vector[String]): Int = {
+    def lower(instruction: Instruction, next: Int, loops: Vector[String],
+              handler: Option[Catch]): Int = {
       val node = instruction.nodeId
       instruction match {
-        case e: Effect => place(node, Invoke(e, loops, next))
+        case e: Effect => place(node, Invoke(e, loops, next), handler)
         case c: Choose =>
-          val fallback = place(node, Bind(c.resultSlot, MapValue(Vector.empty), next))
+          val fallback = place(node, Bind(c.resultSlot, MapValue(Vector.empty), next), handler)
           c.cases.foldRight(fallback) { (branch, otherwise) =>
-            val end = place(node, Bind(c.resultSlot, branch.result, next))
-            val selected = sequence(branch.body, end, loops)
-            place(node, Test(branch.condition, selected, otherwise))
+            val end = place(node, Bind(c.resultSlot, branch.result, next), handler)
+            val selected = sequence(branch.body, end, loops, handler)
+            place(node, Test(branch.condition, selected, otherwise), handler)
           }
         case r: RepeatRange =>
           val initLabel = reserve()
@@ -48,35 +50,44 @@ object ControlFlowLowering {
           val cursor = s"__awfl_pc_${initLabel}_ordinal"
           val start = s"__awfl_pc_${initLabel}_from"
           val end = s"__awfl_pc_${initLabel}_until"
-          val append = place(node, AppendRange(r.result, r.resultSlot, cursor, checkLabel))
-          val body = sequence(r.body, append, loops :+ cursor)
-          set(checkLabel, node, CheckRange(start, end, cursor, r.indexSlot, body, next))
+          val append = place(node, AppendRange(r.result, r.resultSlot, cursor, checkLabel), handler)
+          val body = sequence(r.body, append, loops :+ cursor, handler)
+          set(checkLabel, node, CheckRange(start, end, cursor, r.indexSlot, body, next), handler)
           set(initLabel, node, BeginRange(r.from, r.until, start, end,
-            cursor, r.resultSlot, checkLabel))
+            cursor, r.resultSlot, checkLabel), handler)
           initLabel
         case e: RepeatEach =>
           val initLabel = reserve()
           val checkLabel = reserve()
           val cursor = s"__awfl_pc_${initLabel}_ordinal"
           val values = s"__awfl_pc_${initLabel}_values"
-          val append = place(node, AppendEach(e.result, e.resultSlot, cursor, checkLabel))
-          val body = sequence(e.body, append, loops :+ cursor)
-          set(checkLabel, node, CheckEach(values, cursor, e.itemSlot, body, next))
-          set(initLabel, node, BeginEach(e.iterable, values, cursor, e.resultSlot, checkLabel))
+          val append = place(node, AppendEach(e.result, e.resultSlot, cursor, checkLabel), handler)
+          val body = sequence(e.body, append, loops :+ cursor, handler)
+          set(checkLabel, node, CheckEach(values, cursor, e.itemSlot, body, next), handler)
+          set(initLabel, node, BeginEach(e.iterable, values, cursor, e.resultSlot, checkLabel), handler)
           initLabel
         case f: ReduceEach =>
           val initLabel = reserve()
           val checkLabel = reserve()
           val cursor = s"__awfl_pc_${initLabel}_ordinal"
           val values = s"__awfl_pc_${initLabel}_values"
-          val update = place(node, UpdateFold(f.result, f.resultSlot, cursor, checkLabel))
-          val body = sequence(f.body, update, loops :+ cursor)
-          set(checkLabel, node, CheckFold(values, cursor, f.itemSlot, body, next))
+          val update = place(node, UpdateFold(f.result, f.resultSlot, cursor, checkLabel), handler)
+          val body = sequence(f.body, update, loops :+ cursor, handler)
+          set(checkLabel, node, CheckFold(values, cursor, f.itemSlot, body, next), handler)
           set(initLabel, node, BeginFold(f.initial, f.iterable, values,
-            cursor, f.resultSlot, checkLabel))
+            cursor, f.resultSlot, checkLabel), handler)
           initLabel
-        case r: EarlyReturn => place(node, Done(r.value))
-        case f: Finish => place(node, Done(f.value))
+        case rescued: Rescue =>
+          // The handler itself sees only the enclosing Try handler. A Raise
+          // inside except must propagate to an outer rescue, never recatch.
+          val recovery = place(node, Bind(rescued.resultSlot, rescued.recovery, next), handler)
+          val rescueEntry = sequence(rescued.handler, recovery, loops, handler)
+          val catchHere = Some(Catch(rescueEntry, rescued.errorSlot))
+          val success = place(node, Bind(rescued.resultSlot, rescued.success, next), catchHere)
+          sequence(rescued.attempt, success, loops, catchHere)
+        case thrown: Throw => place(node, ThrowError(thrown.value), handler)
+        case r: EarlyReturn => place(node, Done(r.value), handler)
+        case f: Finish => place(node, Done(f.value), handler)
       }
     }
 
@@ -84,8 +95,8 @@ object ControlFlowLowering {
         program.steps.init.exists(_.isInstanceOf[Finish]))
       throw CompileError(s"workflow=${program.name}",
         "workflow requires exactly one final Finish step")
-    val end = lower(program.steps.last, 0, Vector.empty)
-    val entry = sequence(program.steps.init, end, Vector.empty)
+    val end = lower(program.steps.last, 0, Vector.empty, None)
+    val entry = sequence(program.steps.init, end, Vector.empty, None)
     Plan(entry, blocks.toVector.map(_.getOrElse(
       throw CompileError("control-flow", "unfilled CFG block")))).compact
   }

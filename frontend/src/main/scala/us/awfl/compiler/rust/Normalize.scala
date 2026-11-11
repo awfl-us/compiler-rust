@@ -36,6 +36,10 @@ object Normalize {
         }.sortBy(_._1)
         MapValue(fields)
       case v: Option[?] => v.map(obj(_, where)).getOrElse(NullValue)
+      // Existing DSL optional field wrappers are not normal product maps.
+      // They encode the inner value or null, not {"resolver": ...}.
+      case v: OptResolved[?] => cel(v.resolver.path, where)
+      case v: OptObj[?] => obj(v.obj.value, where)
       case v: BaseValue[?] => valueExpr(v, where)
       case v: Product =>
         val fields = v.productElementNames.zip(v.productIterator).toVector
@@ -204,6 +208,27 @@ object Normalize {
             }.toVector
             val slot = register(branch.resultValue, where)
             Vector(Choose(nodeId, step.name, cases, slot))
+          case attempted: us.awfl.dsl.Try[?, ?] =>
+            // The public DSL's ValueType match type erases to BaseValue here;
+            // all normalization remains compiler-private.
+            val attempt = attempted.run.asInstanceOf[
+              (List[Step[?, ?]], BaseValue[?])]
+            val rescue = attempted.except.asInstanceOf[
+              (List[Step[?, ?]], BaseValue[?])]
+            val errSlot = register(attempted.error, where)
+            val (attemptSteps, result) = scoped {
+              val compiled = steps(attempt._1, s"$nodeId.try")
+              (compiled, valueExpr(attempt._2, s"$where.try.result"))
+            }
+            val (rescueSteps, recovery) = scoped {
+              val compiled = steps(rescue._1, s"$nodeId.except")
+              (compiled, valueExpr(rescue._2, s"$where.except.result"))
+            }
+            val resultSlot = register(attempted.resultValue, where)
+            Vector(Rescue(nodeId, step.name, attemptSteps, result,
+              errSlot, rescueSteps, recovery, resultSlot))
+          case raised: us.awfl.dsl.Raise =>
+            Vector(Throw(nodeId, step.name, valueExpr(raised.raise, where)))
           case loop: ForRange[?] =>
             val from = cel(loop.from, s"$where.from")
             val until = cel(loop.to, s"$where.until")

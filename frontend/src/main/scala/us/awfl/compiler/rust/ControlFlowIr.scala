@@ -55,11 +55,20 @@ object ControlFlowIr {
   case class Invoke(effect: Effect, ancestors: Vector[String], next: Int) extends Op {
     def targets = Vector(next)
   }
+  case class ThrowError(value: Expr) extends Op {
+    def targets = Vector.empty
+  }
+  /** Statically known exception route. Also applied to errors from pure ops. */
+  case class Catch(next: Int, slot: String)
+
   case class Done(value: Expr) extends Op {
     def targets = Vector.empty
   }
 
-  case class Block(id: Int, sourceNode: String, op: Op)
+  case class Block(id: Int, sourceNode: String, op: Op,
+                   onError: Option[Catch] = None) {
+    def successors: Vector[Int] = op.targets ++ onError.toVector.map(_.next)
+  }
 
   case class Plan(entry: Int, blocks: Vector[Block]) {
     val version: Int = 1
@@ -71,7 +80,7 @@ object ControlFlowIr {
     def compact: Plan = {
       val reached = scala.collection.mutable.Set.empty[Int]
       def visit(pc: Int): Unit = {
-        if (reached.add(pc)) blocks(pc).op.targets.foreach(visit)
+        if (reached.add(pc)) blocks(pc).successors.foreach(visit)
       }
       visit(entry)
       val kept = reached.toVector.sorted
@@ -90,10 +99,12 @@ object ControlFlowIr {
         case o: UpdateFold => o.copy(next = remap(o.next))
         case o: Invoke => o.copy(next = remap(o.next))
         case d: Done => d
+        case t: ThrowError => t
       }
       Plan(remap(entry), kept.map { old =>
         val block = blocks(old)
-        Block(remap(old), block.sourceNode, mapped(block.op))
+        Block(remap(old), block.sourceNode, mapped(block.op),
+          block.onError.map(c => c.copy(next = remap(c.next))))
       }).validate()
     }
 
@@ -102,7 +113,7 @@ object ControlFlowIr {
         throw CompileError("control-flow", "invalid entry label")
       blocks.zipWithIndex.foreach { (block, index) =>
         if (block.id != index) throw CompileError("control-flow", "noncanonical CFG label")
-        block.op.targets.foreach { to =>
+        block.successors.foreach { to =>
           if (to < 0 || to >= blocks.size)
             throw CompileError(s"node=${block.sourceNode}",
               s"invalid CFG successor $to from label $index")
@@ -110,14 +121,15 @@ object ControlFlowIr {
       }
       val reachable = scala.collection.mutable.Set.empty[Int]
       def visit(pc: Int): Unit = {
-        if (reachable.add(pc)) blocks(pc).op.targets.foreach(visit)
+        if (reachable.add(pc)) blocks(pc).successors.foreach(visit)
       }
       visit(entry)
       if (reachable.size != blocks.size)
         throw CompileError("control-flow",
           s"unreachable generated CFG labels: ${(blocks.indices.toSet -- reachable).toVector.sorted.mkString(",")}")
-      if (!reachable.exists(pc => blocks(pc).op.isInstanceOf[Done]))
-        throw CompileError("control-flow", "no reachable terminal result")
+      if (!reachable.exists(pc => blocks(pc).op.isInstanceOf[Done] ||
+          blocks(pc).op.isInstanceOf[ThrowError]))
+        throw CompileError("control-flow", "no reachable terminal result or uncaught raise")
       this
     }
   }
