@@ -10,7 +10,9 @@ execution disabled until wider equivalence and safety tests pass.
   existing `awfl-us/compiler.WorkflowLoader`. It normalizes typed expressions
   and step identities, builds deterministic, statically compiled CFG blocks,
   computes live continuation slots, and emits Rust plus source-hash manifest.
-  No Google Workflows YAML is parsed or interpreted at runtime.
+  No Google Workflows YAML is parsed or interpreted at runtime. Untyped
+  string-based Calls, functions and operators are rejected; only canonical
+  typed operation IDs enter the native IR.
 - **One emitter:** `RustEmitter.emit/write` uses `StateMachineEmitter` for
   *both* pure and effectful workflows. `NativeCompiler.compile` and
   `NativeMain` use this same path. The older standalone emitters, protocol-v1

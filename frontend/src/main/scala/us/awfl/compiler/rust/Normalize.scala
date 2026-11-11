@@ -70,16 +70,12 @@ object Normalize {
       case CelValue(value) => valueExpr(value, where)
       case CelGlobal(id) => Global(id)
       case CelFunction(id, params) => function(id, params, where)
-      case CelFunc(name, params) =>
-        val id = OperationRegistry.resolveLegacyFunction(name, where)
-          .fold(msg => fail(where, msg), identity)
-        function(id, params, where)
+      case CelFunc(name, _) =>
+        fail(where, s"untyped CEL function '$name'; construct CelFunction with FunctionId")
       case CelBinary(left, id, right) => Binary(cel(left, where), id, cel(right, where))
       case CelUnary(id, value) => Unary(id, cel(value, where))
-      case CelOp(left, name, right) =>
-        val id = OperatorId.fromLegacy(name, 2)
-          .getOrElse(fail(where, s"unknown legacy binary operator '$name'"))
-        Binary(cel(left, where), id, cel(right, where))
+      case CelOp(_, name, _) =>
+        fail(where, s"untyped CEL binary operator '$name'; construct CelBinary with OperatorId")
       case CelPath(path) =>
         path match {
           case Nil => fail(where, "empty reference path")
@@ -140,11 +136,7 @@ object Normalize {
         val where = s"workflow=$workflowName node=$nodeId step='${step.name}'"
         step match {
           case call: Call[?, ?] =>
-            val id = OperationRegistry.resolveLegacyCall(call.call, where)
-              .fold(msg => fail(where, msg), identity)
-            val args = valueExpr(call.args, s"$where.args")
-            val slot = register(call.resultValue, where)
-            Vector(Effect(nodeId, step.name, id, args, slot))
+            fail(where, s"untyped Call '${call.call}'; construct TypedCall with CallId")
           case call: TypedCall[?, ?] =>
             val args = valueExpr(call.args, s"$where.args")
             val slot = register(call.resultValue, where)

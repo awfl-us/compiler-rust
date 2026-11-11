@@ -66,6 +66,12 @@ new processes resume without repeating completed control flow or effects.
 See the [protocol](../docs/native-ipc-v2.md) and
 [CFG architecture](../docs/native-control-flow-refactor-plan.md).
 
+The native compiler requires typed `TypedCall`, `CelFunction`, `CelBinary`
+and `CelUnary` nodes with canonical IDs; untyped string-based Calls/functions/
+operators are rejected with node-context diagnostics rather than mapped via
+compatibility registries. The Google/YAML compiler remains independently
+responsible for supporting existing DSL callers during their migration.
+
 The current subset covers pure and effectful Switch, ForRange, For, Fold,
 sequential Calls, nested control flow and early Return. `Try`, `Raise`,
 `Parallel`, parallel For, callbacks/child workflows, complete CEL semantics,

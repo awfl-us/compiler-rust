@@ -62,6 +62,37 @@ object FrontendSmoke {
       case e: CompileError => e.getMessage
     }
     assert(diagnostic2.contains("provider.unclassified"))
+    assert(diagnostic2.contains("TypedCall"))
+
+    // Even *registered* string names must not silently compile: this module
+    // is new and accepts typed operation IDs only, not legacy DSL adapters.
+    val untypedCall = Call[Map[String, String], String](
+      "untyped", "http.post", obj(Map("url" -> "https://example.org")))
+    val untypedError = try {
+      Normalize(Workflow((List(untypedCall), untypedCall.resultValue)))
+      throw new AssertionError("expected untyped Call rejection")
+    } catch {
+      case e: CompileError => e.getMessage
+    }
+    assert(untypedError.contains("TypedCall") && untypedError.contains("http.post"))
+
+    val untypedFunctionError = try {
+      Normalize(Workflow((List.empty[Step[?, ?]], Value[Int](
+        CelFunc("len", List(CelList(List(CelInteger(1))))))))
+      throw new AssertionError("expected untyped CEL function rejection")
+    } catch {
+      case e: CompileError => e.getMessage
+    }
+    assert(untypedFunctionError.contains("CelFunction"))
+
+    val untypedOperatorError = try {
+      Normalize(Workflow((List.empty[Step[?, ?]], Value[Int](
+        CelOp(CelInteger(1), "+", CelInteger(2))))))
+      throw new AssertionError("expected untyped CEL operator rejection")
+    } catch {
+      case e: CompileError => e.getMessage
+    }
+    assert(untypedOperatorError.contains("CelBinary"))
 
     val scratch = java.nio.file.Files.createTempDirectory("awfl-native-frontend-")
     val artifacts = NativeCompiler.compile(List(wf), "batch", scratch, runtime)

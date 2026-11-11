@@ -3,7 +3,7 @@
 Status: implemented for the tested subset (November 11, 2026).
 
 There is **one** native backend. `Normalize` traverses constructed Scala AWFL
-DSL objects, resolving operation IDs into typed expressions/instructions with
+DSL objects, requiring canonical operation IDs in typed expressions/instructions with
 stable structural node/slot IDs. `ControlFlowLowering` builds a deterministic
 CFG for `Switch`, `ForRange`, `For`, sequential `Fold`, `Call`, `Return` and
 terminal results. `Plan.compact` prunes dead blocks after early returns;
