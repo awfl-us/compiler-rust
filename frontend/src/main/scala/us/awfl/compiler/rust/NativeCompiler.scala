@@ -11,19 +11,11 @@ import java.nio.file.Path
   * native normalization + codegen when the requested target is Rust.
   */
 object NativeCompiler {
-  /** ABI 3 is the only format accepted by the IAM-authorized native publisher.
-    * Legacy output remains available for compatibility and differential tests.
-    */
-  enum Backend {
-    case DurableV2, Legacy
-  }
-
   final case class Artifact(workflowName: String, directory: Path, program: Program,
                             emitted: RustEmitter.Emitted)
 
   def compile(workflows: List[DslWorkflow[?]], baseName: String,
-              outputDirectory: Path, runtimeDirectory: Path,
-              backend: Backend = Backend.DurableV2): List[Artifact] = {
+              outputDirectory: Path, runtimeDirectory: Path): List[Artifact] = {
     val named = workflows.zipWithIndex.map { (workflow, i) =>
       val name = workflow.name.map(n => s"$baseName-$n").getOrElse(baseName)
       if (name.isBlank) throw CompileError(s"workflow[$i]", "workflow name must not be empty")
@@ -40,10 +32,7 @@ object NativeCompiler {
       // even when the DSL child has a shorter local name.
       val program = Normalize(workflow, name).copy(name = name)
       val destination = outputDirectory.resolve(safeName)
-      val emitted = backend match {
-        case Backend.DurableV2 => RustEmitter.writeV2(program, destination, runtimeDirectory)
-        case Backend.Legacy => RustEmitter.write(program, destination, runtimeDirectory)
-      }
+      val emitted = RustEmitter.write(program, destination, runtimeDirectory)
       Artifact(name, destination, program, emitted)
     }
   }

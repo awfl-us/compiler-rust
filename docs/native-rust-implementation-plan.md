@@ -217,24 +217,16 @@ Run equal-input benchmarks: 1,000 pure operations, 100 local mock HTTP steps, ne
 The architectural plan below is the target design, **not** a claim of completed
 features. The Scala frontend emits pure native `Switch`, `ForRange`, `For`,
 `Fold`, nested expressions, and explicit early `Return`.
-It also emits a **versioned native IPC** for top-level typed `Call` effects:
-the Rust executable suspends, the server journals the requested effect and
-its outcome, and the executable resumes from tagged live slots.
-Dynamic invocation frames now support direct Calls inside top-level
-Switch/ForRange and the limited two-level Switch/ForRange shapes. Completed
-branch selections and both levels of range output prefixes survive worker
-recovery. This original ABI 2 backend remains the default.
-
-An **opt-in generalized CFG backend** now lowers nested control flow, `For`,
-`Fold` and effectful Calls to deterministic Rust state-machine blocks. It
-uses `ContinuationAnalysis` to save only live slots at the successor program
-counter, and runtime ABI 3 / IPC protocol 2 to resume directly after an
-effect. Real generated Rust tests cover effectful `For`/`Fold`, mixed nested
-`Switch`/`ForRange`, nested effects, and rejected malformed continuations.
-The Firestore execution store pins the protocol version and passes the
-new backend's nested-range worker-takeover test. See
-`docs/native-ipc-v2.md` for the wire contract. `Try`/`Parallel` and complete
-CEL/Google semantics are still unsupported in the new backend.
+The **single CFG backend** emits compiled Rust for nested `Switch`, `For`,
+`Fold`, `ForRange`, pure operations and effectful `Call` steps. At an external
+Call it returns a durable effect intent, successor CFG program counter and
+live tagged slots. The server persists the result, journals the operation
+and resumes the same compiled binary without replaying previous branches.
+There is only runtime ABI **3** / IPC protocol **2**; no v1 emitters or
+compatibility modes. The implementation and tests include dependent calls,
+effectful loops/folds, nested branches and malformed continuation rejection.
+See `docs/native-ipc-v2.md` for the wire contract. `Try`/`Raise`, `Parallel`
+and complete CEL/Google semantics remain unsupported.
 Companion draft PRs are
 [dsl #2](https://github.com/awfl-us/dsl/pull/2) and
 [compiler-yaml #1](https://github.com/awfl-us/compiler-yaml/pull/1).
@@ -267,8 +259,8 @@ meaningful differential performance measurements. Do not enable native
 production routing until these gates pass.
 
 **Compiler API follow-through (November 11):** the existing `NativeMain`
-CLI reuses `WorkflowLoader` and now emits ABI 3 / IPC protocol 2 crates by
-default; legacy ABI 1/2 output requires explicit `--abi=legacy`. CI compiles
+CLI reuses `WorkflowLoader` and emits **only** ABI 3 / IPC protocol 2
+crates. The old emitters and wire-v1 runtime were removed. CI compiles
 and executes the actual CLI-produced crate to prevent future publisher
 incompatibility. This is distinct from the still-unimplemented shared
 `compiler --target rust` CLI dispatch, which requires dependency graph

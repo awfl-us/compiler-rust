@@ -8,14 +8,13 @@ import io.circe.Json
 
 /** Deterministic manifest and Cargo crate construction. No DSL lowering here. */
 object ArtifactWriter {
-  def pack(program: Program, source: String, runtimeAbi: Int = -1): RustEmitter.Emitted = {
+  def pack(program: Program, source: String): RustEmitter.Emitted = {
     val sha = MessageDigest.getInstance("SHA-256").digest(source.getBytes(UTF_8)).map(b => f"${b & 0xff}%02x").mkString
     val manifest = Json.obj(
       "schema_version" -> Json.fromInt(program.irVersion),
       "workflow" -> Json.fromString(program.name),
       "source_sha256" -> Json.fromString(sha),
-      "runtime_abi" -> Json.fromInt(
-        if (runtimeAbi > 0) runtimeAbi else if (program.effects.nonEmpty) 2 else 1),
+      "runtime_abi" -> Json.fromInt(3),
       "node_ids" -> Json.arr(program.nodeIds.map(Json.fromString)*),
       "effects" -> Json.arr(program.effects.map(e => Json.obj(
         "node_id" -> Json.fromString(e.nodeId),

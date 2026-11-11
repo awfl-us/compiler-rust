@@ -84,8 +84,8 @@ jobs:
           PYTHON
       - name: Build and lint all generated Rust fixtures
         run: |
-          for name in native-smoke native-switch native-unmatched native-range native-each native-nested native-fold native-early-return native-top-return native-effect native-resume native-two-effects native-range-effect native-range-two-effects native-switch-effects native-nested-switch-effects native-nested-range-effects native-v2-switch-effects native-v2-nested-switch-effects native-v2-range-two-effects native-v2-nested-range-effects native-v2-each native-v2-fold native-v2-each-effects native-v2-fold-effects native-v2-range-switch-effects native-v2-pure-nested; do
-            cargo build --manifest-path "fixtures/$name/Cargo.toml" --locked
+          for name in native-smoke native-switch native-unmatched native-range native-each native-nested native-fold native-early-return native-top-return native-v2-switch-effects native-v2-nested-switch-effects native-v2-range-two-effects native-v2-nested-range-effects native-v2-each native-v2-fold native-v2-each-effects native-v2-fold-effects native-v2-range-switch-effects native-v2-pure-nested native-v2-deep-switch-effects native-v2-mixed-nested-range; do
+            cargo build --manifest-path "fixtures/$name/Cargo.toml"
             cargo clippy --manifest-path "fixtures/$name/Cargo.toml" --all-targets --locked -- -D warnings
           done
       - name: Execute compiled AWFL workflows
@@ -93,4 +93,3 @@ jobs:
           python3 scripts/test_native_smoke.py
           python3 scripts/test_control_flow.py
           python3 scripts/test_native_protocol.py
-          python3 scripts/test_native_protocol_v2.py

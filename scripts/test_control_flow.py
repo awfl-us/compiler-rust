@@ -36,7 +36,7 @@ def run() -> None:
             # Cargo may therefore reuse one shared build target safely.
             target_dir = dirname
             command = [
-                "cargo", "build", "--quiet", "--locked",
+                "cargo", "build", "--quiet",
                 "--manifest-path", str(manifest),
                 "--target-dir", target_dir,
             ]
@@ -44,11 +44,11 @@ def run() -> None:
             binary = Path(target_dir) / "debug" / package
             for input_value, expected in tests:
                 completed = subprocess.run(
-                    [str(binary)], input=json.dumps(input_value) + "\n",
+                    [str(binary)], input=json.dumps({"protocol_version": 2, "input": input_value}) + "\n",
                     text=True, capture_output=True, check=True
                 )
                 observed = json.loads(completed.stdout)
-                assert observed == expected, (
+                assert observed == {"protocol_version": 2, "status": "completed", "result": expected}, (
                     f"{fixture}({input_value!r}) expected {expected!r}; got {observed!r}"
                 )
             print(f"{fixture}: {len(tests)} native assertions passed")

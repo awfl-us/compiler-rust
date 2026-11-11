@@ -9,22 +9,17 @@ import us.awfl.compiler.rust.Ir.CompileError
 /** Opt-in native target CLI. Uses the same workflow-loader implementation as
   * awfl/compiler, without emitting Google YAML as an intermediate format.
   *
-  * Defaults to the durable, publishable native ABI 3 / IPC protocol 2.
-  * The legacy ABI 1/2 emitters remain opt-in for differential fixtures.
-  * The regular compiler CLI can delegate here after coordinated publication.
+  * Emits only ABI 3 / IPC protocol 2. The regular compiler CLI can
+  * delegate here after coordinated publication.
   */
 object NativeMain {
   private val usage =
-    "Usage: NativeMain <WorkflowClassName> [OutputDirectory] [RustRuntimeDirectory] [--abi=3|--abi=legacy]"
+    "Usage: NativeMain <WorkflowClassName> [OutputDirectory] [RustRuntimeDirectory]"
 
   def compile(args: Array[String]): List[NativeCompiler.Artifact] = {
-    val (flags, positional) = args.toVector.partition(_.startsWith("--"))
-    if (positional.isEmpty || positional.size > 3 || flags.size > 1 ||
-        flags.exists(flag => flag != "--abi=3" && flag != "--abi=legacy"))
+    if (args.isEmpty || args.length > 3 || args.exists(_.startsWith("--")))
       throw IllegalArgumentException(usage)
-    val backend = if (flags.contains("--abi=legacy")) NativeCompiler.Backend.Legacy
-                  else NativeCompiler.Backend.DurableV2
-    val loaded = WorkflowLoader.loadFirst(WorkflowLoader.resolveCandidates(positional(0)))
+    val loaded = WorkflowLoader.loadFirst(WorkflowLoader.resolveCandidates(args(0)))
     val fqcn = loaded.fqcn
     val module = loaded.module
     if (module == null || !classOf[CoreWorkflow].isAssignableFrom(module.getClass))
@@ -33,9 +28,9 @@ object NativeMain {
     val workflows = workflow.workflows.asInstanceOf[List[DslWorkflow[?]]]
     if (workflows.isEmpty)
       throw CompileError(fqcn, "workflow builder produced no workflows")
-    val output = Paths.get(positional.lift(1).getOrElse("rust_gens"))
-    val runtime = Paths.get(positional.lift(2).getOrElse("../runtime"))
-    NativeCompiler.compile(workflows, workflow.workflowName, output, runtime, backend)
+    val output = Paths.get(args.lift(1).getOrElse("rust_gens"))
+    val runtime = Paths.get(args.lift(2).getOrElse("../runtime"))
+    NativeCompiler.compile(workflows, workflow.workflowName, output, runtime)
   }
 
   def main(args: Array[String]): Unit = {

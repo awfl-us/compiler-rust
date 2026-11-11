@@ -152,10 +152,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut text = String::new();
     io::stdin().read_to_string(&mut text)?;
     let request: Request = serde_json::from_str(&text)?;
-    request.validate_version(14, 2).map_err(|error|
+    request.validate(14).map_err(|error|
         io::Error::new(io::ErrorKind::InvalidInput, error))?;
     let input = AwflValue::from_plain_json(&request.input)?;
     let outcome = run(&input, request.continuation.as_ref())?;
-    println!("{}", serde_json::to_string(&Response::new_version(outcome, 2))?);
+    println!("{}", serde_json::to_string(&Response::new(outcome))?);
     Ok(())
 }

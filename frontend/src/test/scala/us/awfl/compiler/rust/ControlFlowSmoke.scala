@@ -97,9 +97,7 @@ object ControlFlowSmoke {
     val effectChoice = Normalize(Workflow((List[Step[?, ?]](choiceEffects),
       choiceEffects.resultValue), Some("effectful-switch")))
     assert(effectChoice.effects.size == 3)
-    val choiceGenerated = RustEmitter.write(
-      effectChoice, base.resolve("native-switch-effects"), runtime)
-    assert(choiceGenerated.source.contains("invalid native Switch continuation site"))
+    assert(RustEmitter.emit(effectChoice).manifest.contains("\"runtime_abi\":3"))
 
     // Nested Switch: both branch choices are pinned while a dependent second
     // Call resumes; unrelated outer branches do not dispatch effects.
@@ -124,21 +122,17 @@ object ControlFlowSmoke {
     val nestedChoiceProgram = Normalize(Workflow((List[Step[?, ?]](outerChoice),
       outerChoice.resultValue), Some("nested-switch-effects")))
     assert(nestedChoiceProgram.effects.size == 3)
-    val nestedChoiceSource = RustEmitter.write(nestedChoiceProgram,
-      base.resolve("native-nested-switch-effects"), runtime)
-    assert(nestedChoiceSource.source.contains("invalid nested Switch continuation site"))
-    assert(nestedChoiceSource.source.contains("state.frames.len() != 3"))
+    assert(RustEmitter.emit(nestedChoiceProgram).manifest.contains("\"runtime_abi\":3"))
 
-    // A third branch depth must fail closed until the frame path is lowered.
+    // A third nested Switch is supported by compiled CFG labels; no replay
+    // frame templates or depth-specific backends are required.
     val tooDeep = Switch("third-depth", List(
       CelBoolean(true) -> (List[Step[?, ?]](outerChoice) -> outerChoice.resultValue)
     ))
-    val denied = try {
-      RustEmitter.emit(Normalize(Workflow((List[Step[?, ?]](tooDeep),
-        tooDeep.resultValue))))
-      throw new AssertionError("third nested Switch was not rejected")
-    } catch { case e: CompileError => e.getMessage }
-    assert(denied.contains("nested effectful Switch branches require only direct Calls"))
+    val deepIR = Normalize(Workflow((List[Step[?, ?]](tooDeep),
+      tooDeep.resultValue), Some("third-depth-effects")))
+    assert(deepIR.effects.size == 3)
+    assert(RustEmitter.emit(deepIR).manifest.contains("\"runtime_abi\":3"))
 
     // A preceding compiled branch is checkpointed once and restored on resume.
     val beforeEffect = Switch("before-effect", List(
@@ -149,15 +143,14 @@ object ControlFlowSmoke {
       "external", CallId.HttpPost, obj(Map("url" -> "https://example.org")))
     val sequence = Workflow((List[Step[?, ?]](beforeEffect, topEffect),
       topEffect.resultValue), Some("resume-after-branch"))
-    RustEmitter.write(Normalize(sequence), base.resolve("native-resume"), runtime)
+    assert(RustEmitter.emit(Normalize(sequence)).manifest.contains("\"runtime_abi\":3"))
 
     val firstCall = TypedCall[Map[String, String], String](
       "first", CallId.HttpPost, obj(Map("url" -> "https://example.org/first")))
     val secondCall = TypedCall[Map[String, String], String](
       "second", CallId.HttpPost, obj(Map("url" -> "https://example.org/second")))
-    RustEmitter.write(Normalize(Workflow((List[Step[?, ?]](firstCall, secondCall),
-      secondCall.resultValue), Some("two-effects"))),
-      base.resolve("native-two-effects"), runtime)
+    assert(RustEmitter.emit(Normalize(Workflow((List[Step[?, ?]](firstCall, secondCall),
+      secondCall.resultValue), Some("two-effects")))).manifest.contains("\"runtime_abi\":3"))
 
     // A negative-based range tests ordinal iteration IDs, durable prefix
     // results and step-zero resumptions across real native subprocesses.
@@ -169,9 +162,7 @@ object ControlFlowSmoke {
     val rangeProgram = Normalize(Workflow((List[Step[?, ?]](effectRange), effectRange.resultValue),
       Some("range-effects")))
     assert(rangeProgram.effects.size == 1)
-    val rangeGenerated = RustEmitter.write(rangeProgram, base.resolve("native-range-effect"), runtime)
-    assert(rangeGenerated.source.contains("invalid native range continuation prefix"))
-    assert(rangeGenerated.source.contains("call_0_"))
+    assert(RustEmitter.emit(rangeProgram).source.contains("__awfl_effect_id"))
 
     // Multiple direct effect sites have distinct structural IDs, even
     // inside the same iteration. The second Call depends on the first.
@@ -185,9 +176,7 @@ object ControlFlowSmoke {
     val multiRange = Normalize(Workflow((List[Step[?, ?]](doubleRange), doubleRange.resultValue),
       Some("range-two-effects")))
     assert(multiRange.effects.size == 2)
-    val multiGenerated = RustEmitter.write(multiRange, base.resolve("native-range-two-effects"), runtime)
-    assert(multiGenerated.source.contains("invalid native range continuation site"))
-    assert(multiGenerated.source.contains("state.frames.len() != 2"))
+    assert(RustEmitter.emit(multiRange).manifest.contains("\"runtime_abi\":3"))
 
     // A real effectful nested range retains completed outer and inner
     // prefixes, and resumes a dependent second Call within the same inner
@@ -207,24 +196,19 @@ object ControlFlowSmoke {
     val nestedRangeIR = Normalize(Workflow((List[Step[?, ?]](nestedRange),
       nestedRange.resultValue), Some("nested-range-effects")))
     assert(nestedRangeIR.effects.size == 2)
-    val nestedRangeSource = RustEmitter.write(nestedRangeIR,
-      base.resolve("native-nested-range-effects"), runtime)
-    assert(nestedRangeSource.source.contains("invalid nested range continuation site"))
-    assert(nestedRangeSource.source.contains("__awfl_loop_0_inner_items"))
+    assert(RustEmitter.emit(nestedRangeIR).manifest.contains("\"runtime_abi\":3"))
 
-    // Additional steps in the outer effectful range are still unsupported.
-    val invalidNestedRange = ForRange[String]("mixed-outer-range",
+    // Mixed effectful outer steps and nested ranges use a single compiled CFG.
+    val mixedNestedRange = ForRange[String]("mixed-outer-range",
       CelInteger(0), CelInteger(1)) { _ =>
       val unrelated = TypedCall[Map[String, String], String](
         "unrelated", CallId.HttpPost, obj(Map("url" -> "https://example.org/extra")))
       List[Step[?, ?]](nestedRange, unrelated) -> nestedRange.resultValue
     }
-    val deniedMixedRange = try {
-      RustEmitter.emit(Normalize(Workflow((List[Step[?, ?]](invalidNestedRange),
-        invalidNestedRange.resultValue))))
-      throw new AssertionError("mixed nested range effects were not rejected")
-    } catch { case e: CompileError => e.getMessage }
-    assert(deniedMixedRange.contains("exactly one inner ForRange"))
+    val mixedNestedIR = Normalize(Workflow((List[Step[?, ?]](mixedNestedRange),
+      mixedNestedRange.resultValue), Some("mixed-nested-range")))
+    assert(mixedNestedIR.effects.size == 3)
+    assert(RustEmitter.emit(mixedNestedIR).manifest.contains("\"runtime_abi\":3"))
 
     // ABI 3 no longer needs a separate continuation template for each loop
     // type. Exercise effectful For/Fold and a Switch inside a ForRange.
@@ -260,9 +244,8 @@ object ControlFlowSmoke {
       mixedRange.resultValue), Some("range-switch-effects")))
     assert(mixedRangeIR.effects.size == 1)
 
-    // The generic state machine has a separate ABI 3/protocol v2 contract.
-    // Its explicit CFG resumes directly after effects; no lexical replay
-    // frames or special-case nested templates are used.
+    // Every generated native workflow shares one ABI 3/protocol 2 contract.
+    // Its explicit CFG resumes directly after effects, with no replay frames.
     val v2Fixtures = Vector(
       "native-v2-switch-effects" -> effectChoice,
       "native-v2-nested-switch-effects" -> nestedChoiceProgram,
@@ -273,13 +256,15 @@ object ControlFlowSmoke {
       "native-v2-each-effects" -> eachEffectsIR,
       "native-v2-fold-effects" -> foldEffectsIR,
       "native-v2-range-switch-effects" -> mixedRangeIR,
-      "native-v2-pure-nested" -> nestedIR
+      "native-v2-pure-nested" -> nestedIR,
+      "native-v2-deep-switch-effects" -> deepIR,
+      "native-v2-mixed-nested-range" -> mixedNestedIR
     )
     v2Fixtures.foreach { (name, workflow) =>
-      val emitted = RustEmitter.writeV2(workflow, base.resolve(name), runtime)
+      val emitted = RustEmitter.write(workflow, base.resolve(name), runtime)
       assert(emitted.manifest.contains("\"runtime_abi\":3"))
       assert(emitted.source.contains("native ABI 3"))
-      assert(emitted.source.contains("validate_version("))
+      assert(emitted.source.contains("request.validate("))
     }
 
     println("Scala control-flow fixtures passed")

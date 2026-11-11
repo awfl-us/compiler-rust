@@ -5,26 +5,19 @@ use crate::AwflValue;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
-pub const VERSION: u32 = 1;
-pub const STATE_MACHINE_VERSION: u32 = 2;
-
-/// A validated dynamic invocation location for resumable control flow.
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct InvocationFrame {
-    pub node_id: String,
-    pub iteration: u64,
-}
+pub const VERSION: u32 = 2;
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Continuation {
-    /// The next *compiled top-level instruction* to execute.
+    /// The next statically compiled CFG block to execute.
     pub next_step: usize,
     /// Only the live, already-bound result slots. Missing is not null.
     pub slots: BTreeMap<String, AwflValue>,
+    /// Always empty: nested control flow is checkpointed in live slots.
+    /// Kept in the wire shape expected by the already deployed Jobs service.
     #[serde(default)]
-    pub frames: Vec<InvocationFrame>,
+    pub frames: Vec<serde_json::Value>,
 }
 
 impl Continuation {
@@ -36,29 +29,11 @@ impl Continuation {
     }
 
     pub fn validate(&self, step_count: usize) -> Result<(), String> {
-        if self.next_step > step_count {
+        if self.next_step >= step_count {
             return Err("continuation step outside compiled workflow".into());
         }
-        // Nested continuation frames are allowed in v1 for compiler-managed
-        // resumable control flow. Validate bounds and identifier shapes.
-        if self.frames.len() > 64 {
-            return Err("continuation exceeds structural limits".into());
-        }
-        for frame in &self.frames {
-            if frame.node_id.is_empty()
-                || frame.node_id.len() > 120
-                || !frame
-                    .node_id
-                    .chars()
-                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == '.')
-            {
-                return Err("invalid continuation frame identifier".into());
-            }
-            // The server stores JSON numbers in JavaScript, so frame indices
-            // must round-trip without precision loss.
-            if frame.iteration > 9_007_199_254_740_991 {
-                return Err("continuation frame iteration exceeds safe integer range".into());
-            }
+        if !self.frames.is_empty() {
+            return Err("invalid native continuation: frames must be empty".into());
         }
         if self.slots.len() > 10000 {
             return Err("continuation exceeds structural limits".into());
@@ -85,28 +60,14 @@ pub struct Request {
 
 impl Request {
     pub fn validate(&self, step_count: usize) -> Result<(), String> {
-        self.validate_version(step_count, VERSION)
-    }
-
-    /// New state-machine artifacts use v2 PC labels; old artifacts still
-    /// explicitly require v1. A v2 continuation has no replay frames.
-    pub fn validate_version(&self, step_count: usize, version: u32) -> Result<(), String> {
-        if version != VERSION && version != STATE_MACHINE_VERSION {
-            return Err("unsupported native artifact protocol version".into());
-        }
-        if self.protocol_version != version {
+        if self.protocol_version != VERSION {
             return Err(format!(
-                "unsupported native protocol version {}",
-                self.protocol_version
+                "unsupported native protocol version {} (expected {})",
+                self.protocol_version, VERSION
             ));
         }
         if let Some(continuation) = &self.continuation {
             continuation.validate(step_count)?;
-            if version == STATE_MACHINE_VERSION
-                && (continuation.next_step >= step_count || !continuation.frames.is_empty())
-            {
-                return Err("invalid native v2 continuation target or frames".into());
-            }
         }
         Ok(())
     }
@@ -145,12 +106,8 @@ pub struct Response {
 
 impl Response {
     pub fn new(outcome: Outcome) -> Self {
-        Self::new_version(outcome, VERSION)
-    }
-
-    pub fn new_version(outcome: Outcome, version: u32) -> Self {
         Self {
-            protocol_version: version,
+            protocol_version: VERSION,
             outcome,
         }
     }
@@ -180,7 +137,10 @@ mod tests {
     #[test]
     fn rejects_unknown_version_and_invalid_pc_or_slots() {
         let request: Request = serde_json::from_str(r#"{"protocol_version":2,"input":1}"#).unwrap();
-        assert!(request.validate(2).unwrap_err().contains("version"));
+        assert!(request.validate(2).is_ok());
+        let wrong_version: Request =
+            serde_json::from_str(r#"{"protocol_version":1,"input":1}"#).unwrap();
+        assert!(wrong_version.validate(2).unwrap_err().contains("version"));
         let invalid = Request {
             protocol_version: VERSION,
             input: serde_json::json!(null),
@@ -214,63 +174,7 @@ mod tests {
     }
 
     #[test]
-    fn validates_nested_frames_within_bounds() {
-        let mut slots = BTreeMap::new();
-        slots.insert("s0".into(), AwflValue::Integer(1));
-        let ok = Continuation {
-            next_step: 1,
-            slots,
-            frames: vec![InvocationFrame {
-                node_id: "0.2".into(),
-                iteration: 3,
-            }],
-        };
-        assert!(ok.validate(3).is_ok());
-
-        let bad_id = Continuation {
-            next_step: 1,
-            slots: BTreeMap::new(),
-            frames: vec![InvocationFrame {
-                node_id: "bad id!".into(),
-                iteration: 0,
-            }],
-        };
-        assert!(bad_id.validate(2).unwrap_err().contains("frame identifier"));
-
-        let too_many = Continuation {
-            next_step: 0,
-            slots: BTreeMap::new(),
-            frames: (0..65)
-                .map(|i| InvocationFrame {
-                    node_id: format!("n{i}"),
-                    iteration: i,
-                })
-                .collect(),
-        };
-        assert!(
-            too_many
-                .validate(10)
-                .unwrap_err()
-                .contains("exceeds structural limits")
-        );
-        let unsafe_iteration = Continuation {
-            next_step: 0,
-            slots: BTreeMap::new(),
-            frames: vec![InvocationFrame {
-                node_id: "0.0".into(),
-                iteration: 9_007_199_254_740_992,
-            }],
-        };
-        assert!(
-            unsafe_iteration
-                .validate(2)
-                .unwrap_err()
-                .contains("safe integer")
-        );
-    }
-
-    #[test]
-    fn v2_state_machine_continuations_are_strictly_versioned_and_frame_free() {
+    fn state_machine_continuations_reject_frames_and_bad_pc() {
         let make = |version, next_step, frames| Request {
             protocol_version: version,
             input: serde_json::Value::Null,
@@ -280,27 +184,14 @@ mod tests {
                 frames,
             }),
         };
-        assert!(make(2, 2, vec![]).validate_version(3, 2).is_ok());
-        assert!(make(1, 2, vec![]).validate_version(3, 2).is_err());
-        assert!(make(2, 3, vec![]).validate_version(3, 2).is_err());
-        assert!(
-            make(
-                2,
-                0,
-                vec![InvocationFrame {
-                    node_id: "0.0".into(),
-                    iteration: 0,
-                }]
-            )
-            .validate_version(3, 2)
-            .is_err()
-        );
-        let response = Response::new_version(
-            Outcome::Completed {
-                result: serde_json::json!([1, 2]),
-            },
-            STATE_MACHINE_VERSION,
-        );
+        assert!(make(2, 2, vec![]).validate(3).is_ok());
+        assert!(make(1, 2, vec![]).validate(3).is_err());
+        assert!(make(2, 3, vec![]).validate(3).is_err());
+        let frames = vec![serde_json::json!({"node_id": "0.0", "iteration": 0})];
+        assert!(make(2, 0, frames).validate(3).unwrap_err().contains("frames"));
+        let response = Response::new(Outcome::Completed {
+            result: serde_json::json!([1, 2]),
+        });
         assert_eq!(response.protocol_version, 2);
     }
 }

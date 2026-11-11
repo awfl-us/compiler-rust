@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Real compiled-native IPC suspend/resume conformance (no network effects).
+"""ABI 3 / v2 real-Rust resume conformance: no network or external effects.
 
-These checks pass the recorded effect value back to the next native invocation.
-The server, not this binary, is responsible for authentication, durable journal
-transactions, idempotency and cancellation.
+Every suspension is completed by binding the result to the checkpoint as the
+AWFL server would. Fresh subprocesses execute each native transition.
 """
 import copy
 import json
@@ -14,403 +13,217 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURES = [
-    "native-effect", "native-resume", "native-two-effects",
-    "native-range-effect", "native-range-two-effects", "native-switch-effects",
-    "native-nested-switch-effects", "native-nested-range-effects",
-]
+FIXTURES = (
+    "native-v2-switch-effects",
+    "native-v2-nested-switch-effects",
+    "native-v2-range-two-effects",
+    "native-v2-nested-range-effects",
+    "native-v2-each",
+    "native-v2-fold",
+    "native-v2-each-effects",
+    "native-v2-fold-effects",
+    "native-v2-range-switch-effects",
+    "native-v2-pure-nested",
+    "native-v2-deep-switch-effects",
+    "native-v2-mixed-nested-range",
+)
 
 
-def invoke(executable, payload, *, fails=False):
-    result = subprocess.run(
-        [str(executable)], input=json.dumps(payload) + "\n",
-        text=True, capture_output=True, timeout=15,
+def run(binary, payload, *, fails=False):
+    proc = subprocess.run(
+        [str(binary)], input=json.dumps(payload), text=True,
+        capture_output=True, timeout=20,
     )
     if fails:
-        assert result.returncode != 0, (result.stdout, result.stderr)
-        return result.stderr
-    assert result.returncode == 0, (result.stdout, result.stderr)
-    return json.loads(result.stdout)
+        assert proc.returncode != 0, (proc.stdout, proc.stderr)
+        return proc.stderr
+    assert proc.returncode == 0, (proc.stdout, proc.stderr)
+    result = json.loads(proc.stdout)
+    assert result["protocol_version"] == 2, result
+    return result
 
 
-def bind(cont, slot, value):
-    resumed = copy.deepcopy(cont)
-    resumed["slots"][slot] = {"type": "string", "value": value}
-    return resumed
+def request(binary, value, continuation=None):
+    return run(binary, {"protocol_version": 2, "input": value,
+                        **({"continuation": continuation} if continuation else {})})
+
+
+def bind(response, outcome):
+    checkpoint = copy.deepcopy(response["continuation"])
+    assert checkpoint["frames"] == []
+    checkpoint["slots"][response["effect"]["result_slot"]] = {
+        "type": "string", "value": outcome,
+    }
+    return checkpoint
 
 
 def check():
-    with tempfile.TemporaryDirectory(prefix="awfl-rust-ipc-") as target:
+    with tempfile.TemporaryDirectory(prefix="awfl-native-v2-") as target:
         binaries = {}
         for fixture in FIXTURES:
             manifest = ROOT / "fixtures" / fixture / "Cargo.toml"
-            assert manifest.is_file(), f"run Scala ControlFlowSmoke first: {fixture}"
+            assert manifest.is_file(), f"generate {fixture} with Scala ControlFlowSmoke"
             with manifest.open("rb") as file:
                 package = tomllib.load(file)["package"]["name"]
-            subprocess.run(
-                ["cargo", "build", "--quiet", "--locked",
-                 "--manifest-path", str(manifest), "--target-dir", target],
-                check=True, env=os.environ.copy(),
-            )
+            subprocess.run([
+                "cargo", "build", "--quiet", "--manifest-path", str(manifest),
+                "--target-dir", target,
+            ], check=True, env=os.environ.copy())
             binaries[fixture] = Path(target) / "debug" / package
 
-        single = binaries["native-effect"]
-        start = invoke(single, {"protocol_version": 1, "input": 1})
-        assert start["protocol_version"] == 1
-        assert start["status"] == "suspended"
-        assert start["effect"] == {
-            "effect_id": "call_0", "node_id": "0.0", "operation": "http.post",
-            "result_slot": "s0", "args": {"url": "https://example.org"},
-        }
-        assert start["continuation"] == {"next_step": 1, "slots": {}, "frames": []}
-        complete = invoke(single, {
-            "protocol_version": 1, "input": 1,
-            "continuation": bind(start["continuation"], "s0", "from-server"),
-        })
-        assert complete == {
-            "protocol_version": 1, "status": "completed", "result": "from-server",
-        }
-
-        previous = binaries["native-resume"]
-        first = invoke(previous, {"protocol_version": 1, "input": 9})
+        switch = binaries["native-v2-switch-effects"]
+        first = request(switch, 5)
         assert first["status"] == "suspended"
-        assert first["continuation"]["slots"]["s0"] == {"type": "integer", "value": 8}
-        assert first["effect"]["effect_id"] == "call_1"
-        restored = bind(first["continuation"], "s1", "outcome")
-        # Simulate a changed process input: previous branch is skipped and its
-        # persisted slot is restored, not recomputed. The real server pins input.
-        after = invoke(previous, {
-            "protocol_version": 1, "input": -9, "continuation": restored,
-        })
-        assert after["status"] == "completed" and after["result"] == "outcome"
-
-        invalid = copy.deepcopy(restored)
-        del invalid["slots"]["s0"]
-        assert "missing continuation slot" in invoke(previous, {
-            "protocol_version": 1, "input": 9, "continuation": invalid,
-        }, fails=True)
-        assert "unsupported native protocol version" in invoke(single, {
-            "protocol_version": 2, "input": 1,
-        }, fails=True)
-        assert "outside compiled workflow" in invoke(previous, {
-            "protocol_version": 1, "input": 1,
-            "continuation": {"next_step": 99, "slots": {}, "frames": []},
-        }, fails=True)
-
-        two = binaries["native-two-effects"]
-        a = invoke(two, {"protocol_version": 1, "input": None})
-        assert a["effect"]["effect_id"] == "call_0"
-        b = invoke(two, {
-            "protocol_version": 1, "input": None,
-            "continuation": bind(a["continuation"], "s0", "first-ok"),
-        })
-        assert b["status"] == "suspended"
-        assert b["effect"]["effect_id"] == "call_1"
-        assert b["continuation"]["slots"]["s0"] == {
-            "type": "string", "value": "first-ok",
-        }
-        c = invoke(two, {
-            "protocol_version": 1, "input": None,
-            "continuation": bind(b["continuation"], "s1", "second-ok"),
-        })
-        assert c == {
-            "protocol_version": 1, "status": "completed", "result": "second-ok",
-        }
-
-        # An effect inside ForRange suspends once per iteration. The native
-        # binary is a new process every time, and completed values must be
-        # restored from the continuation rather than replayed or discarded.
-        ranged = binaries["native-range-effect"]
-        current = invoke(ranged, {"protocol_version": 1, "input": None})
-        for iteration, result in enumerate(("first", "second", "third")):
-            assert current["status"] == "suspended", current
-            assert current["effect"]["effect_id"].startswith("call_0_s")
-            assert current["effect"]["effect_id"].endswith("_" + str(iteration))
-            assert current["continuation"]["next_step"] == 0
-            assert current["continuation"]["frames"] == [
-                {"node_id": "0.0", "iteration": iteration}
-            ]
-            slots = current["continuation"]["slots"]
-            prefix = slots["__awfl_loop_0_items"]
-            assert prefix["type"] == "list"
-            assert [v["value"] for v in prefix["value"]] == \
-                list(("first", "second", "third")[:iteration])
-            if iteration == 1:
-                invalid = copy.deepcopy(current["continuation"])
-                invalid["slots"]["__awfl_loop_0_items"]["value"] = []
-                assert "invalid native range continuation prefix" in invoke(ranged, {
-                    "protocol_version": 1, "input": None,
-                    "continuation": bind(invalid, current["effect"]["result_slot"], result),
-                }, fails=True)
-                wrong_frame = copy.deepcopy(current["continuation"])
-                wrong_frame["frames"][0]["node_id"] = "0.wrong"
-                assert "invalid native continuation frame target" in invoke(ranged, {
-                    "protocol_version": 1, "input": None,
-                    "continuation": bind(wrong_frame, current["effect"]["result_slot"], result),
-                }, fails=True)
-            current = invoke(ranged, {
-                "protocol_version": 1, "input": None,
-                "continuation": bind(current["continuation"],
-                                     current["effect"]["result_slot"], result),
-            })
-        assert current == {
-            "protocol_version": 1, "status": "completed",
-            "result": ["first", "second", "third"],
-        }, current
-
-        # Two call sites per iteration: the second call receives the first
-        # call's recorded result, with unique site+iteration effect IDs.
-        multi_range = binaries["native-range-two-effects"]
-        current = invoke(multi_range, {"protocol_version": 1, "input": None})
-        for iteration in range(2):
-            first = current
-            assert first["status"] == "suspended", first
-            assert first["continuation"]["next_step"] == 0
-            assert first["continuation"]["frames"] == [
-                {"node_id": "0.0", "iteration": iteration},
-                {"node_id": first["effect"]["node_id"], "iteration": 0},
-            ]
-            assert first["effect"]["effect_id"].endswith("_" + str(iteration))
-            first_value = "first-" + str(iteration)
-            second = invoke(multi_range, {
-                "protocol_version": 1, "input": None,
-                "continuation": bind(first["continuation"],
-                                     first["effect"]["result_slot"], first_value),
-            })
-            assert second["status"] == "suspended", second
-            assert second["continuation"]["frames"] == [
-                {"node_id": "0.0", "iteration": iteration},
-                {"node_id": second["effect"]["node_id"], "iteration": 1},
-            ]
-            assert second["effect"]["effect_id"].endswith("_" + str(iteration))
-            assert second["effect"]["effect_id"] != first["effect"]["effect_id"]
-            assert second["effect"]["args"] == first_value
-            assert second["continuation"]["slots"][first["effect"]["result_slot"]] == {
-                "type": "string", "value": first_value,
-            }
-            if iteration == 0:
-                wrong_site = copy.deepcopy(second["continuation"])
-                wrong_site["frames"][1]["iteration"] = 99
-                assert "invalid native range continuation site" in invoke(multi_range, {
-                    "protocol_version": 1, "input": None,
-                    "continuation": bind(wrong_site, second["effect"]["result_slot"], "bad"),
-                }, fails=True)
-                missing_prior = copy.deepcopy(second["continuation"])
-                del missing_prior["slots"][first["effect"]["result_slot"]]
-                assert "missing continuation slot" in invoke(multi_range, {
-                    "protocol_version": 1, "input": None,
-                    "continuation": bind(missing_prior, second["effect"]["result_slot"], "bad"),
-                }, fails=True)
-            current = invoke(multi_range, {
-                "protocol_version": 1, "input": None,
-                "continuation": bind(second["continuation"],
-                                     second["effect"]["result_slot"],
-                                     "second-" + str(iteration)),
-            })
-        assert current == {
-            "protocol_version": 1, "status": "completed",
-            "result": ["second-0", "second-1"],
-        }, current
-
-        # A Switch pins its branch and Call site. Resuming with deliberately
-        # different input must NOT take a different branch or repeat a Call.
-        switch = binaries["native-switch-effects"]
-        first = invoke(switch, {"protocol_version": 1, "input": 5})
-        assert first["status"] == "suspended", first
+        assert first["continuation"]["next_step"] >= 0
         assert first["effect"]["node_id"] == "0.0.case0.0"
-        assert first["continuation"]["frames"] == [
-            {"node_id": "0.0", "iteration": 0},
-            {"node_id": "0.0.case0.0", "iteration": 0},
-        ]
-        assert first["continuation"]["next_step"] == 0
-        second = invoke(switch, {
-            "protocol_version": 1, "input": -5,
-            "continuation": bind(first["continuation"],
-                                 first["effect"]["result_slot"], "branch-a-first"),
-        })
-        assert second["status"] == "suspended", second
+        second = request(switch, -5, bind(first, "first"))
+        assert second["status"] == "suspended"
+        assert second["effect"]["args"] == "first"
         assert second["effect"]["node_id"] == "0.0.case0.1"
-        assert second["effect"]["args"] == "branch-a-first"
-        assert second["continuation"]["frames"] == [
-            {"node_id": "0.0", "iteration": 0},
-            {"node_id": "0.0.case0.1", "iteration": 1},
-        ]
-        assert first["effect"]["effect_id"] != second["effect"]["effect_id"]
-        assert second["continuation"]["slots"][first["effect"]["result_slot"]] == {
-            "type": "string", "value": "branch-a-first",
-        }
-        invalid_site = copy.deepcopy(second["continuation"])
-        invalid_site["frames"][0]["iteration"] = 1
-        assert "invalid native Switch continuation site" in invoke(switch, {
-            "protocol_version": 1, "input": -5,
-            "continuation": bind(invalid_site, second["effect"]["result_slot"], "bad"),
-        }, fails=True)
-        invalid_prior = copy.deepcopy(second["continuation"])
-        del invalid_prior["slots"][first["effect"]["result_slot"]]
-        assert "missing continuation slot" in invoke(switch, {
-            "protocol_version": 1, "input": -5,
-            "continuation": bind(invalid_prior, second["effect"]["result_slot"], "bad"),
-        }, fails=True)
-        final = invoke(switch, {
-            "protocol_version": 1, "input": -5,
-            "continuation": bind(second["continuation"],
-                                 second["effect"]["result_slot"], "branch-a-second"),
-        })
-        assert final == {
-            "protocol_version": 1, "status": "completed", "result": "branch-a-second",
-        }, final
-        other = invoke(switch, {"protocol_version": 1, "input": -1})
-        assert other["status"] == "suspended" and other["effect"]["node_id"] == "0.0.case1.0"
-        assert other["continuation"]["frames"] == [
-            {"node_id": "0.0", "iteration": 1},
-            {"node_id": "0.0.case1.0", "iteration": 0},
-        ]
-        other_done = invoke(switch, {
-            "protocol_version": 1, "input": 999,
-            "continuation": bind(other["continuation"],
-                                 other["effect"]["result_slot"], "branch-b"),
-        })
-        assert other_done["result"] == "branch-b"
-        unmatched = invoke(switch, {"protocol_version": 1, "input": 0})
-        assert unmatched["status"] == "completed" and unmatched["result"] == {}
+        assert second["effect"]["effect_id"] != first["effect"]["effect_id"]
+        assert request(switch, -5, bind(second, "second"))["result"] == "second"
+        assert request(switch, -1)["effect"]["node_id"] == "0.0.case1.0"
+        assert request(switch, 0)["result"] == {}
 
-        # Two nested Switches: resume must pin both branches and the Call
-        # site even if process input changes to select the no-effect path.
-        nested_switch = binaries["native-nested-switch-effects"]
-        first = invoke(nested_switch, {"protocol_version": 1, "input": 5})
-        assert first["status"] == "suspended", first
+        corrupt = bind(first, "first")
+        corrupt["frames"] = [{"node_id": "0.0", "iteration": 0}]
+        assert "frames must be empty" in run(switch, {
+            "protocol_version": 2, "input": 5, "continuation": corrupt,
+        }, fails=True)
+        corrupt = bind(first, "first")
+        corrupt["next_step"] = 9999
+        assert "outside compiled workflow" in run(switch, {
+            "protocol_version": 2, "input": 5, "continuation": corrupt,
+        }, fails=True)
+        assert "unsupported native protocol version" in run(switch, {
+            "protocol_version": 1, "input": 5,
+        }, fails=True)
+
+        nested = binaries["native-v2-nested-switch-effects"]
+        first = request(nested, 5)
         assert first["effect"]["node_id"] == "0.0.case0.0.case0.0"
-        assert first["continuation"]["frames"] == [
-            {"node_id": "0.0", "iteration": 0},
-            {"node_id": "0.0.case0.0", "iteration": 0},
-            {"node_id": first["effect"]["node_id"], "iteration": 0},
-        ]
-        second = invoke(nested_switch, {
-            "protocol_version": 1, "input": -100,
-            "continuation": bind(first["continuation"],
-                                 first["effect"]["result_slot"], "nested-first"),
-        })
-        assert second["status"] == "suspended", second
+        second = request(nested, -5, bind(first, "nested-first"))
         assert second["effect"]["node_id"] == "0.0.case0.0.case0.1"
         assert second["effect"]["args"] == "nested-first"
-        assert second["effect"]["effect_id"] != first["effect"]["effect_id"]
-        assert second["continuation"]["frames"] == [
-            {"node_id": "0.0", "iteration": 0},
-            {"node_id": "0.0.case0.0", "iteration": 0},
-            {"node_id": second["effect"]["node_id"], "iteration": 1},
-        ]
-        assert second["continuation"]["slots"][first["effect"]["result_slot"]] == {
-            "type": "string", "value": "nested-first",
-        }
-        wrong = copy.deepcopy(second["continuation"])
-        wrong["frames"][1]["iteration"] = 1
-        assert "invalid nested Switch continuation site" in invoke(nested_switch, {
-            "protocol_version": 1, "input": -100,
-            "continuation": bind(wrong, second["effect"]["result_slot"], "invalid"),
-        }, fails=True)
-        missing = copy.deepcopy(second["continuation"])
-        del missing["slots"][first["effect"]["result_slot"]]
-        assert "missing continuation slot" in invoke(nested_switch, {
-            "protocol_version": 1, "input": -100,
-            "continuation": bind(missing, second["effect"]["result_slot"], "invalid"),
-        }, fails=True)
-        done = invoke(nested_switch, {
-            "protocol_version": 1, "input": -100,
-            "continuation": bind(second["continuation"],
-                                 second["effect"]["result_slot"], "nested-second"),
-        })
-        assert done == {
-            "protocol_version": 1, "status": "completed", "result": "nested-second",
-        }, done
-        alternate = invoke(nested_switch, {"protocol_version": 1, "input": 2})
-        assert alternate["status"] == "suspended", alternate
-        assert alternate["effect"]["node_id"] == "0.0.case0.0.case1.0"
-        assert alternate["continuation"]["frames"][1]["iteration"] == 1
-        alternate_done = invoke(nested_switch, {
-            "protocol_version": 1, "input": -2,
-            "continuation": bind(alternate["continuation"],
-                                 alternate["effect"]["result_slot"], "alternate"),
-        })
-        assert alternate_done["result"] == "alternate"
-        outer_noop = invoke(nested_switch, {"protocol_version": 1, "input": -5})
-        assert outer_noop == {
-            "protocol_version": 1, "status": "completed", "result": "no-effect",
-        }
+        assert request(nested, -5, bind(second, "nested-second"))["result"] == "nested-second"
+        assert request(nested, 2)["effect"]["node_id"] == "0.0.case0.0.case1.0"
+        assert request(nested, -5)["result"] == "no-effect"
 
-        # Two nested ranges with dependent Calls inside each inner iteration.
-        # Completed prefixes for BOTH loop levels must survive every process
-        # restart. Negative outer range bounds use zero-based ordinals.
-        nested_range = binaries["native-nested-range-effects"]
-        current = invoke(nested_range, {"protocol_version": 1, "input": None})
+        ranged = binaries["native-v2-range-two-effects"]
+        current = request(ranged, None)
+        seen_ids = set()
+        results = []
+        for iteration in range(2):
+            first = current
+            assert first["status"] == "suspended"
+            first_id = first["effect"]["effect_id"]
+            assert first_id not in seen_ids
+            seen_ids.add(first_id)
+            first_result = f"first-{iteration}"
+            second = request(ranged, None, bind(first, first_result))
+            assert second["status"] == "suspended"
+            assert second["effect"]["args"] == first_result
+            second_id = second["effect"]["effect_id"]
+            assert second_id not in seen_ids
+            seen_ids.add(second_id)
+            answer = f"second-{iteration}"
+            results.append(answer)
+            current = request(ranged, None, bind(second, answer))
+        assert current["result"] == results
+        assert len(seen_ids) == 4
+
+        nested_range = binaries["native-v2-nested-range-effects"]
+        current = request(nested_range, None)
         expected = []
+        seen_ids.clear()
         for outer in range(2):
             row = []
             for inner in range(2):
                 first = current
-                assert first["status"] == "suspended", first
-                assert first["effect"]["node_id"] == "0.0.each.0.each.0"
-                assert first["continuation"]["next_step"] == 0
-                assert first["continuation"]["frames"] == [
-                    {"node_id": "0.0", "iteration": outer},
-                    {"node_id": "0.0.each.0", "iteration": inner},
-                    {"node_id": first["effect"]["node_id"], "iteration": 0},
-                ]
-                saved = first["continuation"]["slots"]
-                assert len(saved["__awfl_loop_0_items"]["value"]) == outer
-                assert len(saved["__awfl_loop_0_inner_items"]["value"]) == inner
-                assert first["effect"]["effect_id"].endswith("_" + str(outer) + "_" + str(inner))
-                first_result = "first-" + str(outer) + "-" + str(inner)
-                second = invoke(nested_range, {
-                    "protocol_version": 1, "input": None,
-                    "continuation": bind(first["continuation"],
-                                         first["effect"]["result_slot"], first_result),
-                })
-                assert second["status"] == "suspended", second
-                assert second["effect"]["node_id"] == "0.0.each.0.each.1"
+                assert first["status"] == "suspended"
+                first_id = first["effect"]["effect_id"]
+                assert first_id not in seen_ids
+                seen_ids.add(first_id)
+                first_result = f"first-{outer}-{inner}"
+                second = request(nested_range, None, bind(first, first_result))
+                assert second["status"] == "suspended"
                 assert second["effect"]["args"] == first_result
-                assert second["effect"]["effect_id"] != first["effect"]["effect_id"]
-                assert second["continuation"]["frames"][-1]["iteration"] == 1
-                assert second["continuation"]["slots"][first["effect"]["result_slot"]] == {
-                    "type": "string", "value": first_result,
-                }
-                if outer == 1 and inner == 1:
-                    invalid_prefix = copy.deepcopy(second["continuation"])
-                    invalid_prefix["slots"]["__awfl_loop_0_inner_items"]["value"] = []
-                    assert "invalid nested range continuation prefix" in invoke(nested_range, {
-                        "protocol_version": 1, "input": None,
-                        "continuation": bind(invalid_prefix,
-                                             second["effect"]["result_slot"], "bad"),
-                    }, fails=True)
-                    invalid_site = copy.deepcopy(second["continuation"])
-                    invalid_site["frames"][2]["iteration"] = 99
-                    assert "invalid nested range continuation site" in invoke(nested_range, {
-                        "protocol_version": 1, "input": None,
-                        "continuation": bind(invalid_site,
-                                             second["effect"]["result_slot"], "bad"),
-                    }, fails=True)
-                    invalid_prior = copy.deepcopy(second["continuation"])
-                    del invalid_prior["slots"][first["effect"]["result_slot"]]
-                    assert "missing continuation slot" in invoke(nested_range, {
-                        "protocol_version": 1, "input": None,
-                        "continuation": bind(invalid_prior,
-                                             second["effect"]["result_slot"], "bad"),
-                    }, fails=True)
-                second_result = "second-" + str(outer) + "-" + str(inner)
-                row.append(second_result)
-                current = invoke(nested_range, {
-                    "protocol_version": 1, "input": None,
-                    "continuation": bind(second["continuation"],
-                                         second["effect"]["result_slot"], second_result),
-                })
+                second_id = second["effect"]["effect_id"]
+                assert second_id not in seen_ids
+                seen_ids.add(second_id)
+                answer = f"second-{outer}-{inner}"
+                row.append(answer)
+                current = request(nested_range, None, bind(second, answer))
             expected.append(row)
-        assert current == {
-            "protocol_version": 1, "status": "completed", "result": expected,
-        }, current
-        print("native protocol: 2 single-effect resumes, 2-step effect sequence,"
-              " three-iteration range, two effects per range iteration,"
-              " pinned two-branch and nested Switch, nested-range resumes,"
-              " malformed continuation"
-              " and version rejection passed")
+        assert current["result"] == expected, current
+        assert len(seen_ids) == 8
+
+        assert request(binaries["native-v2-each"], [1, 2])["result"] == [4, 5]
+        assert request(binaries["native-v2-fold"], [1, 2, 3])["result"] == 16
+        each_effects = binaries["native-v2-each-effects"]
+        current = request(each_effects, ["a", "b", "c"])
+        for i, item in enumerate(["a", "b", "c"]):
+            assert current["status"] == "suspended", current
+            assert current["effect"]["args"] == item
+            assert current["effect"]["effect_id"].endswith("_" + str(i))
+            current = request(each_effects, ["changed"], bind(current, "item-" + str(i)))
+        assert current["result"] == ["item-0", "item-1", "item-2"]
+
+        fold_effects = binaries["native-v2-fold-effects"]
+        current = request(fold_effects, ["a", "b", "c"])
+        for i, previous in enumerate(["start", "fold-0", "fold-1"]):
+            assert current["status"] == "suspended", current
+            assert current["effect"]["args"] == previous
+            assert current["effect"]["effect_id"].endswith("_" + str(i))
+            current = request(fold_effects, ["changed"], bind(current, "fold-" + str(i)))
+        assert current["result"] == "fold-2"
+
+        mixed = binaries["native-v2-range-switch-effects"]
+        current = request(mixed, None)
+        assert current["status"] == "suspended", current
+        assert current["effect"]["node_id"] == "0.0.each.0.case0.0"
+        assert current["effect"]["effect_id"].endswith("_1")
+        assert request(mixed, None, bind(current, "branch-done"))["result"] == [
+            "skipped", "branch-done",
+        ]
+
+        assert request(binaries["native-v2-pure-nested"], None)["result"] == [2, 3, 9, 9]
+
+        # A third effectful Switch depth is compiled to CFG blocks (no replay
+        # frame limit). Follow its two dependent effects across restarts.
+        deep = binaries["native-v2-deep-switch-effects"]
+        first = request(deep, 5)
+        assert first["effect"]["node_id"] == "0.0.case0.0.case0.0.case0.0"
+        second = request(deep, -5, bind(first, "deep-first"))
+        assert second["effect"]["args"] == "deep-first"
+        assert request(deep, -5, bind(second, "deep-second"))["result"] == "deep-second"
+        assert request(deep, -5)["result"] == "no-effect"
+
+        # Two nested range loops are followed by a sibling effect. Completed
+        # inner-loop calls must not replay when the sibling effect resumes.
+        mixed_nested = binaries["native-v2-mixed-nested-range"]
+        current = request(mixed_nested, None)
+        seen = []
+        rows = []
+        for outer in range(2):
+            row = []
+            for inner in range(2):
+                first = current
+                assert first["status"] == "suspended"
+                seen.append(first["effect"]["effect_id"])
+                current = request(mixed_nested, None, bind(first, f"first-{outer}-{inner}"))
+                assert current["effect"]["args"] == f"first-{outer}-{inner}"
+                seen.append(current["effect"]["effect_id"])
+                current = request(mixed_nested, None, bind(current, f"second-{outer}-{inner}"))
+                row.append(f"second-{outer}-{inner}")
+            rows.append(row)
+        assert current["effect"]["node_id"] == "0.0.each.1"
+        seen.append(current["effect"]["effect_id"])
+        assert request(mixed_nested, None, bind(current, "sibling-ok"))["result"] == [rows]
+        assert len(set(seen)) == len(seen)
+        print("ABI 3 native v2: Switch, nested Switch, range, nested range,"
+              " effectful For/Fold, mixed range+Switch, replay-safe effect IDs"
+              " and malformed checkpoints passed")
 
 
 if __name__ == "__main__":

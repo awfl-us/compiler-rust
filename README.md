@@ -18,7 +18,8 @@ functions. See `docs/implementation-status.md` for the precise capability gates.
 
 The pure subset now includes compiled `Switch`, `ForRange`, `For` and `Fold`, including
 nested control flow. The Scala CLI in `frontend/` reuses the existing compiler
-workflow loader. Full exception/retry parity, real network effects, and general production
+workflow loader. All compiled artifacts use **ABI 3 / protocol 2**; no
+compatibility compiler/runtime variants are shipped. Full exception/retry parity, real network effects, and general production
 routing remain unavailable. The existing server now supports an **opt-in**
 native Jobs/Firestore backend; a pure ABI 3 `NativePilot` GCP canary passed
 on November 11, 2026. See `docs/implementation-status.md` for evidence,
@@ -47,6 +48,7 @@ cd ..
 cargo build --manifest-path fixtures/native-smoke/Cargo.toml
 python3 scripts/test_native_smoke.py
 python3 scripts/test_control_flow.py
+python3 scripts/test_native_protocol.py
 ```
 
 The shared operation identity catalog is maintained in `awfl-us/dsl`, not copied

@@ -24,6 +24,7 @@ object FrontendSmoke {
     val generated = RustEmitter.write(ir, dir, runtime)
     assert(generated.source.contains("ops::add"))
     assert(generated.manifest.contains("math-fixture"))
+    assert(generated.manifest.contains("\"runtime_abi\":3"))
     assert(generated == RustEmitter.emit(Normalize(wf)))
 
     val bad = Workflow((List.empty[Step[?, ?]], Value[String](CelConst("sys.now()"))))
@@ -51,7 +52,7 @@ object FrontendSmoke {
       Paths.get("../runtime").toAbsolutePath.normalize)
     assert(protocol.source.contains("Outcome::Suspended"))
     assert(protocol.manifest.contains("http.post"))
-    assert(protocol.manifest.contains("\"runtime_abi\":2"))
+    assert(protocol.manifest.contains("\"runtime_abi\":3"))
 
     val invalidCall = Call[Map[String, String], String]("custom", "provider.unclassified", obj(Map("x" -> "y")))
     val diagnostic2 = try {
@@ -68,9 +69,6 @@ object FrontendSmoke {
     assert(artifacts.head.program.name == "batch-math-fixture")
     assert(artifacts.head.program.copy(name = ir.name) == ir)
     assert(artifacts.head.emitted.manifest.contains("\"runtime_abi\":3"))
-    val legacyArtifacts = NativeCompiler.compile(List(wf), "batch", scratch, runtime,
-      NativeCompiler.Backend.Legacy)
-    assert(legacyArtifacts.head.emitted.manifest.contains("\"runtime_abi\":1"))
 
     println("Scala frontend native smoke passed")
   }

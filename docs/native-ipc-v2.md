@@ -1,8 +1,8 @@
 # Native CFG state-machine ABI 3 / IPC protocol 2
 
-Status: **experimental, opt-in**. Protocol 1 and its existing Rust fixtures are
-unchanged and remain the default for existing executions. This is not wired
-into AWFL's shared production launcher.
+Status: **single native protocol**, experimental execution routing. The
+compiler emits ABI 3 / protocol 2 exclusively, with no v1 support. The server
+has an opt-in native shared-launcher path, disabled for normal traffic.
 
 ## Compilation model
 
@@ -80,11 +80,11 @@ different iterations distinct idempotency keys. A completed response uses
 ## Server contract
 
 - Artifact manifests set `runtime_abi: 3` for this backend. The execution
-  store pins `protocolVersion: 2` at creation; previous executions default
-  to version 1. Preparing an effect with a mismatched version is rejected.
+  store pins `protocolVersion: 2` at creation for this backend. Preparing
+  an effect with a mismatched version is rejected.
 - `executeNativeStep` passes the pinned version to the digest-verified
-  executable and requires the response version to match. Protocol 2 allows
-  a frame-free continuation at PC zero, unlike protocol 1.
+  executable and requires the response version to match. The continuation
+  can resume at any valid compiled CFG program counter, including zero.
 - The bounded Firestore document holds the checkpoint, lease and
   prepared effect; effect outcomes live in per-effect subcollection documents.
   The journal and resumed tagged result slot are committed in one fenced
@@ -96,14 +96,15 @@ different iterations distinct idempotency keys. A completed response uses
   JSON strings to avoid Firestore's nested-array restriction. Tagged
   continuation slots remain structured values.
 
-The protocol is exercised by `scripts/test_native_protocol_v2.py` against
+The protocol is exercised by `scripts/test_native_protocol.py` against
 freshly compiled Rust executables and by the Firestore emulator's
 worker-takeover test using a generated nested-range executable.
 
 ## Required before production
 
-Integrate trusted artifact registration and backend selection into the
-existing shared launcher. Add comprehensive error/retry/`Try`/`Parallel`
-parity, authenticated provider-specific effect handlers, artifact isolation,
+Verify the authenticated public API / agent session integration, including
+status and cancellation. Add comprehensive error/retry/`Try`/`Parallel`
+parity, authenticated provider-specific effect handlers, process isolation,
 lease heartbeats, broader crash injection, and differential conformance
-tests against Google Workflows. No production migration is implied.
+tests against Google Workflows. The pure-path shared launcher is deployed but
+disabled for normal production traffic.
