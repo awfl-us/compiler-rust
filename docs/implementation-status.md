@@ -64,6 +64,25 @@ its second argument may be a string key or list of nested string keys.
   deliberately **unsupported** by the Rust emitter; registered constants do
   not imply native implementations. No existing workflows were migrated.
 
+## November 11: literal CEL collections accepted by the native compiler
+
+`Normalize` now recognizes existing DSL `CelConst` **strict JSON data literals**
+that begin with `[` or `{`, including `List.cel`, `ListValue.empty`, nested
+maps/lists, strings/Unicode, booleans, null, signed-64-bit integers, and finite
+floating-point numbers. This is **not** a CEL text interpreter: expressions
+containing bare variables, function calls, malformed JSON, overflowing
+integers, or non-finite floats are rejected with workflow/node diagnostics.
+The existing DSL and YAML compiler are unchanged. Constant values become
+statically emitted `AwflValue` Rust expressions, with no runtime parsing of
+the DSL syntax.
+
+Verified locally: `LiteralCollectionsSmoke` compiled an unchanged-DSL
+literal collection into ABI 3 Rust; Cargo built the binary; strict Clippy
+passed; `test_literal_collections.py` verified exact JSON results including
+nested maps, list-element preservation, Unicode, numeric types, `map.get`
+on literal maps, and deterministic replay. Invalid literal data was rejected
+at compilation. The suite is wired into `scripts/test-local.sh --full` and CI.
+
 ## Compiler: implemented
 
 - Scala 3 `frontend/` loads constructed AWFL DSL workflow objects through the

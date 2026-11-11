@@ -145,7 +145,13 @@ workflow.run needs synchronous result and asynchronous skip_polling modes. Norma
 - Normalize existing `CelOp` syntax (`==`, `!=`, `>`, `>=`, `<`, `<=`, `+`, `-`, `*`, `//`, `in`, `and`, `or` and special unary `not`) into **compiler-internal** binary/unary IR. Do not replace CEL operators in the DSL.
 - Preserve short-circuit boolean evaluation. Define integer division, overflow, mixed number comparison, negative indexing behavior and errors through conformance tests.
 - Replace Value("sys.now()"), CelConst("sys.now()") and Value("uuid.generate()") in utilities and application workflows.
-- Interpret existing raw list constants (including nested map.get key paths), dotted input.env references, null/numeric literals, CelOps list rendering and string escaping in the Rust *normalizer*, without extending the DSL AST.
+- **Done for strict literal data:** recognize existing `CelConst` JSON-shaped
+  lists/maps (including empty collections and nested data), `List.cel`, signed
+  numeric literals, booleans, null, dotted input references, and quoted strings
+  in the Rust *normalizer*. `LiteralCollectionsSmoke` + real Cargo executable
+  test exact results and reject malformed/non-finite/overflowing data.
+  **Not done:** expression-valued lists/maps containing arbitrary CEL source;
+  do not interpret or silently reinterpret these strings. No DSL AST changes.
 - CelStr.safe pre-escapes content for YAML. Normalize string contents once and let each backend escape its output; prevent double escaping.
 - Unknown raw CEL fails Rust compilation with a migration suggestion. A small compatibility parser for the known literal/reference subset is acceptable during migration; a general CEL interpreter is not required.
 - Replace WORKFLOW_ENV text substitutions with manifest/deployment bindings, including child workflow names and workflow-file bucket names.

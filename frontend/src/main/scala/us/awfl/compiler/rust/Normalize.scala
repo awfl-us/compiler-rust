@@ -44,6 +44,33 @@ object Normalize {
       case v => fail(where, s"unsupported literal value: ${v.getClass.getName}")
     }
 
+    /** The existing DSL writes literal lists as JSON-like text in CelConst.
+      * Parse only strict data literals, not arbitrary CEL syntax; all dynamic
+      * references and operations must remain structured Cel nodes.
+      */
+    def collectionLiteral(json: io.circe.Json, where: String): Expr =
+      json.fold[Expr](
+        NullValue,
+        BoolValue.apply,
+        number => {
+          val text = number.toString
+          if (text.matches("-?(0|[1-9][0-9]*)"))
+            text.toLongOption.map(IntValue(_)).getOrElse(
+              fail(where, s"integer outside signed 64-bit range: $text"))
+          else
+            text.toDoubleOption.filter(_.isFinite).map(FloatValue(_)).getOrElse(
+              fail(where, s"non-finite/invalid floating-point literal: $text"))
+        },
+        StringValue.apply,
+        values => Ir.ListValue(values.zipWithIndex.map { (value, i) =>
+          collectionLiteral(value, s"$where[$i]")
+        }),
+        fields => MapValue(fields.keys.toVector.sorted.map { key =>
+          key -> collectionLiteral(fields(key).getOrElse(
+            fail(where, s"invalid literal map key '$key'")), s"$where.$key")
+        })
+      )
+
     def raw(rawValue: String, where: String): Expr = rawValue match {
       case "input" => Input
       case "null" => NullValue
@@ -63,6 +90,13 @@ object Normalize {
         val root: Expr = if (segments.head == "input") Input
                          else SlotRef(symbols(segments.head))
         segments.tail.foldLeft(root)((value, field) => Field(value, field))
+      // List/Map literal strings produced by the original DSL List.cel and
+      // ListValue.empty. Do not evaluate raw identifiers or CEL functions.
+      case text if text.trim.startsWith("[") || text.trim.startsWith("{") =>
+        io.circe.parser.parse(text).fold(
+          err => fail(where, s"invalid literal collection (not JSON data): ${err.message}"),
+          json => collectionLiteral(json, where)
+        )
       case text if text.matches("-?(0|[1-9][0-9]*)") =>
         text.toLongOption.map(IntValue(_))
           .getOrElse(fail(where, s"integer outside signed 64-bit range: $text"))
