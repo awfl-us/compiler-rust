@@ -14,6 +14,15 @@ object StateMachineEmitter {
 
   def source(plan: Plan): String = {
     val liveness = ContinuationAnalysis(plan)
+    // A CFG whose blocks only suspend or complete never mutates the PC.
+    // Emit a direct match so Clippy does not flag an unnecessary loop or
+    // final-position `return` in the generated Rust.
+    val advancesPc = plan.blocks.exists(_.op match {
+      case _: Done | _: Invoke => false
+      case _ => true
+    })
+    val terminalPrefix = if (advancesPc) "return " else ""
+    val terminalSuffix = if (advancesPc) ";" else ""
     def slot(id: String): String =
       s"""slots.get(${q(id)}).cloned().ok_or(${q("missing continuation slot: " + id)})?"""
     def expr(value: Expr, node: String): String =
@@ -111,7 +120,7 @@ object StateMachineEmitter {
                     $dynamicId
                     $savedBinding __awfl_saved = std::collections::BTreeMap::new();
                     $saved
-                    return Ok(Outcome::Suspended {
+                    ${terminalPrefix}Ok(Outcome::Suspended {
                         effect: EffectIntent {
                             effect_id: __awfl_effect_id,
                             node_id: ${q(effect.nodeId)}.to_owned(),
@@ -122,11 +131,11 @@ object StateMachineEmitter {
                         continuation: Continuation {
                             next_step: $next, slots: __awfl_saved, frames: vec![],
                         },
-                    });"""
+                    })$terminalSuffix"""
         case Done(value) =>
-          s"""return Ok(Outcome::Completed {
+          s"""${terminalPrefix}Ok(Outcome::Completed {
                         result: (${expr(value, block.sourceNode)}).to_plain_json()?,
-                    });"""
+                    })$terminalSuffix"""
       }
       s"""            ${block.id} => {
                     // AWFL ${block.sourceNode}
@@ -137,10 +146,6 @@ object StateMachineEmitter {
     // Single terminal/effect blocks return without changing the program
     // counter; generating a loop would be both unnecessary and a Clippy
     // `never_loop` error. These are common for constant-return workflows.
-    val advancesPc = plan.blocks.exists(_.op match {
-      case _: Done | _: Invoke => false
-      case _ => true
-    })
     val mutatesSlots = plan.blocks.exists(_.op match {
       case _: Done | _: Invoke | _: Test => false
       case _ => true
