@@ -109,6 +109,10 @@ the AWFL Scala consumer using `scripts/test-local.sh --full`. `map.get`
 accepts exactly two arguments, with the second being a key or list of
 string keys; it is a safe lookup rather than strict field access.
 
+**Also implemented:** original `CelOp` `in` list/map membership and
+signed integer `//` floor division, with checked zero/overflow semantics,
+Scala→Cargo generated executable tests and Rust unit tests (16 total).
+
 **Remaining:** numerical/string conversion, base64, text helpers, time/UUID,
 environment binding, and wider CEL operators are deliberately unsupported
 until individually implemented and tested. The current JSON implementation

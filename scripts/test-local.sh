@@ -27,7 +27,8 @@ echo '== Scala AST normalization, CFG liveness, and NativeMain =='
   'Test / runMain us.awfl.compiler.rust.ControlFlowSmoke' \
   'Test / runMain us.awfl.compiler.rust.NativeCliSmoke' \
   'Test / runMain us.awfl.compiler.rust.CelStdlibSmoke' \
-  'Test / runMain us.awfl.compiler.rust.LiteralCollectionsSmoke')
+  'Test / runMain us.awfl.compiler.rust.LiteralCollectionsSmoke' \
+  'Test / runMain us.awfl.compiler.rust.CelOperatorsSmoke')
 
 echo '== Compile unmodified production workflow source =='
 (cd "$ROOT/frontend" && sbt -batch \
@@ -54,6 +55,11 @@ echo '== Compile original DSL literal lists/maps as native Rust =='
 (cd "$ROOT" && cargo build --manifest-path fixtures/native-literal-collections/Cargo.toml \
   && cargo clippy --manifest-path fixtures/native-literal-collections/Cargo.toml --all-targets --locked -- -D warnings \
   && python3 scripts/test_literal_collections.py)
+
+echo '== Compile existing CEL membership and floor-division operators =='
+(cd "$ROOT" && cargo build --manifest-path fixtures/native-cel-operators/Cargo.toml \
+  && cargo clippy --manifest-path fixtures/native-cel-operators/Cargo.toml --all-targets --locked -- -D warnings \
+  && python3 scripts/test_cel_operators.py)
 
 if [[ "$MODE" == '--full' ]]; then
   echo '== Real Rust process control-flow and effect/replay conformance =='

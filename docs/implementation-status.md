@@ -83,6 +83,23 @@ nested maps, list-element preservation, Unicode, numeric types, `map.get`
 on literal maps, and deterministic replay. Invalid literal data was rejected
 at compilation. The suite is wired into `scripts/test-local.sh --full` and CI.
 
+## November 11: native CEL membership and checked floor division
+
+The original `CelOp` DSL operator nodes (`in` and `//`) are now compiled
+directly into native Rust calls. `in` performs value equality membership
+in lists or string-key membership in maps (without interpreting substrings).
+`//` uses **floor** division on signed 64-bit integers; negative divisors
+and dividends round toward negative infinity rather than Rust's default
+truncation. Division by zero, `i64::MIN / -1`, non-integer operands and
+invalid map keys fail with explicit errors instead of panicking or coercing.
+
+Tested locally with 16 Rust unit tests, a Scala-generated Cargo fixture
+(`CelOperatorsSmoke`), an actual Rust binary asserting both positive and
+negative inputs (`test_cel_operators.py`), repeatability, zero-division
+failure, and strict Clippy. No DSL or YAML compiler modifications, and native
+production routing remains disabled. Extended numeric/heterogeneous CEL
+operators are still unsupported pending Google differential fixtures.
+
 ## Compiler: implemented
 
 - Scala 3 `frontend/` loads constructed AWFL DSL workflow objects through the

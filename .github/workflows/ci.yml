@@ -46,7 +46,8 @@ jobs:
             'Test / runMain us.awfl.compiler.rust.ControlFlowSmoke' \
             'Test / runMain us.awfl.compiler.rust.NativeCliSmoke' \
             'Test / runMain us.awfl.compiler.rust.CelStdlibSmoke' \
-            'Test / runMain us.awfl.compiler.rust.LiteralCollectionsSmoke'
+            'Test / runMain us.awfl.compiler.rust.LiteralCollectionsSmoke' \
+            'Test / runMain us.awfl.compiler.rust.CelOperatorsSmoke'
       - name: Compile and execute NativeMain deployable ABI 3 artifact
         run: |
           cd frontend
@@ -89,6 +90,11 @@ jobs:
           cargo build --manifest-path fixtures/native-literal-collections/Cargo.toml
           cargo clippy --manifest-path fixtures/native-literal-collections/Cargo.toml --all-targets --locked -- -D warnings
           python3 scripts/test_literal_collections.py
+      - name: Compile and execute original CEL membership and floor division
+        run: |
+          cargo build --manifest-path fixtures/native-cel-operators/Cargo.toml
+          cargo clippy --manifest-path fixtures/native-cel-operators/Cargo.toml --all-targets --locked -- -D warnings
+          python3 scripts/test_cel_operators.py
       - name: Compile an unchanged production workflow into native Rust
         run: |
           cd frontend
