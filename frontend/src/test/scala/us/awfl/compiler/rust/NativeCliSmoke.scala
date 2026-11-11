@@ -14,6 +14,17 @@ object NativeCliSmoke {
     assert(Files.isRegularFile(artifact.resolve("src/main.rs")))
     assert(Files.readString(artifact.resolve("manifest.json")).contains("cli-fixture-increment"))
     assert(results.head.emitted.source.contains("ops::add"))
+    assert(results.head.emitted.manifest.contains("\"runtime_abi\":3"))
+    assert(results.head.emitted.source.contains("protocol v2"))
+    val legacy = NativeMain.compile(Array(
+      "us.awfl.compiler.rust.NativeCliFixture", temp.toString,
+      runtime.toString, "--abi=legacy"))
+    assert(legacy.head.emitted.manifest.contains("\"runtime_abi\":1"))
+    assert(legacy.head.emitted.source != results.head.emitted.source)
+    val explicitDurable = NativeMain.compile(Array(
+      "--abi=3", "us.awfl.compiler.rust.NativeCliFixture", temp.toString,
+      runtime.toString))
+    assert(explicitDurable.head.emitted == results.head.emitted)
     val error = try {
       NativeMain.compile(Array("us.awfl.compiler.rust.NativeCliFixture", temp.toString, runtime.toString, "unexpected"))
       throw new AssertionError("expected CLI argument rejection")
@@ -21,6 +32,13 @@ object NativeCliSmoke {
       case e: IllegalArgumentException => e.getMessage
     }
     assert(error.contains("Usage:"))
-    println("Native CLI loaded existing core.Workflow and emitted Rust")
+    val invalidAbi = try {
+      NativeMain.compile(Array("us.awfl.compiler.rust.NativeCliFixture", "--abi=2"))
+      throw new AssertionError("expected unsupported ABI rejection")
+    } catch {
+      case e: IllegalArgumentException => e.getMessage
+    }
+    assert(invalidAbi.contains("--abi=3|--abi=legacy"))
+    println("Native CLI emitted publishable ABI 3 and explicit legacy Rust")
   }
 }

@@ -67,6 +67,10 @@ object FrontendSmoke {
     assert(artifacts.map(_.workflowName) == List("batch-math-fixture"))
     assert(artifacts.head.program.name == "batch-math-fixture")
     assert(artifacts.head.program.copy(name = ir.name) == ir)
+    assert(artifacts.head.emitted.manifest.contains("\"runtime_abi\":3"))
+    val legacyArtifacts = NativeCompiler.compile(List(wf), "batch", scratch, runtime,
+      NativeCompiler.Backend.Legacy)
+    assert(legacyArtifacts.head.emitted.manifest.contains("\"runtime_abi\":1"))
 
     println("Scala frontend native smoke passed")
   }

@@ -47,6 +47,20 @@ statements; the server owns all effects, state transitions and persistence.
 This proves the pure execution plumbing and duplicate completion fencing,
 **not** general native workflow production readiness or user-facing parity.
 
+## November 11: publishable compiler CLI (new)
+
+- `NativeCompiler.compile` and `NativeMain` now emit the ABI 3 / IPC protocol
+  2 CFG backend by default, including for pure workflows. Previously, the
+  standard CLI emitted legacy ABI 1/2 binaries that the native GCS publisher
+  would reject. `NativeCompiler.Backend.Legacy` and `--abi=legacy` retain
+  explicit legacy conformance/compatibility paths.
+- Expanded Scala smoke tests validate the ABI selection, deterministic
+  compiler output, legacy fallback and rejected unknown ABI flags. The CI
+  pipeline additionally generates an artifact through the **real**
+  `NativeMain` workflow-loader, compiles it with Cargo, checks source SHA and
+  runs the binary over protocol 2. A passing CI run is required before
+  asserting the end-to-end CLI smoke has passed.
+
 ## Phase 0 — incomplete
 
 - Pinned source inventory in `phase0-source-inventory.json`; its static

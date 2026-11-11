@@ -266,6 +266,14 @@ effect semantics, callback/child orchestration, `Try`/`Parallel` parity and
 meaningful differential performance measurements. Do not enable native
 production routing until these gates pass.
 
+**Compiler API follow-through (November 11):** the existing `NativeMain`
+CLI reuses `WorkflowLoader` and now emits ABI 3 / IPC protocol 2 crates by
+default; legacy ABI 1/2 output requires explicit `--abi=legacy`. CI compiles
+and executes the actual CLI-produced crate to prevent future publisher
+incompatibility. This is distinct from the still-unimplemented shared
+`compiler --target rust` CLI dispatch, which requires dependency graph
+restructuring or a versioned frontend boundary to avoid a compiler cycle.
+
 ### Phase 0 — Freeze baseline and executable inventory
 - Capture exact commit SHAs and dependency versions for a reproducible fixture bundle.
 - Enumerate operations by walking constructed ASTs, including nested BaseValue/Product/list/map/optional values.

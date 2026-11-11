@@ -50,6 +50,38 @@ jobs:
             'Test / runMain us.awfl.compiler.rust.ControlFlowLoweringSmoke' \
             'Test / runMain us.awfl.compiler.rust.ControlFlowSmoke' \
             'Test / runMain us.awfl.compiler.rust.NativeCliSmoke'
+      - name: Compile and execute NativeMain deployable ABI 3 artifact
+        run: |
+          cd frontend
+          sbt -batch 'Test / runMain us.awfl.compiler.rust.NativeMain us.awfl.compiler.rust.NativeCliFixture ../fixtures/native-cli-v2 ../runtime'
+          cd ..
+          manifest=fixtures/native-cli-v2/cli-fixture-increment/manifest.json
+          test "$(jq -r '.runtime_abi' "$manifest")" = 3
+          test "$(jq -r '.workflow' "$manifest")" = cli-fixture-increment
+          cargo build --manifest-path fixtures/native-cli-v2/cli-fixture-increment/Cargo.toml --target-dir "$RUNNER_TEMP/native-cli-target"
+          python3 - <<'PYTHON'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import subprocess
+          import tomllib
+
+          directory = pathlib.Path('fixtures/native-cli-v2/cli-fixture-increment')
+          manifest = json.loads((directory / 'manifest.json').read_text())
+          source = (directory / 'src/main.rs').read_bytes()
+          assert hashlib.sha256(source).hexdigest() == manifest['source_sha256']
+          with (directory / 'Cargo.toml').open('rb') as stream:
+              package = tomllib.load(stream)['package']['name']
+          binary = pathlib.Path(os.environ['RUNNER_TEMP']) / 'native-cli-target/debug' / package
+          response = subprocess.run(
+              [str(binary)], input=json.dumps({'protocol_version': 2, 'input': 41}),
+              text=True, capture_output=True, timeout=20, check=True)
+          assert json.loads(response.stdout) == {
+              'protocol_version': 2, 'status': 'completed', 'result': 42,
+          }, response.stdout
+          print('NativeMain generated a publishable ABI 3 crate, compiled and executed Rust')
+          PYTHON
       - name: Build and lint all generated Rust fixtures
         run: |
           for name in native-smoke native-switch native-unmatched native-range native-each native-nested native-fold native-early-return native-top-return native-effect native-resume native-two-effects native-range-effect native-range-two-effects native-switch-effects native-nested-switch-effects native-nested-range-effects native-v2-switch-effects native-v2-nested-switch-effects native-v2-range-two-effects native-v2-nested-range-effects native-v2-each native-v2-fold native-v2-each-effects native-v2-fold-effects native-v2-range-switch-effects native-v2-pure-nested; do

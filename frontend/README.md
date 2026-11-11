@@ -5,7 +5,9 @@ native Rust source directly; it does not execute Google Workflows YAML or
 interpret the workflow graph at runtime.
 
 - `NativeCompiler.compile(workflows, baseName, outputDir, runtimeDir)` is the
-  reusable backend API.
+  reusable backend API; it now defaults to **ABI 3 / protocol 2**, accepted by
+  the IAM-authorized native artifact publisher. Use
+  `NativeCompiler.Backend.Legacy` explicitly for ABI 1/2 compatibility tests.
 - `NativeMain` is the current opt-in CLI. It reuses
   `us.awfl.compiler.WorkflowLoader` from the published `awfl-us/compiler`
   module, including the same Scala-object discovery conventions.
@@ -14,9 +16,11 @@ interpret the workflow graph at runtime.
 
 ## Opt-in generalized control-flow backend
 
-The default `RustEmitter.emit/write` retains the legacy pure ABI 1 and
-effectful ABI 2 (IPC version 1). The new `RustEmitter.emitV2/writeV2` entry
-points explicitly select runtime **ABI 3** and **IPC protocol 2**.
+The low-level `RustEmitter.emit/write` retains the legacy pure ABI 1 and
+effectful ABI 2 (IPC version 1). The `RustEmitter.emitV2/writeV2` entry
+points select runtime **ABI 3** and **IPC protocol 2**. The standalone
+`NativeMain` CLI and `NativeCompiler` library now use ABI 3 by default;
+legacy emission requires `--abi=legacy` or `Backend.Legacy`.
 `ControlFlowLowering` compiles nested branches, `ForRange`, `For`, `Fold`,
 `Return` and Calls into deterministic CFG blocks. `ContinuationAnalysis`
 calculates live slots across loop backedges. Each effect saves the successor
@@ -26,8 +30,8 @@ without replaying earlier branches or completed calls.
 The new backend supports effectful `For` and `Fold` and mixed nested
 `ForRange`/`Switch` trees, as exercised by generated Rust conformance
 fixtures. The server has an opt-in `protocolVersion: 2` execution setting
-that pins the chosen wire version. This is an experimental library interface,
-**not** production launcher integration or a new CLI default. See
+that pins the chosen wire version. Native execution in the server is opt-in and disabled for normal traffic;
+the ABI 3 CLI default does not enable server-side workflow routing. See
 [the v2 IPC specification](../docs/native-ipc-v2.md).
 
 ## Dependencies
@@ -45,11 +49,16 @@ Build your Scala workflow object into the frontend classpath, then run:
 ```bash
 cd frontend
 sbt -batch 'runMain us.awfl.compiler.rust.NativeMain your.package.WorkflowBuilder ../rust_gens ../runtime'
+# Optional, for differential testing of ABI 1/2 only:
+sbt -batch 'runMain us.awfl.compiler.rust.NativeMain your.package.WorkflowBuilder ../legacy_gens ../runtime --abi=legacy'
 ```
 
-This generates a Cargo project for each DSL workflow, each with a deterministic
-distinct executable name. You can then build the generated crate with Cargo.
-This does not deploy it or register server-side execution.
+This generates an **ABI 3** Cargo project for each DSL workflow, each with a
+deterministic distinct executable name. Build with Cargo for local tests or
+publish a verified static musl binary via the existing GCP/IAM-authorized
+Workflows publication path. Generation alone does not deploy it or enable
+server-side native execution. CI builds and executes the generated CLI crate
+using real Rust and validates the versioned JSON protocol.
 
 ## Integration tests
 
@@ -89,9 +98,11 @@ have been built and executed across native subprocess restarts with recorded
 results. See [native IPC specification](../docs/native-ipc-v1.md) and
 [implementation status](../docs/implementation-status.md).
 
-Pure artifacts retain ABI 1 (plain JSON in/out). Effectful artifacts use
-ABI 2 (versioned request/response protocol). The server integration is a
-standalone experimental library: it is **not** connected to production routing.
+Only the explicitly selected legacy backend retains ABI 1 (plain JSON) for
+pure work and ABI 2 / protocol 1 for effectful work. By default, pure and
+effectful workflows both use ABI 3 / protocol 2, which the server's
+opt-in backend supports. Normal Cloud Run API/Jobs revisions still have
+native execution disabled.
 
 One or more direct typed Calls in a top-level ForRange support experimental
 per-site suspension and resumption with a tagged completed-output prefix.
@@ -109,9 +120,10 @@ Three frames pin the outer choice, inner choice and active Call site.
 A two-level ForRange can likewise suspend at direct Calls inside its inner
 range, with separate saved prefixes for completed outer and inner iterations.
 
-Known limitations: Effects beyond two Switch or ForRange levels, mixed
-nested control-flow bodies and effectful For/Fold remain rejected. Pure and
-effectful steps mixed within the same Switch branch also fail closed.
-Try, Parallel and complete Google/CEL semantics are not implemented.
+Legacy ABI 2 intentionally rejects effects beyond two Switch/ForRange
+levels, mixed nested control flow, and effectful For/Fold. The default ABI 3
+backend supports the tested CFG versions of these constructs, but `Try`,
+`Parallel`, callbacks/children, complete Google/CEL semantics, external
+effect parity and unrestricted nested graphs are not yet production-ready.
 Unsupported expressions fail compilation with node context rather than
 falling back silently to YAML.
