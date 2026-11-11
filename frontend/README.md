@@ -73,13 +73,15 @@ Pure artifacts retain ABI 1 (plain JSON in/out). Effectful artifacts use
 ABI 2 (versioned request/response protocol). The server integration is a
 standalone experimental library: it is **not** connected to production routing.
 
-One direct typed Call in a top-level ForRange now supports experimental
-per-iteration suspension and resumption with a tagged completed-output
-prefix. Each new Rust subprocess skips finished iterations; the server
-journals effect outcomes and can recover after worker takeover.
+One or more direct typed Calls in a top-level ForRange support experimental
+per-site suspension and resumption with a tagged completed-output prefix.
+When multiple Calls occur in one iteration, a second invocation frame
+identifies the Call site and previous results from that iteration are saved.
+Each new Rust subprocess skips finished effects; the server journals their
+outcomes and can recover after worker takeover.
 
-Known limitations: multiple Calls per iteration, effects inside nested
-loops, branches, For, and Fold remain explicitly rejected. Try, Parallel
+Known limitations: Calls inside nested loops, branches, For, and Fold
+remain explicitly rejected. Try, Parallel
 and complete Google/CEL semantics are not implemented.
 Unsupported expressions fail compilation with node context rather than
 falling back silently to YAML.

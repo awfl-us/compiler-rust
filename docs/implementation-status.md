@@ -40,13 +40,15 @@ statements; the server owns all effects, state transitions and persistence.
   (`runtime_abi=1`). Effectful binaries require versioned JSON IPC
   (`runtime_abi=2`, protocol version 1). Both are opt-in. Manifest lists
   structural node IDs, effect operations and generated-source SHA-256.
-- **Limited nested effect slice:** A top-level ForRange with exactly one
-  direct Call in its body now suspends and resumes per iteration. Bounded
-  checkpoints preserve completed output and a zero-based invocation frame;
-  previously completed effects are not replayed. Dynamic effect IDs include
-  the top-level step, result slot and iteration ordinal.
-- **Still unsupported:** Multiple calls per iteration, nested branch/range
-  effects, For, Fold, Try and Parallel. They fail closed; complete CEL,
+- **Limited nested effect slice:** A top-level ForRange with one or more
+  direct Calls in its body suspends and resumes at each call site. Checkpoints
+  preserve the completed iteration prefix and previously recorded Call
+  results in the unfinished iteration. A range frame records the zero-based
+  iteration; a second frame identifies the direct Call site when more than
+  one exists. Dynamic effect IDs include the top-level step, result slot
+  and iteration ordinal. Each completed effect is skipped after recovery.
+- **Still unsupported:** Effects nested inside branch/range bodies,
+  For, Fold, Try and Parallel. They fail closed; complete CEL,
   Google retry/error semantics and YAML fallback are pending.
 - `NativeCompiler.compile` consumes constructed DSL workflows.
   `NativeMain` reuses `awfl-us/compiler.WorkflowLoader` to load existing
@@ -60,7 +62,10 @@ statements; the server owns all effects, state transitions and persistence.
     two sequential effects, continuation restoration, missing-slot rejection,
     malformed PC rejection and protocol-version rejection. A generated
     three-iteration range binary passed repeated suspend/resume with
-    preserved results and malformed prefix/frame rejection.
+    preserved results and malformed prefix/frame rejection. A second
+    generated binary passed two dependent Calls per iteration, verifying
+    four unique invocation IDs, saved intra-iteration results, and
+    malformed site/missing-slot rejection.
   - Rustfmt and strict Clippy checks apply to the Rust crate and generated
     fixtures in CI.
 
@@ -90,9 +95,10 @@ statements; the server owns all effects, state transitions and persistence.
   cancellation versus recording, process/store reconstruction around
   pending intents, uncertain outcome reconciliation, a generated Rust
   suspension with recorded server outcome, and a two-effect Rust sequence.
-  All seven emulator integration tests passed, including a generated Rust
-  range resuming after worker takeover without duplicating its three effects.
-  The entire Node native suite passed 21/21 with all real-binary integrations
+  All eight emulator integration tests passed, including a generated Rust
+  range resuming after worker takeover without duplicating its three effects,
+  and a two-Call-per-iteration range recovering mid-iteration. The entire
+  Node native suite passed 22/22 with all real-binary integrations
   enabled; two additional
   local tests verify subcollection scaling and persistence-size rejection.
 - This is **not** wired to production `createWorkflowExecution`, cloud
@@ -102,8 +108,8 @@ statements; the server owns all effects, state transitions and persistence.
 
 ## Remaining gates before a pilot
 
-1. Extend the bounded range frame to multiple effects per iteration,
-   nested branches, For and Fold, with precise live-slot capture.
+1. Extend the bounded per-site frames to nested branches, nested loops,
+   For and Fold, with precise live-slot capture and branch-safe replay.
 2. Test every crash window (prepare, dispatch, unknown remote outcome,
    result commit, post-commit resume), transaction contention at realistic
    scale, lease heartbeats and lifecycle sweeping.

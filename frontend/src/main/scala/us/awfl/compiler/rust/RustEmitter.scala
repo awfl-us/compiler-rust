@@ -155,29 +155,52 @@ ${pad}}"""
     case _ => None
   }
 
-  /** First supported nested boundary: one direct Call per range iteration.
-    * Store only completed iteration outputs and resume at the unfinished one.
-    * Other nested effects fail closed until multi-site frames are implemented.
+  /** Effectful range bodies use an ordinal frame plus, for multiple Calls,
+    * a second frame identifying the effect site. Prior results in the current
+    * iteration are checkpointed alongside completed iteration outputs.
+    * Nested effects in other control flow still fail closed.
     */
   private def emitEffectRange(loop: RepeatRange, index: Int,
                               prior: Vector[String]): String = {
     val where = s"node=${loop.nodeId} step='${loop.displayName}'"
     val nested = Program("range-effects", loop.body, Vector.empty).effects
     val direct = loop.body.collect { case effect: Effect => effect }
-    if (nested.size != 1 || direct.size != 1)
-      throw CompileError(where, "effectful ForRange requires exactly one direct Call; nested or multiple Calls unsupported")
+    if (direct.isEmpty || nested.size != direct.size)
+      throw CompileError(where, "effectful ForRange requires direct Calls only; effects in nested control flow unsupported")
+    val multiSite = direct.size > 1
+    val expectedFrames = if (multiSite) 2 else 1
+    val siteCases = direct.zipWithIndex.map { (e, i) =>
+      s"""                    (${q(e.nodeId)}, ${i}u64) => ${i}u64,"""
+    }.mkString("\n")
+    val siteValidation = if (multiSite)
+      s"""let __awfl_site = match (state.frames[1].node_id.as_str(), state.frames[1].iteration) {
+$siteCases
+                    _ => return Err("invalid native range continuation site".into()),
+                };"""
+    else "let __awfl_site = 0u64;"
     val itemsKey = q(s"__awfl_loop_${index}_items")
     val local = s"index_${loop.indexSlot}"
     val saved = prior.map(slot =>
       s"""                slots.insert(${q(slot)}.to_owned(), $slot.clone());""").mkString("\n")
     val body = loop.body.map {
       case e: Effect =>
-        s"""            // AWFL ${e.nodeId} ${e.displayName}: one invocation per iteration
-            let ${e.resultSlot} = if __awfl_resuming_here && __awfl_iter == __awfl_resume_iter {
+        val site = direct.indexWhere(_.nodeId == e.nodeId)
+        val resumedSite = if (site == 0) "" else s" && __awfl_resume_site >= ${site}u64"
+        val savedEarlier = direct.take(site).map(previous =>
+          s"""                slots.insert(${q(previous.resultSlot)}.to_owned(), ${previous.resultSlot}.clone());""").mkString("\n")
+        val extraFrame = if (multiSite)
+          s""", InvocationFrame {
+                            node_id: ${q(e.nodeId)}.to_owned(),
+                            iteration: ${site}u64,
+                        }"""
+        else ""
+        s"""            // AWFL ${e.nodeId} ${e.displayName}: dynamic site $site
+            let ${e.resultSlot} = if __awfl_resuming_here && __awfl_iter == __awfl_resume_iter$resumedSite {
                 resume.ok_or("missing native continuation")?.slot(${q(e.resultSlot)})?
             } else {
                 let mut slots = std::collections::BTreeMap::new();
 $saved
+$savedEarlier
                 slots.insert($itemsKey.to_owned(), AwflValue::List(__awfl_items.clone()));
                 return Ok(Outcome::Suspended {
                     effect: EffectIntent {
@@ -192,7 +215,7 @@ $saved
                         frames: vec![InvocationFrame {
                             node_id: ${q(loop.nodeId)}.to_owned(),
                             iteration: __awfl_iter,
-                        }],
+                        }$extraFrame],
                     },
                 });
             };"""
@@ -206,10 +229,10 @@ $saved
         let __awfl_end = ops::int_value(&(${render(loop.until, where)}))?;
         let __awfl_span = ((__awfl_end as i128) - (__awfl_start as i128)).max(0) as u64;
         let __awfl_resuming_here = resume.is_some_and(|s| !s.frames.is_empty() && pc == $index);
-        let (__awfl_resume_iter, mut __awfl_items): (u64, Vec<AwflValue>) =
+        let (__awfl_resume_iter, __awfl_resume_site, mut __awfl_items): (u64, u64, Vec<AwflValue>) =
             if __awfl_resuming_here {
                 let state = resume.ok_or("missing native continuation")?;
-                if state.frames.len() != 1 || state.frames[0].node_id != ${q(loop.nodeId)} {
+                if state.frames.len() != $expectedFrames || state.frames[0].node_id != ${q(loop.nodeId)} {
                     return Err("invalid native range continuation frame".into());
                 }
                 let iteration = state.frames[0].iteration;
@@ -217,8 +240,9 @@ $saved
                 if iteration >= __awfl_span || items.len() as u64 != iteration {
                     return Err("invalid native range continuation prefix".into());
                 }
-                (iteration, items)
-            } else { (0, Vec::new()) };
+                $siteValidation
+                (iteration, __awfl_site, items)
+            } else { (0, 0, Vec::new()) };
         let __awfl_next = i64::try_from((__awfl_start as i128) + (__awfl_resume_iter as i128))?;
         for $local in __awfl_next..__awfl_end {
             let __awfl_iter = (($local as i128) - (__awfl_start as i128)) as u64;
@@ -234,7 +258,7 @@ $body
   private def effectfulSource(program: Program): String = {
     val frameConditions = program.steps.zipWithIndex.collect {
       case (loop: RepeatRange, i) if Program("range-effects", loop.body, Vector.empty).effects.nonEmpty =>
-        s"pc == $i && s.frames.len() == 1 && s.frames[0].node_id == ${q(loop.nodeId)}"
+        s"pc == $i && s.frames.len() == ${if (loop.body.collect { case _: Effect => 1 }.size > 1) 2 else 1} && s.frames[0].node_id == ${q(loop.nodeId)}"
     }
     val frameTargets = frameConditions match {
       case Vector() => "false"

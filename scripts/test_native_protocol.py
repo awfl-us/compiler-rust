@@ -14,7 +14,10 @@ import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-FIXTURES = ["native-effect", "native-resume", "native-two-effects", "native-range-effect"]
+FIXTURES = [
+    "native-effect", "native-resume", "native-two-effects",
+    "native-range-effect", "native-range-two-effects",
+]
 
 
 def invoke(executable, payload, *, fails=False):
@@ -153,8 +156,63 @@ def check():
             "protocol_version": 1, "status": "completed",
             "result": ["first", "second", "third"],
         }, current
+
+        # Two call sites per iteration: the second call receives the first
+        # call's recorded result, with unique site+iteration effect IDs.
+        multi_range = binaries["native-range-two-effects"]
+        current = invoke(multi_range, {"protocol_version": 1, "input": None})
+        for iteration in range(2):
+            first = current
+            assert first["status"] == "suspended", first
+            assert first["continuation"]["next_step"] == 0
+            assert first["continuation"]["frames"] == [
+                {"node_id": "0.0", "iteration": iteration},
+                {"node_id": first["effect"]["node_id"], "iteration": 0},
+            ]
+            assert first["effect"]["effect_id"].endswith("_" + str(iteration))
+            first_value = "first-" + str(iteration)
+            second = invoke(multi_range, {
+                "protocol_version": 1, "input": None,
+                "continuation": bind(first["continuation"],
+                                     first["effect"]["result_slot"], first_value),
+            })
+            assert second["status"] == "suspended", second
+            assert second["continuation"]["frames"] == [
+                {"node_id": "0.0", "iteration": iteration},
+                {"node_id": second["effect"]["node_id"], "iteration": 1},
+            ]
+            assert second["effect"]["effect_id"].endswith("_" + str(iteration))
+            assert second["effect"]["effect_id"] != first["effect"]["effect_id"]
+            assert second["effect"]["args"] == first_value
+            assert second["continuation"]["slots"][first["effect"]["result_slot"]] == {
+                "type": "string", "value": first_value,
+            }
+            if iteration == 0:
+                wrong_site = copy.deepcopy(second["continuation"])
+                wrong_site["frames"][1]["iteration"] = 99
+                assert "invalid native range continuation site" in invoke(multi_range, {
+                    "protocol_version": 1, "input": None,
+                    "continuation": bind(wrong_site, second["effect"]["result_slot"], "bad"),
+                }, fails=True)
+                missing_prior = copy.deepcopy(second["continuation"])
+                del missing_prior["slots"][first["effect"]["result_slot"]]
+                assert "missing continuation slot" in invoke(multi_range, {
+                    "protocol_version": 1, "input": None,
+                    "continuation": bind(missing_prior, second["effect"]["result_slot"], "bad"),
+                }, fails=True)
+            current = invoke(multi_range, {
+                "protocol_version": 1, "input": None,
+                "continuation": bind(second["continuation"],
+                                     second["effect"]["result_slot"],
+                                     "second-" + str(iteration)),
+            })
+        assert current == {
+            "protocol_version": 1, "status": "completed",
+            "result": ["second-0", "second-1"],
+        }, current
         print("native protocol: 2 single-effect resumes, 2-step effect sequence,"
-              " three-iteration native range resume, malformed continuation"
+              " three-iteration range, two effects per range iteration,"
+              " malformed continuation"
               " and version rejection passed")
 
 

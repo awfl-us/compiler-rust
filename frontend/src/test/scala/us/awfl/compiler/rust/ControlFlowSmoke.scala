@@ -128,19 +128,21 @@ object ControlFlowSmoke {
     assert(rangeGenerated.source.contains("invalid native range continuation prefix"))
     assert(rangeGenerated.source.contains("call_0_"))
 
-    // Multiple effect sites cannot share the same per-iteration frame.
-    val doubleRange = ForRange[String]("double-range", CelInteger(0), CelInteger(2)) { _ =>
+    // Multiple direct effect sites have distinct structural IDs, even
+    // inside the same iteration. The second Call depends on the first.
+    val doubleRange = ForRange[String]("double-range", CelInteger(-1), CelInteger(1)) { _ =>
       val a = TypedCall[Map[String, String], String](
         "a", CallId.HttpPost, obj(Map("url" -> "https://example.org/a")))
-      val b = TypedCall[Map[String, String], String](
-        "b", CallId.HttpPost, obj(Map("url" -> "https://example.org/b")))
+      val b = TypedCall[String, String](
+        "b", CallId.HttpPost, a.resultValue)
       List[Step[?, ?]](a, b) -> b.resultValue
     }
-    val rejectedMultiple = try {
-      RustEmitter.emit(Normalize(Workflow((List[Step[?, ?]](doubleRange), doubleRange.resultValue))))
-      throw new AssertionError("multiple nested Calls were not rejected")
-    } catch { case e: CompileError => e.getMessage }
-    assert(rejectedMultiple.contains("exactly one direct Call"))
+    val multiRange = Normalize(Workflow((List[Step[?, ?]](doubleRange), doubleRange.resultValue),
+      Some("range-two-effects")))
+    assert(multiRange.effects.size == 2)
+    val multiGenerated = RustEmitter.write(multiRange, base.resolve("native-range-two-effects"), runtime)
+    assert(multiGenerated.source.contains("invalid native range continuation site"))
+    assert(multiGenerated.source.contains("state.frames.len() != 2"))
 
     println("Scala control-flow fixtures passed")
   }

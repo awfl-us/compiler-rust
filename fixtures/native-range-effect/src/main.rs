@@ -28,7 +28,7 @@ fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<
         let __awfl_end = ops::int_value(&(AwflValue::Integer(1i64)))?;
         let __awfl_span = ((__awfl_end as i128) - (__awfl_start as i128)).max(0) as u64;
         let __awfl_resuming_here = resume.is_some_and(|s| !s.frames.is_empty() && pc == 0);
-        let (__awfl_resume_iter, mut __awfl_items): (u64, Vec<AwflValue>) =
+        let (__awfl_resume_iter, __awfl_resume_site, mut __awfl_items): (u64, u64, Vec<AwflValue>) =
             if __awfl_resuming_here {
                 let state = resume.ok_or("missing native continuation")?;
                 if state.frames.len() != 1 || state.frames[0].node_id != "0.0" {
@@ -39,17 +39,19 @@ fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<
                 if iteration >= __awfl_span || items.len() as u64 != iteration {
                     return Err("invalid native range continuation prefix".into());
                 }
-                (iteration, items)
-            } else { (0, Vec::new()) };
+                let __awfl_site = 0u64;
+                (iteration, __awfl_site, items)
+            } else { (0, 0, Vec::new()) };
         let __awfl_next = i64::try_from((__awfl_start as i128) + (__awfl_resume_iter as i128))?;
         for index_s0 in __awfl_next..__awfl_end {
             let __awfl_iter = ((index_s0 as i128) - (__awfl_start as i128)) as u64;
             let s0 = AwflValue::Integer(index_s0);
-            // AWFL 0.0.each.0 nested-call: one invocation per iteration
+            // AWFL 0.0.each.0 nested-call: dynamic site 0
             let s1 = if __awfl_resuming_here && __awfl_iter == __awfl_resume_iter {
                 resume.ok_or("missing native continuation")?.slot("s1")?
             } else {
                 let mut slots = std::collections::BTreeMap::new();
+
 
                 slots.insert("__awfl_loop_0_items".to_owned(), AwflValue::List(__awfl_items.clone()));
                 return Ok(Outcome::Suspended {
