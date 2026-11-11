@@ -98,7 +98,7 @@ jobs:
           python3 scripts/test_cel_operators.py
       - name: Build and execute real Rust Try/Raise continuations
         run: |
-          for name in catch-raise success nested-catch uncaught runtime-error effect-catch; do
+          for name in catch-raise success nested-catch uncaught runtime-error effect-catch default-log; do
             cargo build --manifest-path "fixtures/native-try-raise/$name/Cargo.toml" --target-dir /tmp/awfl-try-target
             cargo clippy --manifest-path "fixtures/native-try-raise/$name/Cargo.toml" --all-targets --locked --target-dir /tmp/awfl-try-target -- -D warnings
           done

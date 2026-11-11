@@ -49,6 +49,19 @@ object TryRaiseSmoke {
     val guardedHttp = Try("guarded-http", List[Step[?, ?]](api) -> str(CelStr("effect-ok")),
       err => List.empty[Step[?, ?]] -> err.flatMap(_.message))
     emitted("effect-catch", Workflow((List[Step[?, ?]](guardedHttp), guardedHttp.resultValue), Some("effect-catch")))
+    // Original DSL default Try handler writes sys.log and then rethrows.
+    // A catch-only CFG must be mutable even without ordinary control-flow jumps.
+    val raised = Raise("raise-and-log", message("deliberately raised"))
+    val withDefaultHandler = Try("default-log", List[Step[?, ?]](raised) ->
+      str(CelStr("unreachable")))
+    val logFlow = Normalize(Workflow((List[Step[?, ?]](withDefaultHandler),
+      withDefaultHandler.resultValue), Some("native-log-on-error")))
+    assert(logFlow.effects.exists(_.id == CallId.LogWrite))
+    val logResult = RustEmitter.write(logFlow,
+      base.resolve("default-log"), runtime)
+    assert(logResult.manifest.contains("\"runtime_abi\":3"))
+    assert(logResult.manifest.contains("log.write"))
+
     println("Native Try/Raise: explicit, nested, uncaught, runtime error and guarded effect compiled")
   }
 }

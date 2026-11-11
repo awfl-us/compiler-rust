@@ -67,5 +67,20 @@ error['slots'][suspended['effect']['on_error']['error_slot']] = {
 failed = run('effect-catch', continuation=error)
 assert failed['status'] == 'completed' and failed['result'] == 'HTTP 503', failed
 assert run('effect-catch', continuation=error) == failed
+# The existing default Try handler logs the original Error and re-raises.
+# Its only CFG transition is the exception edge, not an ordinary branch.
+logged = run('default-log')
+assert logged['status'] == 'suspended', logged
+assert logged['effect']['operation'] == 'log.write', logged
+assert logged['effect']['args'] == {'text': '[logError] deliberately raised'}, logged
+assert 'on_error' not in logged['effect'], logged
+assert logged['continuation']['frames'] == []
+resume_log = copy.deepcopy(logged['continuation'])
+resume_log['slots'][logged['effect']['result_slot']] = {'type': 'null'}
+raised_result = run('default-log', continuation=resume_log)
+assert raised_result == {'protocol_version': 2, 'status': 'failed',
+                        'error': {'message': 'deliberately raised', 'code': None}}, raised_result
+assert run('default-log', continuation=resume_log) == raised_result
+
 print('NATIVE TRY/RAISE: caught and uncaught, nested rethrow, runtime error, '
-      'HTTP intent + happy/error continuation paths, determinism: PASS')
+      'HTTP and log effects, catch-only CFG + rethrow, determinism: PASS')

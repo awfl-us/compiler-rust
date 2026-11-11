@@ -152,6 +152,23 @@ not yet have a production native server dispatcher/allowlist implementation.
 Do not enable native routing for this workflow until that effect and
 remaining differential semantics are verified. No workflows were migrated.
 
+## November 11: catch-only CFG and original DSL error-logging regression
+
+A workflow with the original DSL's default `Try` exception handler may have
+no ordinary CFG jump, only a catch edge. Its recovered Rust program counter
+must therefore be mutable **even when no ordinary branch advances it**.
+`StateMachineEmitter` now derives this property from the presence of any
+exception handler as well as ordinary control-flow transitions.
+
+`TryRaiseSmoke` generates an additional **default-log** ABI 3 crate using
+only the original DSL `Try`, `Raise`, and `Error` nodes. Its existing error
+handler emits a genuine persisted `log.write` effect, then re-raises the
+original error after the effect completes. `test_try_raise.py` asserts the
+serialized log intent, checkpoint state, resumed terminal failure, and
+repeatability. The crate is compiled and linted in local and CI suites.
+The native server's log dispatcher/journal integration is tested separately.
+No DSL or YAML changes, and production native routing remains disabled.
+
 ## Compiler: implemented
 
 - Scala 3 `frontend/` loads constructed AWFL DSL workflow objects through the

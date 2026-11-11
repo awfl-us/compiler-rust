@@ -59,6 +59,11 @@ The full option also tests nested branches, loops,
 folds, effect IDs, checkpoint corruption, and replay using fresh Rust
 processes. No production workflow routing is enabled by these tests.
 
+The existing default `Try` handler is also covered: `TryRaiseSmoke`
+generates a real `default-log` Rust crate that suspends on `log.write` and
+re-raises the original error after a replayed success, exercising the special
+CFG case where only an exception edge changes the program counter.
+
 Production-source conformance also compiles the original
 `workflows/evals/Product.scala` (no changes to the source) to three native
 executables. Its original DSL `Try`, `Fold`, `For`, and `join` constructors

@@ -76,7 +76,7 @@ echo '== Compile existing CEL membership and floor-division operators =='
   && python3 scripts/test_cel_operators.py)
 
 echo '== Compile nested Try/Raise, recoverable effects and explicit errors =='
-(cd "$ROOT" && for name in catch-raise success nested-catch uncaught runtime-error effect-catch; do
+(cd "$ROOT" && for name in catch-raise success nested-catch uncaught runtime-error effect-catch default-log; do
   cargo build --manifest-path "fixtures/native-try-raise/$name/Cargo.toml" --target-dir /tmp/awfl-try-target
   cargo clippy --manifest-path "fixtures/native-try-raise/$name/Cargo.toml" --all-targets --locked --target-dir /tmp/awfl-try-target -- -D warnings
 done && python3 scripts/test_try_raise.py)
