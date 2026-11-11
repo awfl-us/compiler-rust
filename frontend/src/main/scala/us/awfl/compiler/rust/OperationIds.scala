@@ -12,7 +12,7 @@ enum FunctionId(val wireId: String, val minArity: Int, val maxArity: Int) {
   case ToInt extends FunctionId(CelFunctions.ToInt, 1, 1)
   case ToString extends FunctionId(CelFunctions.ToString, 1, 1)
   case Length extends FunctionId(CelFunctions.Length, 1, 1)
-  case MapGet extends FunctionId(CelFunctions.MapGet, 2, 3)
+  case MapGet extends FunctionId(CelFunctions.MapGet, 2, 2)
   case MapMerge extends FunctionId(CelFunctions.MapMerge, 2, 2)
   case ListConcat extends FunctionId(CelFunctions.ListConcat, 2, 2)
   case JsonDecode extends FunctionId(CelFunctions.JsonDecode, 1, 1)

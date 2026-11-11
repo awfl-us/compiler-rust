@@ -25,7 +25,8 @@ echo '== Scala AST normalization, CFG liveness, and NativeMain =='
   'Test / runMain us.awfl.compiler.rust.FrontendSmoke' \
   'Test / runMain us.awfl.compiler.rust.ControlFlowLoweringSmoke' \
   'Test / runMain us.awfl.compiler.rust.ControlFlowSmoke' \
-  'Test / runMain us.awfl.compiler.rust.NativeCliSmoke')
+  'Test / runMain us.awfl.compiler.rust.NativeCliSmoke' \
+  'Test / runMain us.awfl.compiler.rust.CelStdlibSmoke')
 
 echo '== Compile unmodified production workflow source =='
 (cd "$ROOT/frontend" && sbt -batch \
@@ -42,6 +43,11 @@ echo '== Compile and run pure and real workflow Rust binaries =='
   && cargo build --manifest-path fixtures/real-load-history/LoadConversationHistory/Cargo.toml \
        --target-dir "$ROOT/target/local-real-workflow" \
   && python3 scripts/test_real_workflow.py "$ROOT/target/local-real-workflow")
+
+echo '== Compile and execute native CEL standard-library expressions =='
+(cd "$ROOT" && cargo build --manifest-path fixtures/native-cel-stdlib/Cargo.toml \
+  && cargo clippy --manifest-path fixtures/native-cel-stdlib/Cargo.toml --all-targets --locked -- -D warnings \
+  && python3 scripts/test_cel_stdlib.py)
 
 if [[ "$MODE" == '--full' ]]; then
   echo '== Real Rust process control-flow and effect/replay conformance =='

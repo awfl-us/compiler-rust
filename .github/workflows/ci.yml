@@ -44,7 +44,8 @@ jobs:
             'Test / runMain us.awfl.compiler.rust.FrontendSmoke' \
             'Test / runMain us.awfl.compiler.rust.ControlFlowLoweringSmoke' \
             'Test / runMain us.awfl.compiler.rust.ControlFlowSmoke' \
-            'Test / runMain us.awfl.compiler.rust.NativeCliSmoke'
+            'Test / runMain us.awfl.compiler.rust.NativeCliSmoke' \
+            'Test / runMain us.awfl.compiler.rust.CelStdlibSmoke'
       - name: Compile and execute NativeMain deployable ABI 3 artifact
         run: |
           cd frontend
@@ -77,6 +78,11 @@ jobs:
           }, response.stdout
           print('NativeMain generated a publishable ABI 3 crate, compiled and executed Rust')
           PYTHON
+      - name: Compile and exercise CEL standard library in generated Rust
+        run: |
+          cargo build --manifest-path fixtures/native-cel-stdlib/Cargo.toml
+          cargo clippy --manifest-path fixtures/native-cel-stdlib/Cargo.toml --all-targets --locked -- -D warnings
+          python3 scripts/test_cel_stdlib.py
       - name: Compile an unchanged production workflow into native Rust
         run: |
           cd frontend

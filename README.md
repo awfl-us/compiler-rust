@@ -17,7 +17,9 @@ source manifests. A pure-workflow fixture is compiled and executed end-to-end.
 functions. See `docs/implementation-status.md` for the precise capability gates.
 
 The pure subset now includes compiled `Switch`, `ForRange`, `For` and `Fold`, including
-nested control flow. The Scala CLI in `frontend/` reuses the existing compiler
+nested control flow. Additional CEL functions (`default`, `get_type`, `map.get`,
+`map.merge`, `list.concat`, JSON encode/decode) now emit native calls rather
+than requiring a CEL interpreter. The Scala CLI in `frontend/` reuses the existing compiler
 workflow loader. All compiled artifacts use **ABI 3 / protocol 2**; no
 compatibility compiler/runtime variants are shipped. Full exception/retry parity, real network effects, and general production
 routing remain unavailable. The existing server now supports an **opt-in**
@@ -50,7 +52,8 @@ The script resolves the published additive DSL **v0.3.4**, loads and
 compiles an **unchanged** `LoadConversationHistory.scala` from the sibling
 Workflows checkout, builds actual Rust executable crates, tests HTTP
 intent + checkpoint resume **without contacting the endpoint**, and checks
-pure workflow outputs. The full option also tests nested branches, loops,
+pure workflow outputs and generated native CEL standard-library semantics.
+The full option also tests nested branches, loops,
 folds, effect IDs, checkpoint corruption, and replay using fresh Rust
 processes. No production workflow routing is enabled by these tests.
 

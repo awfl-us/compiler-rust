@@ -83,7 +83,7 @@ in the public DSL**. New semantics are added there when backed by tests.
 | len | value.length | Lists, maps, strings, bytes as supported |
 | map.get | map.get | Single key and key-path list; missing versus null |
 | map.merge | map.merge | Merge direction and shallow behavior |
-| list.concat | list.concat | Preserve the exact Google concatenation behavior; do not silently change it to single-item append |
+| list.concat | list.concat | Append exactly **one element** to a copy of a list (even when that element is a list); never flatten |
 | json.decode | json.decode | String/bytes, numeric representation, errors |
 | json.encode | json.encode_bytes | Produces bytes, not a JSON string |
 | json.encode_to_string | json.encode_string | Escaping and representation |
@@ -98,6 +98,23 @@ in the public DSL**. New semantics are added there when backed by tests.
 | uuid.generate | uuid.generate | Journal each evaluated occurrence |
 | sys.now (raw strings) | clock.now | Epoch seconds; journal each occurrence |
 | sys.get_env (backend-generated) | environment.get | Explicit allowed bindings, not arbitrary worker environment |
+
+**Implemented native CEL subset (November 11, 2026):** `len`, `default`,
+`get_type`, `map.get` (including nested key paths), `map.merge` (shallow),
+`list.concat` (append one), `json.decode`, `json.encode` (bytes), and
+`json.encode_to_string` are direct compiler-emitted Rust helpers. The
+eight newly added operations have runtime unit tests and an actual Cargo-
+compiled Scala DSL fixture (`CelStdlibSmoke` + `test_cel_stdlib.py`) run from
+the AWFL Scala consumer using `scripts/test-local.sh --full`. `map.get`
+accepts exactly two arguments, with the second being a key or list of
+string keys; it is a safe lookup rather than strict field access.
+
+**Remaining:** numerical/string conversion, base64, text helpers, time/UUID,
+environment binding, and wider CEL operators are deliberately unsupported
+until individually implemented and tested. The current JSON implementation
+rejects bytes *as a value being encoded* and treats text/bytes as input to
+decode; exact Google error and encoding-edge parity still need differential
+tests. No existing workflows were migrated to new constants.
 
 Twenty distinct literal CelFunc names occur in the four scanned Scala repositories. clock.now and environment.get additionally cover raw expression/backend-generated behavior. list.concat is also emitted directly by compiler-yaml. The source-location appendix below records all literal CelFunc sites, including comments where present; compiled-AST validation will be the authoritative coverage check.
 
