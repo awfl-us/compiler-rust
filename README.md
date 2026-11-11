@@ -1,12 +1,23 @@
 # AWFL native Rust compiler
 
+> **Status, November 11, 2026:** Scala-to-Rust ABI 3 and unchanged
+> `Product.scala`/`LoadConversationHistory.scala` native fixtures work.
+> Durable `Try`/`Raise` HTTP-error handling is merged; the catch-only logger
+> fix has merged as [compiler PR #7](https://github.com/awfl-us/compiler-rust/pull/7),
+> and server `log.write` handling has merged as
+> [server PR #79](https://github.com/awfl-us/server/pull/79).
+> **Normal production native execution is disabled**. See the
+> [evidence and ordered roadmap](docs/current-state-and-roadmap.md).
+
 The Scala AWFL DSL remains the source of truth. This repository will implement a
 **Scala frontend and native Rust backend**, not a Google Workflows YAML interpreter.
 Durable steps, continuation/value storage and effect reconciliation belong to the
 existing AWFL server; generated native binaries handle pure work locally.
 
-Read [the implementation plan](docs/native-rust-implementation-plan.md) before
-implementing any new compiler/runtime paths.
+Start with the [current state and roadmap](docs/current-state-and-roadmap.md),
+then the [implementation plan](docs/native-rust-implementation-plan.md),
+[CFG architecture](docs/native-control-flow-refactor-plan.md), and
+[IPC contract](docs/native-ipc-v2.md) before changing compiler or runtime paths.
 
 ## Current state
 

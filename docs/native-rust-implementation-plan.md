@@ -1,7 +1,13 @@
 # Native Rust workflow compiler and server execution plan
 
-Status: actively implemented; pure GCP canary verified, broader parity and rollout remain gated.
-Original plan: 2026-11-10; progress review: 2026-11-11.
+Status: Scala-to-Rust ABI 3 implemented for sequential CFG, original `Try`/`Raise`,
+CEL subset and resumable HTTP effects; isolated pure GCP canary passed. Native
+production routing remains disabled. **Parallel, callbacks, children, provider
+connectors, reconciliation and OS sandbox are not ready.**
+Original plan: 2026-11-10; verification review: 2026-11-11.
+For the authoritative merged-versus-branch inventory, tests, remaining risk,
+prioritized milestones and acceptance gates, see
+[current-state-and-roadmap.md](current-state-and-roadmap.md).
 Goal: preserve Scala workflow authoring, compile workflow control flow and expressions to native Rust, and move durable execution, step/value persistence, callbacks and recovery into AWFL server.
 
 ## 1. Findings from the current source
@@ -119,8 +125,10 @@ executables verify `Try`/`For`/`Fold`/`join`, list merging, zero-result input,
 and two-variable Cartesian-product results. The current DSL itself still
 emits `sys.log`, `len`, `default`, and `json.encode_to_string`; the native
 compiler maps only these DSL-owned internal spellings, without implementing
-unbounded legacy CEL lookup. Product's exception-path `log.write` effect is
-retained in the manifest and awaits a restricted server dispatcher.
+unbounded legacy CEL lookup. Product's exception-path `log.write` is retained
+in the manifest. A separate native `Try` fixture proves it through a
+restricted Node logging dispatcher with journal/resume/crash-after-commit tests
+merged in server PR #79; this is **not** yet live-effect validation.
 
 **Remaining:** numerical/string conversion, base64, text helpers, time/UUID,
 environment binding, and wider CEL operators are deliberately unsupported
@@ -204,13 +212,16 @@ Extract shared normalization/registry support into dsl or a small shared compile
 - For/ForRange: persist source list/range, cursor and accumulator. Scala upper bound is exclusive; YAML currently subtracts one. Cover empty and reversed ranges.
 - Fold: initialize accumulator once; checkpoint cursor/accumulator without duplicating updates after resume.
 - Switch: first true case, record chosen branch; preserve current no-match semantics initially and diagnose type mismatches.
-- Try/Raise: **compiler implemented** using statically linked exceptional CFG edges,
-  not lexical exception frames. Native Rust emits deterministic error catch
-  routes and recoverable-effect continuation metadata (ABI 3/IPC v2). A
-  confirmed remote HTTP failure must be journaled and atomically redirected
-  to the nearest compiled catch in the server; uncertain effects, cancellation
-  and internal infrastructure failures must never be silently caught. Full
-  Google exception taxonomy and crash/reconciliation tests remain required.
+- Try/Raise: **compiler and confirmed-HTTP server path implemented** using
+  statically linked exceptional CFG edges, not lexical exception frames.
+  Native Rust emits catch routes and recoverable-effect metadata (ABI 3/IPC2).
+  Merged server PR #78 atomically journals received HTTP 4xx/5xx failures and
+  redirects to the compiled handler; uncertain outcomes, cancellation and
+  infrastructure failures are never silently caught. Compiler PR #7 fixes
+  the special catch-only program-counter case. A separate unmerged server
+  PR #79 adds the original DSL's `sys.log` -> `log.write` handler, verified
+  through real Rust + Node + mock-transaction tests. Google exception/error
+  taxonomy, remote uncertainty and **all** crash-window parity remain gated.
 - Block/FlatMap: preserve output aliasing; FlatMap is a projection of an existing step, not an additional remote invocation.
 - Parallel: isolated branch frames, shared result slots and durable join.
 - ParallelFor: bounded concurrency, per-iteration frame, atomic result collection. Existing YAML appends into a shared list, so do not assume input-order results. Preserve observed ordering semantics or introduce an explicitly versioned ordered mode.
@@ -287,57 +298,53 @@ Run equal-input benchmarks: 1,000 pure operations, 100 local mock HTTP steps, ne
 
 ### Implementation checkpoint — 2026-11-11 (tested, still experimental)
 
-The architectural plan below is the target design, **not** a claim of completed
-features. The Scala frontend emits pure native `Switch`, `ForRange`, `For`,
-`Fold`, nested expressions, and explicit early `Return`.
-The **single CFG backend** emits compiled Rust for nested `Switch`, `For`,
-`Fold`, `ForRange`, pure operations and effectful `Call` steps. At an external
-Call it returns a durable effect intent, successor CFG program counter and
-live tagged slots. The server persists the result, journals the operation
-and resumes the same compiled binary without replaying previous branches.
-There is only runtime ABI **3** / IPC protocol **2**; no v1 emitters or
-compatibility modes. The implementation and tests include dependent calls,
-effectful loops/folds, nested branches and malformed continuation rejection.
-See `docs/native-ipc-v2.md` for the wire contract. `Try`/`Raise`, `Parallel`
-and complete CEL/Google semantics remain unsupported.
-Companion draft PRs are
-[dsl #2](https://github.com/awfl-us/dsl/pull/2) and
-[compiler-yaml #1](https://github.com/awfl-us/compiler-yaml/pull/1).
+**Merged / completed within tested scope:** original DSL constant-only change
+and YAML mapping; compiler-rust #1–#6 (one Scala-normalized native CFG,
+Rust ABI 3/IPC 2, `Switch`/`ForRange`/`For`/`Fold`/`Return`, constrained
+CEL/map/list/JSON, raw literal collections, `in` and checked `//`,
+`Try`/`Raise`, typed live slots and deterministic effect IDs); server #72/#78
+(authenticated shared launcher, GCS artifact mapping, Cloud Tasks, Firestore
+journal/leases and confirmed HTTP 4xx/5xx catch); workflows #3 (static
+musl publisher). Unchanged production-source `LoadConversationHistory` and
+`Product` compile and run the supported paths as real Rust executables.
 
-[server PR #72](https://github.com/awfl-us/server/pull/72) is merged and
-its opt-in native path is deployed. The server's existing shared launcher now
-selects an IAM-published GCS artifact only for opted-in native workflows,
-then creates a pinned Firestore execution and a single Cloud Task for the
-OIDC-protected Jobs worker. Ordinary API/Jobs revisions still have native
-execution **disabled**. Firestore persists bounded values and a per-effect
-journal with epoch fencing, cancellation, and checkpoint recovery.
+**Latest merged exception-handling increment:** compiler-rust
+[#7](https://github.com/awfl-us/compiler-rust/pull/7) fixes the
+exception-only CFG PC and generates a default-DSL-`Try` `log.write` fixture;
+server [#79](https://github.com/awfl-us/server/pull/79) implements a restricted
+authenticated log handler and extends the native operation allowlists.
+The AWFL Scala consumer's `scripts/test-local.sh --full` and GitHub Rust/Scala
+jobs passed. Local real Rust binary/Node server tests returned **34 pass,
+0 fail, 3 skipped**, including log journaling, original rethrow and
+post-journal-commit worker interruption. This tests a *subset* of failure
+windows, not exactly-once external log delivery or live production traffic.
 
-**November 11 verified GCP checkpoint:** the first live pilot request
-reached Jobs but failed because its glibc-linked ELF could not spawn in
-Alpine. [Workflows PR #3](https://github.com/awfl-us/workflows/pull/3)
-merged the verified musl-static publisher. `NativePilot` now pins the static
-SHA-256 `109b82a73175a46ada8b4c5f5059b724f40017a8321b2c76edec9e62396f984e`.
-A second live Cloud Tasks → tagged Jobs → Firestore canary **completed**
-with `[2,3,9,9]`, 6,836 ms observed end-to-end in one sample; duplicate
-delivery did not advance the completed execution. The route had no external
-effects. This proves the isolated pure canary only, **not** the public
-end-user-authenticated launcher or workflow parity. The scripted canary is
-in `scripts/live_native_pilot.py`; detailed evidence and remaining gates
-are in `docs/implementation-status.md`.
+**Isolated live GCP canary:** a static-musl pure `NativePilot` completed
+Cloud Tasks -> tagged Jobs -> Firestore with `[2,3,9,9]` and one observed
+6,836 ms enqueue-to-result interval, including cold startup. It did not
+exercise live HTTP, callbacks, child workflows, user-facing APIs, native
+logging, or general agent performance. The Cloud Run Jobs normal revision
+retains `AWFL_NATIVE_EXECUTION_ENABLED=0`.
 
-**Enforced next gate:** end-user-authenticated shared-launcher/status tests,
-crash/retry reconciliation, secure OS process sandbox, real authenticated HTTP
-effect semantics, callback/child orchestration, `Try`/`Parallel` parity and
-meaningful differential performance measurements. Do not enable native
-production routing until these gates pass.
+**Still unimplemented or materially unverified:** `Parallel`/`ParallelFor`,
+callbacks, child workflow launch/await, storage/Pub/Sub adapters, many CEL
+functions/overloads, clock/UUID journaling, version-safe environment globals,
+Google differential error/retry semantics, remote-uncertain outcome
+reconciliation, authenticated shared-launcher end-to-end audit, safe OS
+sandbox, lease/worker/orphan reliability, and representative performance.
+No workflow source migration and no regular production traffic switch.
 
-**Compiler API follow-through (November 11):** the existing `NativeMain`
-CLI reuses `WorkflowLoader` and emits **only** ABI 3 / IPC protocol 2
-crates. The old emitters and wire-v1 runtime were removed. CI compiles
-and executes the actual CLI-produced crate to prevent future publisher
-incompatibility. This is distinct from the still-unimplemented shared
-`compiler --target rust` CLI dispatch, which requires dependency graph
-restructuring or a versioned frontend boundary to avoid a compiler cycle.
+**Next gate order:** (P0) compiler/server pair **merged** with green CI;
+(P1) constructed AST compatibility inventory plus differential fixtures;
+(P2) server effect/child/callback reliability and sandbox; (P3) real durable
+parallel scheduling; (P4) latency/throughput/security acceptance and a
+rollback-capable native canary. See
+[current-state-and-roadmap.md](current-state-and-roadmap.md) for detailed
+per-stage acceptance tests and dependencies.
+
+**Compiler CLI follow-through:** `NativeMain` reuses existing `WorkflowLoader`
+for ABI3/IPC2 artifacts, while a shared `compiler --target rust` entrypoint
+remains unimplemented to avoid a cross-module compiler dependency cycle.
 
 ### Phase 0 — Freeze baseline and executable inventory
 - Capture exact commit SHAs and dependency versions for a reproducible fixture bundle.
@@ -355,18 +362,25 @@ Gate: every observed operation/raw expression classified; baseline artifacts rep
 Gate: YAML fixture behavior unchanged, existing workflow Scala code compiles, native generated Rust conforms, and unsupported raw syntax produces actionable diagnostics.
 
 ### Phase 2 — Native backend MVP
+**Implemented for tested sequential/exception subset**, not complete
+Google semantics or the shared compiler CLI.
 - Introduce normalization/IR, stable slots/IDs, Rust emitter and runtime value/error library.
 - Extend compiler target selection and preserve schemas/definitions.
 - Support sequential control flow, projection, switch, loops/fold and exceptions with mock effects.
 Gate: generated Rust compiles and executes conformance fixtures; constant-only workflows supported; deterministic manifest/source maps.
 
 ### Phase 3 — Server execution and persistence
+**Partially completed:** effect intents/journaling/lease fencing and
+confirmed HTTP catches. Logging is merged and locally tested;
+remote uncertain-outcome reconciliation remains unsolved.
 - Add backend dispatch, artifact registry, worker IPC, leases, checkpoint/value/effect storage and traces.
 - Add HTTP/log adapters, legacy retry policy and clock/UUID journaling.
 - Test crash points before dispatch, after dispatch, before commit and after commit.
 Gate: resume yields correct results, committed effects do not repeat, stale workers cannot commit, unknown outcomes are visible.
 
 ### Phase 4 — Callbacks, children, parallelism and connectors
+**Not implemented.** Treat this phase as a separate durable server
+orchestration project; adding IR lowering alone is not enough.
 - Implement callback inbox/timers, nested workflow sync/async execution, cancellation propagation.
 - Add storage and messaging adapters with existing response envelopes.
 - Add parallel branches/loops, bounded scheduling, atomic joins/results and persisted errors.
@@ -396,7 +410,10 @@ Open points requiring measured evidence, not assumptions:
 - Firestore throughput/latency under the selected durability policy.
 - Best worker hosting choice within existing server infrastructure; avoid a new cold-start-per-step system.
 - Whether to expose strict per-step durability as a deployment option or always use batched pure-step trace persistence.
-- Full dependency closure and published-version mismatch: compiler currently pins 0.3.1 dependencies while this review reads repository HEADs.
+- Full dependency closure and published-version mismatch: the native frontend
+  currently pins published DSL v0.3.4 and a fixed workflows commit for tested
+  sources; check the actual application dependency lock before claims about
+  the current head of every workflow repo.
 
 ## 8. Reference sources
 
