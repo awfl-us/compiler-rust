@@ -30,6 +30,11 @@ jobs:
           repository: awfl-us/dsl
           ref: a05ea130be826a81094c0f0bfd0ac5faa79baa69
           path: _dsl
+      - uses: actions/checkout@v4
+        with:
+          repository: awfl-us/workflows
+          ref: 59ed80232d8e742fcc6f4520199f56fe5bbd4d19
+          path: _workflows
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
@@ -82,6 +87,18 @@ jobs:
           }, response.stdout
           print('NativeMain generated a publishable ABI 3 crate, compiled and executed Rust')
           PYTHON
+      - name: Compile an unchanged production workflow into native Rust
+        run: |
+          cd frontend
+          sbt -batch \
+            'set Test / unmanagedSources += file("../_workflows/src/main/scala/us/awfl/workflows/LoadConversationHistory.scala")' \
+            'Test / runMain us.awfl.compiler.rust.RealWorkflowSmoke'
+          cd ..
+          # Test uses original Scala source; no HTTP request is executed here.
+          ls fixtures/real-load-history/*/src/main.rs
+          for crate in fixtures/real-load-history/*/Cargo.toml; do
+            cargo build --manifest-path "$crate" --target-dir "$RUNNER_TEMP/real-workflow-target"
+          done
       - name: Build and lint all generated Rust fixtures
         run: |
           for name in native-smoke native-switch native-unmatched native-range native-each native-nested native-fold native-early-return native-top-return native-v2-switch-effects native-v2-nested-switch-effects native-v2-range-two-effects native-v2-nested-range-effects native-v2-each native-v2-fold native-v2-each-effects native-v2-fold-effects native-v2-range-switch-effects native-v2-pure-nested native-v2-deep-switch-effects native-v2-mixed-nested-range; do
