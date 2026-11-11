@@ -75,13 +75,20 @@ object FrontendSmoke {
     assert(callDiagnostic.contains("provider.unclassified"))
     assert(callDiagnostic.contains("CallOperations"))
 
+    // The published DSL's own len(...) helper currently emits literal
+    // "len". This exact internal spelling must compile without changing
+    // public DSL code, but unrelated textual CEL names still fail closed.
+    val dslLen = Value[Int](CelFunc("len", CelConst("input")))
+    val dslLenSource = RustEmitter.emit(
+      Normalize(Workflow((List.empty[Step[?, ?]], dslLen)))).source
+    assert(dslLenSource.contains("ops::length"))
     val functionDiagnostic = try {
       Normalize(Workflow((List.empty[Step[?, ?]],
-        Value[Int](CelFunc("len", CelConst("input"))))))
+        Value[Int](CelFunc("provider.unclassified", CelConst("input"))))))
       throw new AssertionError("expected unknown CEL function rejection")
     } catch { case e: CompileError => e.getMessage }
     assert(functionDiagnostic.contains("CelFunctions"))
-    assert(functionDiagnostic.contains("len"))
+    assert(functionDiagnostic.contains("provider.unclassified"))
 
     val operatorDiagnostic = try {
       Normalize(Workflow((List.empty[Step[?, ?]],

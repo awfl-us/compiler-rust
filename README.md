@@ -59,6 +59,16 @@ The full option also tests nested branches, loops,
 folds, effect IDs, checkpoint corruption, and replay using fresh Rust
 processes. No production workflow routing is enabled by these tests.
 
+Production-source conformance also compiles the original
+`workflows/evals/Product.scala` (no changes to the source) to three native
+executables. Its original DSL `Try`, `Fold`, `For`, and `join` constructors
+produce 2, 4, and 0 Cartesian-product results across three test scenarios.
+The DSL's internally emitted `sys.log` and `len` operations are resolved
+by the Rust compiler's narrow built-in-name mapping, without introducing
+legacy name fallback for arbitrary applications. The Product error logging
+**dispatch** is not yet implemented on the native server, so this only
+validates pure Product execution.
+
 The actual local run on November 11 passed **10 runtime unit tests**, all
 **four Scala frontend suites**, pure workflow inputs, the real HTTP-effect
 workflow's suspend/resume sequence, and both compiled control-flow and

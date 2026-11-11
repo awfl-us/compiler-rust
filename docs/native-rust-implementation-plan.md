@@ -113,6 +113,15 @@ string keys; it is a safe lookup rather than strict field access.
 signed integer `//` floor division, with checked zero/overflow semantics,
 Scala→Cargo generated executable tests and Rust unit tests (16 total).
 
+**Verified real nested workflow:** unchanged `awfl-us/workflows/evals/Product.scala`
+compiles through the published DSL to native ABI 3. Three actual Rust
+executables verify `Try`/`For`/`Fold`/`join`, list merging, zero-result input,
+and two-variable Cartesian-product results. The current DSL itself still
+emits `sys.log`, `len`, `default`, and `json.encode_to_string`; the native
+compiler maps only these DSL-owned internal spellings, without implementing
+unbounded legacy CEL lookup. Product's exception-path `log.write` effect is
+retained in the manifest and awaits a restricted server dispatcher.
+
 **Remaining:** numerical/string conversion, base64, text helpers, time/UUID,
 environment binding, and wider CEL operators are deliberately unsupported
 until individually implemented and tested. The current JSON implementation

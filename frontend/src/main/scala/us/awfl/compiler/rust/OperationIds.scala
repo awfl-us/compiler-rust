@@ -32,7 +32,16 @@ enum FunctionId(val wireId: String, val minArity: Int, val maxArity: Int) {
 }
 object FunctionId {
   private val byName = values.map(id => id.wireId -> id).toMap
-  def resolve(name: String): Option[FunctionId] = byName.get(name)
+  // These exact literals are still emitted internally by the published
+  // DSL's `len`, `encodeJson`, and safe-resolver helpers. This is not
+  // general old-name support for application workflow CEL functions.
+  private val dslBuiltins = Map(
+    "len" -> Length,
+    "default" -> Default,
+    "json.encode_to_string" -> JsonEncodeString
+  )
+  def resolve(name: String): Option[FunctionId] =
+    byName.get(name).orElse(dslBuiltins.get(name))
 }
 
 enum CallId(val wireId: String) {
@@ -49,7 +58,11 @@ enum CallId(val wireId: String) {
 }
 object CallId {
   private val byName = values.map(id => id.wireId -> id).toMap
-  def resolve(name: String): Option[CallId] = byName.get(name)
+  // The current, unchanged DSL `Log` constructor emits sys.log itself.
+  // Recognize that exact built-in operation without broad legacy aliases
+  // or changing the public DSL; the emitted native operation stays log.write.
+  def resolve(name: String): Option[CallId] =
+    if (name == "sys.log") Some(LogWrite) else byName.get(name)
 }
 
 enum GlobalId(val wireId: String, val placeholder: String) {
