@@ -45,6 +45,11 @@ rather than dispatching previous Calls again. The completed output prefix
 is serialized in the tagged list slot `__awfl_loop_<step>_items`.
 A framed continuation may use next_step 0 for the first top-level step;
 frame-free continuations must advance beyond a completed step.
+For a top-level `Switch` containing direct Calls, exactly two frames pin
+the selected branch and active effect site. The first carries the Switch
+node ID and zero-based branch index; the second carries the effect node ID
+and its ordinal within the branch. Resume bypasses branch condition
+evaluation and restores prior Call results from the tagged slots.
 
 ## Response
 
@@ -86,8 +91,10 @@ slots, and skips finished steps or range iterations instead of replaying
 effects. Direct top-level effect IDs use call_<step>. Range Call IDs use
 call_<step>_<result-slot>_<ordinal>; the unique result slot distinguishes
 multiple effect sites in the same iteration, and the ordinal is zero-based
-even for negative range starts. Effects nested in branches or deeper loops
-still fail compilation until those frame paths and live slots are implemented.
+even for negative range starts. A Switch branch Call uses the stable ID
+`call_<step>_<result-slot>_b<branch-index>`. Effects in deeper branches or
+nested loops still fail compilation until those frame paths and live slots
+are implemented.
 
 ## Safety constraints and limitations
 

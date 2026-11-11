@@ -16,7 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 FIXTURES = [
     "native-effect", "native-resume", "native-two-effects",
-    "native-range-effect", "native-range-two-effects",
+    "native-range-effect", "native-range-two-effects", "native-switch-effects",
 ]
 
 
@@ -210,9 +210,71 @@ def check():
             "protocol_version": 1, "status": "completed",
             "result": ["second-0", "second-1"],
         }, current
+
+        # A Switch pins its branch and Call site. Resuming with deliberately
+        # different input must NOT take a different branch or repeat a Call.
+        switch = binaries["native-switch-effects"]
+        first = invoke(switch, {"protocol_version": 1, "input": 5})
+        assert first["status"] == "suspended", first
+        assert first["effect"]["node_id"] == "0.0.case0.0"
+        assert first["continuation"]["frames"] == [
+            {"node_id": "0.0", "iteration": 0},
+            {"node_id": "0.0.case0.0", "iteration": 0},
+        ]
+        assert first["continuation"]["next_step"] == 0
+        second = invoke(switch, {
+            "protocol_version": 1, "input": -5,
+            "continuation": bind(first["continuation"],
+                                 first["effect"]["result_slot"], "branch-a-first"),
+        })
+        assert second["status"] == "suspended", second
+        assert second["effect"]["node_id"] == "0.0.case0.1"
+        assert second["effect"]["args"] == "branch-a-first"
+        assert second["continuation"]["frames"] == [
+            {"node_id": "0.0", "iteration": 0},
+            {"node_id": "0.0.case0.1", "iteration": 1},
+        ]
+        assert first["effect"]["effect_id"] != second["effect"]["effect_id"]
+        assert second["continuation"]["slots"][first["effect"]["result_slot"]] == {
+            "type": "string", "value": "branch-a-first",
+        }
+        invalid_site = copy.deepcopy(second["continuation"])
+        invalid_site["frames"][0]["iteration"] = 1
+        assert "invalid native Switch continuation site" in invoke(switch, {
+            "protocol_version": 1, "input": -5,
+            "continuation": bind(invalid_site, second["effect"]["result_slot"], "bad"),
+        }, fails=True)
+        invalid_prior = copy.deepcopy(second["continuation"])
+        del invalid_prior["slots"][first["effect"]["result_slot"]]
+        assert "missing continuation slot" in invoke(switch, {
+            "protocol_version": 1, "input": -5,
+            "continuation": bind(invalid_prior, second["effect"]["result_slot"], "bad"),
+        }, fails=True)
+        final = invoke(switch, {
+            "protocol_version": 1, "input": -5,
+            "continuation": bind(second["continuation"],
+                                 second["effect"]["result_slot"], "branch-a-second"),
+        })
+        assert final == {
+            "protocol_version": 1, "status": "completed", "result": "branch-a-second",
+        }, final
+        other = invoke(switch, {"protocol_version": 1, "input": -1})
+        assert other["status"] == "suspended" and other["effect"]["node_id"] == "0.0.case1.0"
+        assert other["continuation"]["frames"] == [
+            {"node_id": "0.0", "iteration": 1},
+            {"node_id": "0.0.case1.0", "iteration": 0},
+        ]
+        other_done = invoke(switch, {
+            "protocol_version": 1, "input": 999,
+            "continuation": bind(other["continuation"],
+                                 other["effect"]["result_slot"], "branch-b"),
+        })
+        assert other_done["result"] == "branch-b"
+        unmatched = invoke(switch, {"protocol_version": 1, "input": 0})
+        assert unmatched["status"] == "completed" and unmatched["result"] == {}
         print("native protocol: 2 single-effect resumes, 2-step effect sequence,"
               " three-iteration range, two effects per range iteration,"
-              " malformed continuation"
+              " pinned two-branch Switch resume, malformed continuation"
               " and version rejection passed")
 
 

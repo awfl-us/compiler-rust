@@ -254,11 +254,103 @@ $body
     };"""
   }
 
+  /** A resumable top-level Switch records the selected branch and the Call
+    * site as two invocation frames. Branch selection is never re-evaluated
+    * after suspension, and results of preceding Calls are restored by slot.
+    *
+    * Pure branches retain ordinary lowering. Effectful branches are limited
+    * to a sequence of direct Calls until nested live-slot capture exists.
+    */
+  private def emitEffectChoice(choice: Choose, index: Int,
+                               prior: Vector[String]): String = {
+    val where = s"node=${choice.nodeId} step='${choice.displayName}'"
+    val cases = choice.cases.map { branch =>
+      val effects = Program("branch", branch.body, Vector.empty).effects
+      val direct = branch.body.collect { case e: Effect => e }
+      if (effects.nonEmpty && effects.size != branch.body.size)
+        throw CompileError(where, "effectful Switch branch must contain only direct Calls; nested control flow or mixed steps unsupported")
+      if (effects.nonEmpty && direct.size != effects.size)
+        throw CompileError(where, "effectful Switch branch has nested Call sites")
+      direct
+    }
+    val sites = cases.zipWithIndex.flatMap { (effects, branchIndex) =>
+      effects.zipWithIndex.map { (e, site) =>
+        s"""                    (${branchIndex}u64, ${q(e.nodeId)}, ${site}u64) => (${branchIndex}u64, ${site}u64),"""
+      }
+    }.mkString("\n")
+    val savedTop = prior.map(slot =>
+      s"""                slots.insert(${q(slot)}.to_owned(), $slot.clone());""").mkString("\n")
+    val branches = choice.cases.zipWithIndex.map { (branch, branchIndex) =>
+      val prefix = if (branchIndex == 0) "if" else "else if"
+      val guard = s"(__awfl_resuming_here && __awfl_resume_branch == ${branchIndex}u64) || (!__awfl_resuming_here && ops::bool_value(&(${render(branch.condition, where)}))?)"
+      val body = branch.body.map {
+        case effect: Effect =>
+          val site = cases(branchIndex).indexWhere(_.nodeId == effect.nodeId)
+          val resumedSite = if (site == 0) "" else s" && __awfl_resume_site >= ${site}u64"
+          val previous = cases(branchIndex).take(site)
+          val slotsBinding = if (prior.isEmpty && previous.isEmpty) "let slots" else "let mut slots"
+          val savedPrevious = previous.map(e =>
+            s"""                slots.insert(${q(e.resultSlot)}.to_owned(), ${e.resultSlot}.clone());""").mkString("\n")
+          s"""            // AWFL ${effect.nodeId} ${effect.displayName}
+            let ${effect.resultSlot} = if __awfl_resuming_here$resumedSite {
+                resume.ok_or("missing native continuation")?.slot(${q(effect.resultSlot)})?
+            } else {
+                $slotsBinding = std::collections::BTreeMap::new();
+$savedTop
+$savedPrevious
+                return Ok(Outcome::Suspended {
+                    effect: EffectIntent {
+                        effect_id: ${q(s"call_${index}_${effect.resultSlot}_b${branchIndex}")}.to_owned(),
+                        node_id: ${q(effect.nodeId)}.to_owned(),
+                        operation: ${q(effect.id.wireId)}.to_owned(),
+                        result_slot: ${q(effect.resultSlot)}.to_owned(),
+                        args: (${render(effect.arguments, where)}).to_plain_json()?,
+                    },
+                    continuation: Continuation {
+                        next_step: $index, slots,
+                        frames: vec![
+                            InvocationFrame { node_id: ${q(choice.nodeId)}.to_owned(), iteration: ${branchIndex}u64 },
+                            InvocationFrame { node_id: ${q(effect.nodeId)}.to_owned(), iteration: ${site}u64 },
+                        ],
+                    },
+                });
+            };"""
+        case pure => emitStep(pure, 12, effectful = true)
+      }.mkString("\n")
+      s"""$prefix $guard {
+$body
+            ${render(branch.result, where)}
+        }"""
+    }.mkString(" ")
+    val assigned = if (branches.isEmpty)
+      "AwflValue::Map(std::collections::BTreeMap::new())"
+    else s"$branches else { AwflValue::Map(std::collections::BTreeMap::new()) }"
+    s"""    // AWFL ${choice.nodeId} ${choice.displayName} (resumable Switch)
+    let ${choice.resultSlot} = if pc > $index {
+        resume.ok_or("missing native continuation")?.slot(${q(choice.resultSlot)})?
+    } else {
+        let __awfl_resuming_here = resume.is_some_and(|s| !s.frames.is_empty() && pc == $index);
+        let (__awfl_resume_branch, __awfl_resume_site) = if __awfl_resuming_here {
+            let state = resume.ok_or("missing native continuation")?;
+            if state.frames.len() != 2 || state.frames[0].node_id != ${q(choice.nodeId)} {
+                return Err("invalid native Switch continuation frame".into());
+            }
+            match (state.frames[0].iteration, state.frames[1].node_id.as_str(), state.frames[1].iteration) {
+$sites
+                _ => return Err("invalid native Switch continuation site".into()),
+            }
+        } else { (0u64, 0u64) };
+        $assigned
+    };"""
+  }
+
   /** Direct Rust computation with server-managed effect boundaries. */
   private def effectfulSource(program: Program): String = {
     val frameConditions = program.steps.zipWithIndex.collect {
       case (loop: RepeatRange, i) if Program("range-effects", loop.body, Vector.empty).effects.nonEmpty =>
         s"pc == $i && s.frames.len() == ${if (loop.body.collect { case _: Effect => 1 }.size > 1) 2 else 1} && s.frames[0].node_id == ${q(loop.nodeId)}"
+      case (choice: Choose, i) if Program("choice-effects", choice.cases.flatMap(_.body), Vector.empty).effects.nonEmpty =>
+        s"pc == $i && s.frames.len() == 2 && s.frames[0].node_id == ${q(choice.nodeId)}"
     }
     val frameTargets = frameConditions match {
       case Vector() => "false"
@@ -307,6 +399,9 @@ ${emitStep(early, 8, effectful = true)}
 ${emitStep(loop, 8, effectful = true)}
         $slot
     };"""
+        case choice: Choose if Program("choice-effects", choice.cases.flatMap(_.body), Vector.empty).effects.nonEmpty =>
+          val prior = program.steps.take(index).flatMap(topLevelSlot)
+          emitEffectChoice(choice, index, prior)
         case other =>
           val slot = topLevelSlot(other).getOrElse(
             throw CompileError(where, "unsupported top-level native statement"))

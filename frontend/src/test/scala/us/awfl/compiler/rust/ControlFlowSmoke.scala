@@ -80,20 +80,37 @@ object ControlFlowSmoke {
     RustEmitter.write(Normalize(Workflow((List[Step[?, ?]](topReturn), obj(99)),
       Some("top-level-return"))), base.resolve("native-top-return"), runtime)
 
-    // Even a conditional effect must be rejected, not hidden in unselected branches.
-    val effect = TypedCall[Map[String, String], String](
-      "request", CallId.HttpPost, obj(Map("url" -> "https://example.org")))
-    val unsafe = Switch("unsafe", List(
-      CelBoolean(false) -> (List(effect) -> effect.resultValue),
-      CelBoolean(true) -> (List.empty[Step[?, ?]] -> obj("safe"))
+    // A selected branch is pinned across subprocess restarts. Its second
+    // Call depends on the first; the other branch has an independent Call.
+    val branchFirst = TypedCall[Map[String, String], String](
+      "first-branch", CallId.HttpPost, obj(Map("url" -> "https://example.org/branch-a")))
+    val branchSecond = TypedCall[String, String](
+      "second-branch", CallId.HttpPost, branchFirst.resultValue)
+    val otherBranch = TypedCall[Map[String, String], String](
+      "other-branch", CallId.HttpPost, obj(Map("url" -> "https://example.org/branch-b")))
+    val choiceEffects = Switch("effects-switch", List(
+      (input.cel > CelInteger(0)) ->
+        (List[Step[?, ?]](branchFirst, branchSecond) -> branchSecond.resultValue),
+      (input.cel < CelInteger(0)) ->
+        (List[Step[?, ?]](otherBranch) -> otherBranch.resultValue)
+    ))
+    val effectChoice = Normalize(Workflow((List[Step[?, ?]](choiceEffects),
+      choiceEffects.resultValue), Some("effectful-switch")))
+    assert(effectChoice.effects.size == 3)
+    val choiceGenerated = RustEmitter.write(
+      effectChoice, base.resolve("native-switch-effects"), runtime)
+    assert(choiceGenerated.source.contains("invalid native Switch continuation site"))
+
+    // Effects nested another level in the selected branch remain rejected.
+    val nestedUnsafe = Switch("nested-effects", List(
+      CelBoolean(true) -> (List[Step[?, ?]](choiceEffects) -> choiceEffects.resultValue)
     ))
     val denied = try {
-      RustEmitter.emit(Normalize(Workflow((List(unsafe), unsafe.resultValue))))
-      throw new AssertionError("nested external effect was not rejected")
-    } catch {
-      case e: CompileError => e.getMessage
-    }
-    assert(denied.contains("nested effect"))
+      RustEmitter.emit(Normalize(Workflow((List[Step[?, ?]](nestedUnsafe),
+        nestedUnsafe.resultValue))))
+      throw new AssertionError("deeply nested external effect was not rejected")
+    } catch { case e: CompileError => e.getMessage }
+    assert(denied.contains("effectful Switch branch must contain only direct Calls"))
 
     // A preceding compiled branch is checkpointed once and restored on resume.
     val beforeEffect = Switch("before-effect", List(

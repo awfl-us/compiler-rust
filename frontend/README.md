@@ -80,8 +80,14 @@ identifies the Call site and previous results from that iteration are saved.
 Each new Rust subprocess skips finished effects; the server journals their
 outcomes and can recover after worker takeover.
 
-Known limitations: Calls inside nested loops, branches, For, and Fold
-remain explicitly rejected. Try, Parallel
+A top-level Switch now suspends at direct Calls in its selected branch.
+Its two-frame continuation pins the branch and Call site, and previous
+Call results are restored without re-evaluating branch conditions.
+Pure and unmatched branches still complete without dispatching effects.
+
+Known limitations: Effects inside deeper nested branches/loops, For and
+Fold remain explicitly rejected. Pure and effectful steps mixed within
+the same Switch branch also fail closed. Try, Parallel
 and complete Google/CEL semantics are not implemented.
 Unsupported expressions fail compilation with node context rather than
 falling back silently to YAML.
