@@ -10,8 +10,9 @@ execution disabled until wider equivalence and safety tests pass.
   `CelFunctions` / `CallOperations` backend-neutral String constants. The
   original `CelFunc`, `CelOp`, `Call` AST classes and the four global Value
   placeholders are **byte-for-byte unchanged from the pre-Rust DSL baseline**.
-  DSL helpers only substitute the operation-name constants; no new AST or
-  overloaded constructors are required. DSL test `OperationNamesSmoke` passed
+  The published DSL helpers retain their original implementation (including
+  a handful of Google-named internal calls); no new AST or overloaded
+  constructors are required. DSL test `OperationNamesSmoke` passed
   when run by the YAML CI job.
 - Merged `awfl-us/compiler-yaml` PR #1 maps 22 function names and 10 call names to
   their exact previous Google Workflows spellings, preserving pre-existing
@@ -125,6 +126,31 @@ success/error paths, plus deterministic output. The Python effect-failure
 checkpoint is a controlled simulation; server-side integration must be
 verified separately before enabling native production routing. CI and
 `scripts/test-local.sh --full` exercise all six generated crates under Clippy.
+
+## November 11: unchanged production Product.scala native conformance
+
+The **unmodified** `awfl-us/workflows/src/main/scala/us/awfl/workflows/evals/Product.scala`
+now compiles from the original published DSL to real Rust ABI 3 binaries.
+Its `Try` error branch uses the DSL's built-in `Log` constructor (`sys.log`),
+and the DSL's `join` helper builds `CelFunc("len", ...)`. The compiler now
+resolves only these exact **current DSL-owned** spellings (plus `default` and
+`json.encode_to_string` from the same DSL source) into the existing private
+operation IDs. General unknown names still fail closed; no workflow sources,
+DSL AST or YAML compiler were changed.
+
+`RealProductSmoke` loads the **exact pinned** workflow source via sbt
+`Test / unmanagedSources`, confirms that nested compiled `Try` handlers
+remain live and `log.write` appears in the manifest, then creates three
+actual Rust crates. `test_real_product.py` executes them on representative
+inputs: single-variable combinations (2), two-variable Cartesian product (4),
+and an empty list (0); all match the expected JSON results and are
+deterministic. The generated crates pass strict Clippy.
+
+**Scope limitation:** these are happy-path executions. The `log.write`
+effect on Product's *exception* path is preserved by the compiler but does
+not yet have a production native server dispatcher/allowlist implementation.
+Do not enable native routing for this workflow until that effect and
+remaining differential semantics are verified. No workflows were migrated.
 
 ## Compiler: implemented
 

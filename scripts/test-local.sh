@@ -36,6 +36,11 @@ echo '== Compile unmodified production workflow source =='
   "set Test / unmanagedSources += file(\"$WORKFLOWS/src/main/scala/us/awfl/workflows/LoadConversationHistory.scala\")" \
   'Test / runMain us.awfl.compiler.rust.RealWorkflowSmoke')
 
+echo '== Compile unchanged Product.scala (Try/Fold/For) from AWFL workflows =='
+(cd "$ROOT/frontend" && sbt -batch \
+  "set Test / unmanagedSources ++= Seq(file(\"$WORKFLOWS/src/main/scala/us/awfl/workflows/evals/Product.scala\"), file(\"src/integration/scala/us/awfl/compiler/rust/RealProductSmoke.scala\"))" \
+  'Test / runMain us.awfl.compiler.rust.RealProductSmoke')
+
 echo '== Runtime unit tests and static analysis =='
 (cd "$ROOT" && cargo fmt --all -- --check && cargo test --workspace --locked \
   && cargo clippy --workspace --all-targets --locked -- -D warnings)
@@ -46,6 +51,14 @@ echo '== Compile and run pure and real workflow Rust binaries =='
   && cargo build --manifest-path fixtures/real-load-history/LoadConversationHistory/Cargo.toml \
        --target-dir "$ROOT/target/local-real-workflow" \
   && python3 scripts/test_real_workflow.py "$ROOT/target/local-real-workflow")
+
+echo '== Execute real Product combinator across single, Cartesian and empty inputs =='
+(cd "$ROOT" && for name in single cartesian empty; do
+  cargo build --manifest-path "fixtures/real-product/$name/Cargo.toml" \
+    --target-dir "$ROOT/target/local-product-workflow"
+  cargo clippy --manifest-path "fixtures/real-product/$name/Cargo.toml" \
+    --all-targets --locked --target-dir "$ROOT/target/local-product-workflow" -- -D warnings
+done && python3 scripts/test_real_product.py "$ROOT/target/local-product-workflow")
 
 echo '== Compile and execute native CEL standard-library expressions =='
 (cd "$ROOT" && cargo build --manifest-path fixtures/native-cel-stdlib/Cargo.toml \
