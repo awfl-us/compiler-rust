@@ -188,7 +188,12 @@ mod tests {
         assert!(make(1, 2, vec![]).validate(3).is_err());
         assert!(make(2, 3, vec![]).validate(3).is_err());
         let frames = vec![serde_json::json!({"node_id": "0.0", "iteration": 0})];
-        assert!(make(2, 0, frames).validate(3).unwrap_err().contains("frames"));
+        assert!(
+            make(2, 0, frames)
+                .validate(3)
+                .unwrap_err()
+                .contains("frames")
+        );
         let response = Response::new(Outcome::Completed {
             result: serde_json::json!([1, 2]),
         });
