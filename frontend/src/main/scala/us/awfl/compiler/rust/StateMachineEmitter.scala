@@ -266,8 +266,9 @@ use awfl_native_runtime::protocol::{
 $extraTypes
 
 #[allow(clippy::never_loop)]
-${generatedClippy}fn run(input: &AwflValue, resume: Option<&Continuation>) -> Result<Outcome, Box<dyn std::error::Error>> {
+${generatedClippy}fn run(input: &AwflValue, trusted_globals: &BTreeMap<String, String>, resume: Option<&Continuation>) -> Result<Outcome, Box<dyn std::error::Error>> {
     let _ = input;
+    let _ = trusted_globals;
     $slotsBinding: BTreeMap<String, AwflValue> =
         resume.map_or_else(BTreeMap::new, |c| c.slots.clone());
     // Some pure terminal CFGs need no slots; keep the schema but suppress
@@ -284,7 +285,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     request.validate(${plan.blocks.size}).map_err(|error|
         io::Error::new(io::ErrorKind::InvalidInput, error))?;
     let input = AwflValue::from_plain_json(&request.input)?;
-    let outcome = run(&input, request.continuation.as_ref())?;
+    let trusted_globals = request.trusted_globals.clone().unwrap_or_default();
+    let outcome = run(&input, &trusted_globals, request.continuation.as_ref())?;
     println!("{}", serde_json::to_string(&Response::new(outcome))?);
     Ok(())
 }
