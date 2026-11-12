@@ -15,17 +15,20 @@ object Normalize {
     val symbols = mutable.Map.empty[String, String]
     val slots = mutable.ArrayBuffer.empty[String]
     val usedLabels = mutable.Set.empty[String]
+    val nextLabelSuffix = mutable.Map.empty[String, Int]
 
     // Readable labels are unique at compile time; node IDs determine actual
-    // effect/continuation identity, regardless of these display labels.
+    // effect/continuation identity. Counters avoid quadratic scans when
+    // a shared helper emits hundreds of identically named steps.
     def uniqueLabel(name: String): String = {
-      var candidate = name
-      var suffix = 1
+      var suffix = nextLabelSuffix.getOrElse(name, 0)
+      var candidate = if (suffix == 0) name else name + "_" + suffix
       while (usedLabels.contains(candidate)) {
-        candidate = name + "_" + suffix
         suffix += 1
+        candidate = name + "_" + suffix
       }
       usedLabels += candidate
+      nextLabelSuffix(name) = suffix + 1
       candidate
     }
 
