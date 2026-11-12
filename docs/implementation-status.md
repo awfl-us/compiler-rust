@@ -2,6 +2,13 @@
 
 ## Latest: native time.format and correctly aligned helper audit
 
+**Paired server reliability:** server PR #82 (`d776d76`) additionally passes
+real emulator assertions from a **second Node process**: a live forked
+parent's lease cannot be stolen, and a completed parent's result can be
+observed without re-execution. The same four compiled-binary emulator tests
+pass locally. This does not verify process-crash takeover or distributed
+capacity limits; both remain outstanding.
+
 **65/66 compiled workflow definitions emit Rust source**, with **one**
 remaining first blocker (`initEnvResult_71e5323f` used out of scope in
 `evals-experiments-SweBenchLite`). Zero class-loading errors and unknown

@@ -4,6 +4,15 @@
 
 ## Latest verified compatibility checkpoint — November 12 (supersedes 55/66 below)
 
+**Parallel durability follow-through:** Paired server draft
+[#82](https://github.com/awfl-us/server/pull/82) (`d776d76`) extended the
+four-test real Firestore emulator suite: a separate Node process with its own
+Firestore client receives a lease conflict while a parent is forking, and
+observes the terminal result after parent join. All four tests passed locally
+with actual generated Rust binaries. This verifies **cross-process active
+parent lease exclusion**, *not* process-crash lease takeover, cross-process
+concurrency permits, recursive cancellation or production Jobs durability.
+
 **65 of 66 constructed AWFL workflow definitions now emit Rust source (98.5%).**
 The read-only audit uses unchanged `workflows/main` at `c84270f`, rebuilt
 against helper sources whose tree matches `workflow-utils/main` at `08bda2d`.
@@ -74,7 +83,7 @@ The original November 11 compatibility figures below are **historical baseline s
 
 - **Implemented in drafts:** original Scala `Parallel` and `ParallelFor` lower to separate Rust entry PCs and branch-local slot snapshots, with a version-pinned `native.parallel` fork. The Jobs worker creates deterministic, digest-pinned child records, dispatches bounded concurrent child effects through the existing journal, records one parent join, and reconstructs indexed loop results. Parent `Try` handles **confirmed** failed children, not uncertain remote outcomes. A parent fork lease is refreshed during execution; a shared *in-process* permit queue limits nested work without reserving permits while awaiting children.
 - **Verified:** Scala `ParallelIrSmoke`; four generated Rust crates built and Clippy-clean; a real compiled binary + worker + transaction-shaped in-memory Firestore store test covers overlapping HTTP effects, zero/one/many indexed lanes, crash after committed children before parent journal, replay, caught/uncaught `Raise`, and uncertain sibling outcomes. Server native discovery suite **85 tests: 63 passed, 0 failed, 22 skipped** (prior to the added emulator cases). **New:** the compiled Rust ELF suites passed **4/4 tests against the actual local Firestore emulator**—concurrent branches + fresh-store replay with duplicate-parent-lease rejection, takeover after injected post-child/pre-parent crash, zero/one/many indexed `ParallelFor` iterations, and parent cancellation fencing. Compiler GitHub Actions and paired server GitHub Actions passed on the prior revisions, including the first three emulator cases; updated four-case CI is being verified on the draft.
-- **Not yet verified:** Firestore under true separate-process contention or deployed worker death; recursive cancellation/orphaned sibling policy; cross-process admission control; long-running lease/fork heartbeat races; nested fanout and real workflow differential semantics; live effectful Cloud Tasks/Jobs routing. `AWFL_NATIVE_EXECUTION_ENABLED` remains disabled in normal production. Emulator tests are **not** a GCP production rollout.
+- **Not yet verified:** separate-process lease expiry/takeover after an actual worker death (active-process lease conflicts are emulator-tested); recursive cancellation/orphaned sibling policy; cross-process admission control; long-running lease/fork heartbeat races; nested fanout and real workflow differential semantics; live effectful Cloud Tasks/Jobs routing. `AWFL_NATIVE_EXECUTION_ENABLED` remains disabled in normal production. Emulator tests are **not** a GCP production rollout.
 
 **Next gate order:** (1) maintain the four real Firestore emulator tests in CI; extend to child cancellation/orphan cleanup and independent *process* takeover, (2) nested fanout, uncertain-effect and cancellation propagation with bounded resources across server processes, (3) full constructed-AST and unchanged real-workflow audit and YAML differential fixtures, (4) authenticated deployed Jobs canary with artifact pinning and rollback, then latency/cost benchmarks. Details and acceptance checklist: [durable parallel fork/join](durable-parallel-fork-join.md).
 
