@@ -37,7 +37,7 @@ object ExpressionEmitter {
       case SlotRef(id) => slot(id)
       case Field(v, name) => s"ops::field(&(${inner(v)}), ${q(name)})?"
       case Index(v, index) => s"ops::index(&(${inner(v)}), &(${inner(index)}))?"
-      case Global(id) => throw CompileError(where, s"global ${id.wireId} requires trusted server bindings; not available in pure runner")
+      case Global(id) => s"ops::trusted_global(trusted_globals, ${q(id.wireId)})?"
       case Binary(left, id, right) =>
         val l = inner(left); val r = inner(right)
         id match {
@@ -60,6 +60,10 @@ object ExpressionEmitter {
         }
       case Unary(OperatorId.Not, value) => s"AwflValue::Bool(!ops::bool_value(&(${inner(value)}))?)"
       case Unary(id, _) => throw CompileError(where, s"unary operator ${id.wireId} unsupported")
+      case Function(FunctionId.EnvironmentGet, Vector(name)) =>
+        s"ops::environment_get(trusted_globals, &(${inner(name)}), None)?"
+      case Function(FunctionId.EnvironmentGet, Vector(name, fallback)) =>
+        s"ops::environment_get(trusted_globals, &(${inner(name)}), Some(&(${inner(fallback)})))?"
       case Function(FunctionId.ClockNow, Vector()) => "ops::time_now()?"
       case Function(FunctionId.UuidGenerate, Vector()) => "ops::uuid_generate()"
       case Function(FunctionId.Length, Vector(arg)) => s"ops::length(&(${inner(arg)}))?"
