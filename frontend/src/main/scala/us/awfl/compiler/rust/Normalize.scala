@@ -34,6 +34,60 @@ object Normalize {
 
     def fail(where: String, why: String): Nothing = throw CompileError(where, why)
 
+    /** Legacy YAML stringifies an Obj nested in str(CelValue(obj(...))) as
+      * JSON text. Resolved fields become literal `${...}` placeholders,
+      * not references that must be bound in the workflow.
+      */
+    def templateCel(node: Cel, where: String): String = node match {
+      case CelConst(value) => value
+      case CelStr(value) => s"\"${CelStr(value).safe.content}\""
+      case CelValue(value: Resolved[?]) => templateCel(value.resolver.path, where)
+      case CelValue(value: Obj[?]) => templateJson(value.value, where).toString
+      case CelPath(path) => path.map(templateCel(_, where)).mkString(".")
+      case CelOp(left, op, right) =>
+        s"(${templateCel(left, where)} $op ${templateCel(right, where)})"
+      case CelFunc(name, params) =>
+        s"$name(${params.map(templateCel(_, where)).mkString(", ")})"
+      case CelAt(list, index) =>
+        s"${templateCel(list.resolver.path, where)}[${templateCel(index, where)}]"
+      case other => fail(where, s"unsupported CEL inside literal JSON template: $other")
+    }
+
+    def templateJson(value: Any, where: String): io.circe.Json = {
+      import io.circe.Json
+      value match {
+        case null => Json.Null
+        case resolved: Resolved[?] =>
+          Json.fromString("${" + templateCel(resolved.resolver.path, where) + "}")
+        case opt: OptResolved[?] => templateJson(opt.getOrElse(Value.nil(opt.spec)), where)
+        case opt: OptList[?] => templateJson(opt.getOrElse(us.awfl.dsl.ListValue.nil(opt.spec)), where)
+        case OptObj(v) => templateJson(v.value, where)
+        case Obj(v) => templateJson(v, where)
+        case Some(v) => templateJson(v, where)
+        case None => Json.fromString("${null}")
+        case values: scala.List[?] => Json.fromValues(values.zipWithIndex.map { (v, i) =>
+          templateJson(v, s"$where[$i]")
+        })
+        case values: scala.collection.Map[?, ?] =>
+          val fields = values.toSeq.map {
+            case (name: String, v) => name -> templateJson(v, s"$where.$name")
+            case (key, _) => fail(where, s"invalid JSON template key: $key")
+          }
+          Json.fromFields(fields)
+        case product: Product =>
+          Json.fromFields(product.productElementNames.zip(product.productIterator).map {
+            (name, field) => name -> templateJson(field, s"$where.$name")
+          }.toSeq)
+        case v: String => Json.fromString(v)
+        case v: Boolean => Json.fromBoolean(v)
+        case v: Int => Json.fromInt(v)
+        case v: Long => Json.fromLong(v)
+        case v: Double => Json.fromDoubleOrNull(v)
+        case v: Float => Json.fromFloatOrNull(v)
+        case v => fail(where, s"unsupported JSON template value: ${v.getClass.getName}")
+      }
+    }
+
     def obj(value: Any, where: String): Expr = value match {
       case null => NullValue
       case v: String => StringValue(v)
@@ -162,6 +216,13 @@ object Normalize {
     }
 
     def valueExpr(value: BaseValue[?], where: String): Expr = value match {
+      // `str(CelValue(obj(...)))` means JSON text, not a runtime map. Only
+      // string-typed wrappers take this path; ordinary Obj stays executable.
+      case resolved: Value[?] if resolved.spec == stringSpec =>
+        resolved.resolver.path.path match {
+          case CelValue(Obj(data)) :: Nil => StringValue(templateJson(data, where).toString)
+          case _ => cel(resolved.resolver.path, where)
+        }
       case resolved: Resolved[?] => cel(resolved.resolver.path, where)
       case Obj(value) => obj(value, where)
     }

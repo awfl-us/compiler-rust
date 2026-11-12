@@ -80,7 +80,7 @@ real workflow is actually selected. For immediate acceptance, follow
 
 ## Sequencing / checkpoints
 
-A. Repair unbound raw helper references at the source (schema examples and Firebase cache's 404 recovery), rerun the baseline audit without changing compiler raw-CEL validation.
+A. Preserve the original DSL's object-to-string schema-template semantics in the Rust compiler (`str(CelValue(obj(...)))`), restore the original `Llm.chatJson` helper, and keep Firebase's actual 404 recovery-scope fix. Continue rejecting unbound references in executable objects; rerun the compatibility audit against aligned helper sources.
 
 B. Add compiler-private parallel IR, scoped CFG branches and exact resume-slot/lane identity tests; keep Rust emission gated until protocol support exists.
 

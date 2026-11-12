@@ -81,6 +81,24 @@ remain release gates.
 
 ## Latest verified compatibility checkpoint — November 12 (supersedes 55/66 below)
 
+**Original LLM JSON-template semantics restored (November 12, subsequent check).**
+The `workflow-utils` [revert PR #8](https://github.com/awfl-us/workflow-utils/pull/8)
+is merged: `Llm.chatJson` again uses
+`str(CelValue(obj(implicitly[Spec[T]].init(Resolver("example")))))`.
+The Rust normalizer now preserves this exact object-to-JSON-*string* use case,
+instead of trying to bind `example` as a runtime variable. Ordinary executable
+objects still resolve their values strictly and reject undefined names.
+Focused Scala normalization tests and the actual generated Rust ELF prove that
+`${example.title}` and `${example.summary}` stay literal for both empty input
+and input containing an unrelated `example` object. CI now runs these tests.
+Recompiling the unchanged `workflows/main` source at `c84270f` against the
+reverted, locally published `workflow-utils` helper and running the same
+constructed-AST audit yields **66 scanned, 65 emitted, 1 blocked, 0 load errors**.
+The sole blocker remains the existing `evals-experiments-SweBenchLite` reference
+to `initEnvResult_71e5323f` outside its lexical scope. The older 21/66 result
+from a stale workflow *feature* checkout is not the current main-branch baseline.
+As before, Rust source emission does not prove cloud execution or effect parity.
+
 **Parallel durability follow-through:** Paired server draft
 [#82](https://github.com/awfl-us/server/pull/82) (`d776d76`) extended the
 four-test real Firestore emulator suite: a separate Node process with its own
@@ -146,15 +164,22 @@ these counts as a release gate.
 confirmed by the GitHub Actions `real-workflow-compatibility` job checking out
 `workflows/main` on this compiler branch. Both audits still resolve an old
 `workflow-utils` artifact. The nine unbound `example` CEL paths come from
-`Llm.chatJson` constructing a `Spec.init(Resolver("example"))` as a runtime
-expression; the other two come from `Firebase.read`'s 404 handler returning the
-failed request's out-of-scope result. These defects were already fixed at
-their source in merged [workflow-utils PR #6](https://github.com/awfl-us/workflow-utils/pull/6)
-(literal schema examples and null-on-404, merged November 12). The compiler
-frontend still resolves `workflow-utils:0.3.5` in test scope, while the
-workflows build also uses its older local snapshot. **Next action is a
-reproducible release/dependency alignment and a fresh constructed-AST audit,
-not loosening compiler name lookup to accept undefined CEL variables.**
+`Llm.chatJson` constructing a `Spec.init(Resolver("example"))` for a *JSON-text
+schema template* wrapped in `str(CelValue(obj(...)))`; this was **not** a
+reference intended for runtime evaluation. The YAML encoder stringified the
+object and kept `${example.title}` as text inside quoted JSON, whereas the
+old Rust normalizer walked into each field and erroneously tried to resolve
+`example` as a bound symbol. The other two failures involved a real
+`Firebase.read` 404 handler reference to a failed request's out-of-scope
+result. [workflow-utils PR #6](https://github.com/awfl-us/workflow-utils/pull/6)
+temporarily changed the LLM helper to generate `SchemaExample[T]` directly;
+that change was reverted in merged
+[workflow-utils PR #8](https://github.com/awfl-us/workflow-utils/pull/8),
+in favor of preserving **existing DSL semantics in the Rust compiler**,
+while retaining the unrelated Firebase 404 fix.
+All actual executable object/step references remain strictly scope-checked.
+The 55/66 historical measurement still uses old helper dependencies; rerun
+an aligned source audit before comparing current coverage.
 
 The original November 11 compatibility figures below are **historical baseline snapshots**; in particular, rows stating that `Parallel`/`ParallelFor` are not implemented refer to the then-merged baseline, **not** current draft branches. Do not change those old audit counts without rerunning the identical constructed-AST audit against the newer compiler. The current changes are in **draft** [compiler-rust #18](https://github.com/awfl-us/compiler-rust/pull/18) and [server #82](https://github.com/awfl-us/server/pull/82) (`67e1184`), not on `main`.
 
