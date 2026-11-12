@@ -44,6 +44,29 @@ Local source inventory (requires sibling repository clones):
 python3 scripts/source_inventory.py --output docs/phase0-source-inventory.json
 ```
 
+### Constructed-AST compatibility audit
+
+Unlike a source grep, this scanner loads compiled, unchanged workflow
+singletons and walks their *constructed* DSL steps and CEL/Call expressions,
+including those produced by `workflow-utils` helpers. It attempts native
+CFG/Rust **source emission** and records exact first-failure node paths.
+It does not run Cargo, external calls, or production execution.
+
+```bash
+(cd ../workflows && sbt -batch compile)  # compile unchanged application sources
+scripts/audit-real-workflows.sh          # report under ignored target/
+python3 scripts/render_compatibility_report.py \
+  target/constructed-ast-compatibility.json \
+  target/constructed-ast-compatibility.md
+```
+
+See the [verified inventory snapshot](docs/constructed-ast-compatibility.md).
+Application Scala changes are restricted to **name-only** substitution of CEL
+functions and connector operations with `CelFunctions` / `CallOperations`
+constants. Keep all workflow structure and helper APIs unchanged; implement
+missing semantics in this compiler and the server. The native compiler now
+lowers the original DSL `FlatMap` projection wrapper without a new DSL node.
+
 ## Local tests in the AWFL compiler-rust environment
 
 Use the AWFL `scala` image profile: Java 21, sbt 1.11.0, Rust 1.99.1,
