@@ -65,6 +65,12 @@ object ExpressionEmitter {
         s"ops::default_value(${inner(value)}, ${inner(fallback)})"
       case Function(FunctionId.TypeOf, Vector(value)) =>
         s"ops::type_of(&(${inner(value)}))"
+      case Function(FunctionId.ToString, Vector(value)) =>
+        s"ops::to_string(&(${inner(value)}))?"
+      case Function(FunctionId.ToInt, Vector(value)) =>
+        s"ops::to_int(&(${inner(value)}))?"
+      case Function(FunctionId.TextLowercase, Vector(value)) =>
+        s"ops::text_lowercase(&(${inner(value)}))?"
       case Function(FunctionId.MapGet, Vector(map, path)) =>
         s"ops::map_get(&(${inner(map)}), &(${inner(path)}))?"
       case Function(FunctionId.MapMerge, Vector(left, right)) =>

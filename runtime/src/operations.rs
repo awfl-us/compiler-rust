@@ -144,6 +144,51 @@ pub fn type_of(value: &AwflValue) -> AwflValue {
     AwflValue::String(name.to_owned())
 }
 
+/// Google Workflows string(number | boolean), not general JSON conversion.
+pub fn to_string(value: &AwflValue) -> Result<AwflValue, ValueError> {
+    let converted = match value {
+        AwflValue::Integer(n) => n.to_string(),
+        AwflValue::Float(n) if n.is_finite() => n.to_string(),
+        AwflValue::Float(_) => return Err(ValueError::NonFiniteFloat),
+        AwflValue::Bool(value) => value.to_string(),
+        _ => {
+            return Err(ValueError::Type(
+                "string() requires an integer, double or boolean".into(),
+            ));
+        }
+    };
+    Ok(AwflValue::String(converted))
+}
+
+/// Check float boundaries before casting: Rust's f64-to-i64 cast saturates
+/// and would otherwise turn overflow into a valid result.
+pub fn to_int(value: &AwflValue) -> Result<AwflValue, ValueError> {
+    let converted = match value {
+        AwflValue::String(text) => text.parse::<i64>().map_err(|_| {
+            ValueError::Type("int() requires a signed decimal integer string".into())
+        })?,
+        AwflValue::Float(n) if n.is_finite() => {
+            let truncated = n.trunc();
+            const TWO_POW_63: f64 = 9_223_372_036_854_775_808.0;
+            if !(-TWO_POW_63..TWO_POW_63).contains(&truncated) {
+                return Err(ValueError::Overflow);
+            }
+            truncated as i64
+        }
+        AwflValue::Float(_) => return Err(ValueError::NonFiniteFloat),
+        _ => return Err(ValueError::Type("int() requires a string or double".into())),
+    };
+    Ok(AwflValue::Integer(converted))
+}
+
+/// Google text.to_lower operates on Unicode, not ASCII byte sequences.
+pub fn text_lowercase(value: &AwflValue) -> Result<AwflValue, ValueError> {
+    match value {
+        AwflValue::String(text) => Ok(AwflValue::String(text.to_lowercase())),
+        _ => Err(ValueError::Type("text.to_lower requires a string".into())),
+    }
+}
+
 /// Workflows map.get is a safe *nested* lookup, unlike strict `ops::field`.
 /// Key paths must consist only of strings. Missing keys and non-map values
 /// along the path yield null, even when the initial value is not a map.
@@ -288,6 +333,57 @@ mod tests {
             add(AwflValue::Integer(i64::MAX), AwflValue::Integer(1)),
             Err(ValueError::Overflow)
         ));
+    }
+    #[test]
+    fn conversions_check_types_bounds_and_unicode() {
+        assert_eq!(
+            to_string(&AwflValue::Integer(-13)).unwrap(),
+            AwflValue::String("-13".into())
+        );
+        assert_eq!(
+            to_string(&AwflValue::Bool(false)).unwrap(),
+            AwflValue::String("false".into())
+        );
+        assert_eq!(
+            to_string(&AwflValue::Float(2.5)).unwrap(),
+            AwflValue::String("2.5".into())
+        );
+        assert!(matches!(
+            to_string(&AwflValue::Null),
+            Err(ValueError::Type(_))
+        ));
+        assert!(matches!(
+            to_string(&AwflValue::String("1".into())),
+            Err(ValueError::Type(_))
+        ));
+        assert_eq!(
+            to_int(&AwflValue::String("-102".into())).unwrap(),
+            AwflValue::Integer(-102)
+        );
+        assert_eq!(
+            to_int(&AwflValue::Float(-2.9)).unwrap(),
+            AwflValue::Integer(-2)
+        );
+        assert_eq!(
+            to_int(&AwflValue::Float(2.9)).unwrap(),
+            AwflValue::Integer(2)
+        );
+        assert_eq!(
+            to_int(&AwflValue::Float(i64::MIN as f64)).unwrap(),
+            AwflValue::Integer(i64::MIN)
+        );
+        assert!(matches!(
+            to_int(&AwflValue::Float(9_223_372_036_854_775_808.0)),
+            Err(ValueError::Overflow)
+        ));
+        assert!(to_int(&AwflValue::String("9223372036854775808".into())).is_err());
+        assert!(to_int(&AwflValue::String("1.5".into())).is_err());
+        assert!(to_int(&AwflValue::Bool(true)).is_err());
+        assert_eq!(
+            text_lowercase(&AwflValue::String("ÉCOLE İSTANBUL".into())).unwrap(),
+            AwflValue::String("école i̇stanbul".into())
+        );
+        assert!(text_lowercase(&AwflValue::Integer(1)).is_err());
     }
     #[test]
     fn unicode_length_is_codepoint_count() {
