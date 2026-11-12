@@ -27,6 +27,7 @@ echo '== Scala AST normalization, CFG liveness, and NativeMain =='
   'Test / runMain us.awfl.compiler.rust.ControlFlowSmoke' \
   'Test / runMain us.awfl.compiler.rust.NativeCliSmoke' \
   'Test / runMain us.awfl.compiler.rust.CelStdlibSmoke' \
+  'Test / runMain us.awfl.compiler.rust.ConversionSmoke' \
   'Test / runMain us.awfl.compiler.rust.LiteralCollectionsSmoke' \
   'Test / runMain us.awfl.compiler.rust.CelOperatorsSmoke' \
   'Test / runMain us.awfl.compiler.rust.TryRaiseSmoke' \
@@ -70,6 +71,11 @@ echo '== Compile and execute native CEL standard-library expressions =='
 (cd "$ROOT" && cargo build --manifest-path fixtures/native-cel-stdlib/Cargo.toml \
   && cargo clippy --manifest-path fixtures/native-cel-stdlib/Cargo.toml --all-targets --locked -- -D warnings \
   && python3 scripts/test_cel_stdlib.py)
+
+echo '== Compile and execute conversions with native Rust and Unicode/error checks =='
+(cd "$ROOT" && cargo build --manifest-path fixtures/native-conversion/Cargo.toml \
+  && cargo clippy --manifest-path fixtures/native-conversion/Cargo.toml --all-targets --locked -- -D warnings \
+  && python3 scripts/test_conversion.py)
 
 echo '== Compile original DSL literal lists/maps as native Rust =='
 (cd "$ROOT" && cargo build --manifest-path fixtures/native-literal-collections/Cargo.toml \

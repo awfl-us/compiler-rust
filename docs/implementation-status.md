@@ -1,5 +1,21 @@
 # Native Rust implementation status — November 11, 2026
 
+## Follow-on compatibility increment: pure conversions
+
+The existing `CelFunctions.ToInt`, `CelFunctions.ToString`, and
+`CelFunctions.TextLowercase` operation names now emit native Rust calls,
+without extending the public Scala DSL or modifying any application workflow.
+The runtime uses checked signed-64-bit numeric conversions, rejects unsupported
+operand types instead of applying JSON coercion, and performs Unicode lowercase
+conversion. Scala-generated Cargo fixtures execute successful conversions and
+invalid-type/overflow paths in a new Rust process and verify deterministic
+replay; Rust unit tests cover numeric boundaries and Unicode expansion.
+
+**Scope:** this adds native semantics for already-declared generic IDs. It does
+not migrate legacy operation names in `workflows` or `workflow-utils`, implement
+`sys.now()` or connector effects, or establish Google differential parity
+for every float-to-string formatting edge case or exception message.
+
 **Current authoritative summary:** [verified state and ordered roadmap](current-state-and-roadmap.md).
 **Release state:** compiler-rust PRs #1–#7, server PRs #72/#78/#79,
 DSL #2, compiler-yaml #1 and workflows #3 are **merged**. Compiler #7 is

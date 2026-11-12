@@ -67,6 +67,13 @@ recorded first unsupported operation. The compiler now lowers existing
 `FlatMap` wrappers without DSL/application edits. This is **source-emission**
 coverage, not 2/66 executable conformance or Google differential parity.
 
+**Following pure-operation increment:** the native emitter and runtime now
+handle `ToInt`, `ToString`, and Unicode `TextLowercase` by generic DSL
+operation ID, with generated Rust process and runtime unit tests. This does
+not alter the last *unchanged-application-source* 2/66 compatibility inventory;
+legacy name-only substitutions are deliberately separate from the compiler
+implementation, and connector/clock/fork-join readiness gates remain open.
+
 - Enumerate *actual instantiated* workflows and dependencies from `workflows`, `workflow-utils`, DSL and compiler: `CelFunc`, `CelOp`, raw `CelConst`, callbacks and all `Call` names; include names hidden inside helpers. Preserve original DSL; migrate constants in application sources **later** as a simple name-only operation.
 - Select increasingly realistic unchanged workflows (queue helpers, dispatcher, task/callback workflows, then full `ProjectManager` dependency graph). Label each as compiles, executes purely, executes with mock effects, differential-conformant, or blocked, with the exact missing operation and source location.
 - Build golden YAML-vs-native fixtures for result, exceptions, retries, null/missing/bytes, JSON encoding, integer edges, Unicode, clock/UUID, globals, and HTTP 4xx/5xx vs uncertain failure. Use deterministic mocked services and avoid duplicate live agent/LLM/tool side effects.
