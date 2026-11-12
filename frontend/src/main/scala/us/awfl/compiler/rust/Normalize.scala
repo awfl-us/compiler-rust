@@ -10,8 +10,27 @@ import scala.collection.mutable
   */
 object Normalize {
   def apply(workflow: us.awfl.dsl.Workflow[?], workflowName: String = "workflow"): Program = {
+    // Resolve textual DSL references in the active scope only; repeated
+    // definitions use separate backend slots, even when names/hash repeat.
     val symbols = mutable.Map.empty[String, String]
     val slots = mutable.ArrayBuffer.empty[String]
+    val usedLabels = mutable.Set.empty[String]
+    val nextLabelSuffix = mutable.Map.empty[String, Int]
+
+    // Readable labels are unique at compile time; node IDs determine actual
+    // effect/continuation identity. Counters avoid quadratic scans when
+    // a shared helper emits hundreds of identically named steps.
+    def uniqueLabel(name: String): String = {
+      var suffix = nextLabelSuffix.getOrElse(name, 0)
+      var candidate = if (suffix == 0) name else name + "_" + suffix
+      while (usedLabels.contains(candidate)) {
+        suffix += 1
+        candidate = name + "_" + suffix
+      }
+      usedLabels += candidate
+      nextLabelSuffix(name) = suffix + 1
+      candidate
+    }
 
     def fail(where: String, why: String): Nothing = throw CompileError(where, why)
 
@@ -153,7 +172,8 @@ object Normalize {
         case CelConst(name) :: Nil => name
         case _ => fail(where, s"unresolvable step result symbol: $path")
       }
-      if (symbols.contains(name)) fail(where, s"colliding step result symbol: $name")
+      // The latest binding shadows an earlier same-named result in this
+      // scope. Earlier expressions have already captured their slot IDs.
       val slot = s"s${slots.size}"
       symbols(name) = slot
       slots += slot
@@ -161,7 +181,7 @@ object Normalize {
     }
 
     def local(name: String, where: String): String = {
-      if (symbols.contains(name)) fail(where, s"colliding iterator symbol: $name")
+      // Nested loop items/indices can shadow their parents temporarily.
       val slot = s"s${slots.size}"
       slots += slot
       symbols(name) = slot
@@ -181,15 +201,16 @@ object Normalize {
       all.zipWithIndex.flatMap { (step, i) =>
         val nodeId = s"$scope.$i"
         val where = s"workflow=$workflowName node=$nodeId step='${step.name}'"
+        val label = uniqueLabel(step.name)
         step match {
           case call: Call[?, ?] =>
             val id = CallId.resolve(call.call).getOrElse(
               fail(where, s"unknown native Call '${call.call}'; use CallOperations constants"))
             val args = valueExpr(call.args, s"$where.args")
             val slot = register(call.resultValue, where)
-            Vector(Effect(nodeId, step.name, id, args, slot))
+            Vector(Effect(nodeId, label, id, args, slot))
           case ret: Return[?] =>
-            Vector(EarlyReturn(nodeId, step.name, valueExpr(ret.value, where)))
+            Vector(EarlyReturn(nodeId, label, valueExpr(ret.value, where)))
           case block: Block[?, ?] =>
             steps(block.steps, nodeId)
           case mapped: FlatMap[?, ?, ?] =>
@@ -213,7 +234,7 @@ object Normalize {
               }
             }.toVector
             val slot = register(branch.resultValue, where)
-            Vector(Choose(nodeId, step.name, cases, slot))
+            Vector(Choose(nodeId, label, cases, slot))
           case attempted: us.awfl.dsl.Try[?, ?] =>
             // The public DSL's ValueType match type erases to BaseValue here;
             // all normalization remains compiler-private.
@@ -231,10 +252,10 @@ object Normalize {
               (compiled, valueExpr(rescue._2, s"$where.except.result"))
             }
             val resultSlot = register(attempted.resultValue, where)
-            Vector(Rescue(nodeId, step.name, attemptSteps, result,
+            Vector(Rescue(nodeId, label, attemptSteps, result,
               errSlot, rescueSteps, recovery, resultSlot))
           case raised: us.awfl.dsl.Raise =>
-            Vector(Throw(nodeId, step.name, valueExpr(raised.raise, where)))
+            Vector(Throw(nodeId, label, valueExpr(raised.raise, where)))
           case loop: ForRange[?] =>
             val from = cel(loop.from, s"$where.from")
             val until = cel(loop.to, s"$where.until")
@@ -244,7 +265,7 @@ object Normalize {
               (idxSlot, inner, valueExpr(loop.each._2, s"$where.each.result"))
             }
             val slot = register(loop.resultValue, where)
-            Vector(RepeatRange(nodeId, step.name, from, until, indexSlot, body, result, slot))
+            Vector(RepeatRange(nodeId, label, from, until, indexSlot, body, result, slot))
           case loop: us.awfl.dsl.For[?, ?] =>
             val iterable = valueExpr(loop.in, s"$where.in")
             val (itemSlot, body, result) = scoped {
@@ -257,7 +278,7 @@ object Normalize {
               (slot, inner, valueExpr(loop.each._2, s"$where.each.result"))
             }
             val slot = register(loop.resultValue, where)
-            Vector(RepeatEach(nodeId, step.name, iterable, itemSlot, body, result, slot))
+            Vector(RepeatEach(nodeId, label, iterable, itemSlot, body, result, slot))
           case fold: Fold[?, ?, ?] =>
             val initial = valueExpr(fold.b, s"$where.initial")
             val iterable = valueExpr(fold.list, s"$where.list")
@@ -273,7 +294,7 @@ object Normalize {
               val body = steps(fold.run._1, s"$nodeId.each")
               (itemSlot, body, valueExpr(fold.run._2, s"$where.each.result"))
             }
-            Vector(ReduceEach(nodeId, step.name, initial, iterable, itemSlot,
+            Vector(ReduceEach(nodeId, label, initial, iterable, itemSlot,
               body, result, resultSlot))
           case other =>
             fail(where, s"${other.getClass.getSimpleName} requires native lowering before Rust emission; cannot silently interpret YAML")
@@ -282,7 +303,7 @@ object Normalize {
     }
 
     val compiled = steps(workflow.steps._1, "0")
-    val output = compiled :+ Finish("0.return", "return", valueExpr(workflow.steps._2, s"workflow=$workflowName return"))
+    val output = compiled :+ Finish("0.return", uniqueLabel("return"), valueExpr(workflow.steps._2, s"workflow=$workflowName return"))
     Program(workflow.name.getOrElse(workflowName), output, slots.toVector)
   }
 }

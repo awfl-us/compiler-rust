@@ -88,3 +88,13 @@ seconds and uuid.generate() as an RFC 4122 UUIDv4. Each invocation is
 evaluated normally (multiple calls inside one step may differ). Step results
 materialized into slots are checkpointed by the existing continuation system;
 there is no separate clock/UUID journal.
+
+Repeated source step labels are permitted. Rust normalization assigns unique
+structural node IDs, occurrence-specific slots and deterministic suffixed
+display labels. A result, Try-error or iterator symbol shadows an earlier
+textual symbol in the active scope; leaving a nested branch or loop restores
+the enclosing bindings. Already-resolved references retain their original
+slot IDs through suspend/resume. No public DSL or persistence change is
+needed. If two *identical* source steps have the exact same hash-derived
+result reference, a subsequent textual reference selects the latest visible
+occurrence because the original DSL reference itself is indistinguishable.

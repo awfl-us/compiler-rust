@@ -192,7 +192,7 @@ Extract shared normalization/registry support into dsl or a small shared compile
 
 ### Identity and value model
 - Allocate structural node IDs and symbol/slot IDs deterministically during normalization. Preserve DSL display names separately; branch/loop paths disambiguate repetitions.
-- Resolve all legacy hash-derived result references to slots during the same frontend run. Never recompute hashCode on resume. Detect colliding/unresolved symbols rather than guessing.
+- Resolve legacy hash-derived result references to compiler-private slots during the frontend run. Never recompute hashCode on resume. Repeated step labels and result/error/iterator references are legal: allocate a new stable slot for each binding, shadow its previous textual name only in the active lexical scope, and restore parent bindings after branches/loops. Unresolvable raw references still fail closed. Compiler-internal structural node IDs distinguish effects and checkpoints independently of display step names.
 - Runtime instance key: execution ID + artifact digest + node ID + nested loop indices + branch path + invocation occurrence. Retry attempt is separate from logical effect identity.
 - Use a tagged AwflValue for null, bool, signed integers, doubles, strings, bytes, lists and maps. serde_json::Value alone loses byte distinctions and may blur integer semantics.
 - Persist a versioned tagged encoding; expose ordinary JSON only at API boundaries. Reject unsupported/non-finite values explicitly.
