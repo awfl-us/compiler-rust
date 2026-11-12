@@ -254,6 +254,27 @@ pub fn to_int(value: &AwflValue) -> Result<AwflValue, ValueError> {
 }
 
 /// Google text.to_lower operates on Unicode, not ASCII byte sequences.
+/// Percent-encode UTF-8 bytes as in Google Workflows text.url_encode.
+/// Only ASCII letters/digits and '.', '-', '_' remain literal; notably '~'
+/// and spaces are escaped, and spaces are never converted into '+'.
+pub fn text_url_encode(value: &AwflValue) -> Result<AwflValue, ValueError> {
+    let AwflValue::String(source) = value else {
+        return Err(ValueError::Type("text.url_encode source must be a string".into()));
+    };
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    let mut encoded = String::with_capacity(source.len());
+    for byte in source.bytes() {
+        if byte.is_ascii_alphanumeric() || matches!(byte, b'.' | b'-' | b'_') {
+            encoded.push(char::from(byte));
+        } else {
+            encoded.push('%');
+            encoded.push(char::from(HEX[usize::from(byte >> 4)]));
+            encoded.push(char::from(HEX[usize::from(byte & 0x0f)]));
+        }
+    }
+    Ok(AwflValue::String(encoded))
+}
+
 pub fn text_lowercase(value: &AwflValue) -> Result<AwflValue, ValueError> {
     match value {
         AwflValue::String(text) => Ok(AwflValue::String(text.to_lowercase())),
@@ -487,6 +508,19 @@ fn finite(n: f64) -> Result<AwflValue, ValueError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn url_encoding_matches_workflows_byte_semantics() {
+        assert_eq!(
+            text_url_encode(&AwflValue::String("a/b/c?item=d+e f".into())).unwrap(),
+            AwflValue::String("a%2Fb%2Fc%3Fitem%3Dd%2Be%20f".into())
+        );
+        assert_eq!(
+            text_url_encode(&AwflValue::String("a~_-.é🙂".into())).unwrap(),
+            AwflValue::String("a%7E_-.%C3%A9%F0%9F%99%82".into())
+        );
+        assert!(text_url_encode(&AwflValue::Integer(9)).is_err());
+    }
 
     #[test]
     fn trusted_globals_are_separate_from_arbitrary_environment() {
