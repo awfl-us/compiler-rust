@@ -17,11 +17,11 @@ object CelStdlibSmoke {
     assert(FunctionId.resolve("map.get").contains(FunctionId.MapGet))
     val clock = Normalize(Workflow((List.empty[Step[?, ?]],
       Value[Double](time.now()))))
-    val unsupportedClock = try {
-      RustEmitter.emit(clock)
-      throw new AssertionError("native clock must be journaled before enabling")
-    } catch { case e: Ir.CompileError => e.getMessage }
-    assert(unsupportedClock.contains("sys.now"))
+    val clockSource = RustEmitter.emit(clock).source
+    assert(clockSource.contains("ops::time_now()"))
+    val uuidProgram = Normalize(Workflow((List.empty[Step[?, ?]],
+      Value[String](uuid.generate()))))
+    assert(RustEmitter.emit(uuidProgram).source.contains("ops::uuid_generate()"))
 
     val source = "input"
     val present = Value[Int](CelFunc(CelFunctions.MapGet,

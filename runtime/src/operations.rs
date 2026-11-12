@@ -3,6 +3,20 @@
 use crate::{AwflValue, ValueError};
 use base64::Engine;
 
+/// Current Unix epoch seconds, as a float compatible with Google Workflows sys.now.
+/// Evaluated when encountered; existing step slots/continuations own persistence.
+pub fn time_now() -> Result<AwflValue, ValueError> {
+    let elapsed = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| ValueError::Type("system clock precedes Unix epoch".into()))?;
+    Ok(AwflValue::Float(elapsed.as_secs_f64()))
+}
+
+/// Cryptographically random RFC 4122 version-4 UUID.
+pub fn uuid_generate() -> AwflValue {
+    AwflValue::String(uuid::Uuid::new_v4().to_string())
+}
+
 pub fn int_value(value: &AwflValue) -> Result<i64, ValueError> {
     match value {
         AwflValue::Integer(n) => Ok(*n),
@@ -416,6 +430,26 @@ fn finite(n: f64) -> Result<AwflValue, ValueError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn clock_and_uuid_are_native_independent_values() {
+        for _ in 0..2 {
+            match time_now().unwrap() {
+                AwflValue::Float(seconds) => assert!(seconds.is_finite() && seconds > 0.0),
+                other => panic!("expected float epoch seconds, got {other:?}"),
+            }
+        }
+        let get_id = || match uuid_generate() {
+            AwflValue::String(id) => id,
+            other => panic!("expected UUID string, got {other:?}"),
+        };
+        let first = get_id();
+        let second = get_id();
+        assert_ne!(first, second);
+        let parsed = uuid::Uuid::parse_str(&first).expect("canonical UUID");
+        assert_eq!(parsed.get_version_num(), 4);
+        assert_eq!(parsed.to_string(), first);
+    }
     #[test]
     fn overflow_is_explicit() {
         assert!(matches!(

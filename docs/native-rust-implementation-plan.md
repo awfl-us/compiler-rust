@@ -97,8 +97,8 @@ clock evaluation still needs persisted nondeterministic results on resume.
 | text.to_lower | CelFunctions.Text.ToLower | Unicode case conversion |
 | text.url_encode | CelFunctions.Text.UrlEncode | Reserved characters and escaping |
 | time.format | CelFunctions.Time.Format | Epoch units, timezone/DST and formatting |
-| uuid.generate | CelFunctions.Uuid.Generate | Persist each generated value on replay |
-| sys.now (Scala `time.now()`) | CelFunctions.Time.Now | Epoch seconds; persist each occurrence on replay |
+| uuid.generate | CelFunctions.Uuid.Generate | Native UUIDv4; materialized step results use existing checkpoints |
+| sys.now (Scala `time.now()`) | CelFunctions.Time.Now | Epoch seconds; materialized step results use existing checkpoints |
 | sys.get_env (Scala `environment.get()`) | CelFunctions.Environment.Get | Explicit server-trusted bindings |
 
 **Implemented native CEL subset (November 11, 2026):** `len`, `default`,
@@ -126,8 +126,7 @@ in the manifest. A separate native `Try` fixture proves it through a
 restricted Node logging dispatcher with journal/resume/crash-after-commit tests
 merged in server PR #79; this is **not** yet live-effect validation.
 
-**Remaining for native runtime:** persist nondeterministic `sys.now`
-and `uuid.generate` results; implement `sys.get_env` trust boundaries,
+**Remaining for native runtime:** implement `sys.get_env` trust boundaries,
 `time.format`, broader text functions and Google-differential behavior;
 child workflow/callback connectors and parallel scheduling. The existing
 constructed-AST scan predates workflow source migration. The proposed

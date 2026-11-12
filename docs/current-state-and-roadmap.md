@@ -126,3 +126,12 @@ connector effects runnable.
 - [IPC ABI 3 / protocol 2](native-ipc-v2.md)
 - [Server native execution guide](https://github.com/awfl-us/server/blob/main/workflows/native/README.md)
 - [Workflows repository](https://github.com/awfl-us/workflows)
+
+
+**Native clock and UUID increment (November 12, 2026):** Scala CEL
+functions time.now() and uuid.generate() emit direct Rust calls using system
+Unix seconds and random UUIDv4. Values are evaluated at each expression use;
+repeated occurrences within a step may differ. Persisted step-result slots
+continue to use the existing CFG continuation and server checkpoint, without
+any new journal. TimeUuidSmoke and the native generated-executable test
+verify the actual process output.
