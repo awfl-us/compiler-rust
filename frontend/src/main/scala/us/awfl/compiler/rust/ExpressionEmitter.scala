@@ -75,6 +75,8 @@ object ExpressionEmitter {
         s"ops::to_string(&(${inner(value)}))?"
       case Function(FunctionId.ToInt, Vector(value)) =>
         s"ops::to_int(&(${inner(value)}))?"
+      case Function(FunctionId.TextUrlEncode, Vector(value)) =>
+        s"ops::text_url_encode(&(${inner(value)}))?"
       case Function(FunctionId.TextLowercase, Vector(value)) =>
         s"ops::text_lowercase(&(${inner(value)}))?"
       case Function(FunctionId.MapGet, Vector(map, path)) =>
