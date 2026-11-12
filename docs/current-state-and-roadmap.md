@@ -1,5 +1,28 @@
 # Native Rust execution: verified state, compatibility matrix, and roadmap
 
+## November 12 — native worker hot-path simplification (latest)
+
+Server [#91](https://github.com/awfl-us/server/pull/91) and
+[#92](https://github.com/awfl-us/server/pull/92) are merged and the latter
+deployed. The worker now reuses its own **already committed, fenced**
+Firestore state between transitions, without introducing a second in-memory
+database or Rust process protocol. The hot path eliminated two reads, one
+claim and one renewal on `helpers-ToolDefs`; all effect-intent/outcome
+durability and pre-HTTP cancellation checks remain.
+
+An isolated GCP canary passed **5/5** real compiled Rust executions with
+one journaled HTTP 200 effect each. Its last four runs had a client median
+of **0.917 s**, with **517 ms** median in Jobs. The earlier native warm
+client median was **1.445 s**; the reduction is shared between a pinned
+artifact cache and state reuse, not independently attributed. Regular
+production remains Google-backed and native-disabled. For full measured
+phase timings and limitations, see
+[the comparison report](native-vs-google-tooldefs-2026-11-12.md).
+
+**Next:** representative multi-effect workflow and same-API comparison.
+Do not add another state store or distributed scheduler without evidence.
+
+
 ## November 12 — authenticated native execution and Google differential (latest)
 
 **Live native API execution passed.** Merged server
