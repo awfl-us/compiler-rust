@@ -1,5 +1,20 @@
 # Native durable Parallel / ParallelFor — implementation design
 
+**Merge boundary, November 12, 2026:**
+The compiler side of this design is **merged in
+[compiler-rust #18](https://github.com/awfl-us/compiler-rust/pull/18)**
+(`a285f66`). Real Rust branch entries, nested `Parallel`, indexed
+`ParallelFor`, distinct frames and the fork/join ABI are now on compiler
+`main`. The paired server-side child journal, parent lease/epoch fencing
+and in-process eight-permit execution remain in **open
+[server #82](https://github.com/awfl-us/server/pull/82)**, tested locally
+but not deployed as the active backend. The originally planned distributed
+Firestore permit subsystem was reverted and is not a current requirement.
+No production parallel canary, full Google differential comparison, or
+full application workflow parity has been demonstrated. Next priority:
+[isolated authenticated real-workflow pilot](real-workflow-pilot-and-benchmark-plan.md),
+not more speculative parallel orchestration.
+
 **Scope decision, November 12 (supersedes any exploratory requirements below):**
 Fork/join is sufficiently implemented for the current **one Jobs worker per
 workflow** model. Keep the shared in-process eight-permit budget and durable

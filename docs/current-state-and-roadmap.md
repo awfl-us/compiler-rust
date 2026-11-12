@@ -1,5 +1,42 @@
 # Native Rust execution: verified state, compatibility matrix, and roadmap
 
+## Post-merge checkpoint — November 12, 2026
+
+**Compiler [PR #18](https://github.com/awfl-us/compiler-rust/pull/18) is merged
+into `main`** as [`a285f66`](https://github.com/awfl-us/compiler-rust/commit/a285f66df11efd1b2c9811fbd494dcd45541aa7e).
+The Scala frontend/native Rust runtime now include compiled nested
+`Parallel`/`ParallelFor`, `time.format`, original JSON object-to-string
+template semantics, and per-workflow `NativeMain --only=<FullWorkflowName>`
+selection. This is a **compiler merge**, not a full native deployment:
+paired server [PR #82](https://github.com/awfl-us/server/pull/82) remains
+open, and regular API/Jobs native routing remains disabled. Merged
+[workflow-utils #8](https://github.com/awfl-us/workflow-utils/pull/8) restores
+the original LLM schema expression while keeping the Firebase 404 scope fix.
+
+**Aligned current-source result:** unchanged `workflows/main` at `c84270f`
+against the reverted helper snapshot, using the *same helper on the scanner
+classpath*, yielded **65 Rust source emissions / 66 constructed definitions,
+1 scoped-reference blocker, 0 loading errors**. The only blocker is
+`evals-experiments-SweBenchLite`'s `initEnvResult_71e5323f` reference outside
+its lexical scope. `Summaries` JSON-template variants compile without
+looking up a runtime `example` variable. This measures **source emission**,
+not Cargo builds for all 65, live effects, or Google behavioral equivalence.
+
+**Test evidence:** the object-string Scala regression and actual generated
+Rust ELF preserve literal `${example.title}` / `${example.summary}` even with
+`example` in the input; ordinary executable objects still reject unbound
+references. Focused Scala CLI/collections tests, Cargo build, and the aligned
+workflow audit passed locally. Compiler Rust and compatibility CI checks
+succeeded before the merge. The longer Scala-to-native CI was still running
+at merge time and later **passed** on the merged PR head (GitHub run
+`43303204990`). This does not establish live Jobs behavior.
+
+**Next:** run one unchanged effectful workflow through the authenticated
+Workflows → Cloud Tasks → Jobs → Firestore path in isolation; compare
+results and end-to-end latency with Google Workflows, then fix only observed
+gaps. Keep infrastructure/IAM changes in Terraform. Do not add another
+parallel scheduler or weaken scope validation to inflate the audit.
+
 **Current execution plan (November 12):** [Real-workflow pilot and benchmark](real-workflow-pilot-and-benchmark-plan.md).
 That plan and the scope decision immediately below **supersede historical
 parallel delivery and release-gate checklists later in this document**.
@@ -52,7 +89,7 @@ deferred; do not generalize compiler scoping just for it. Follow the
 
 ## November 12 — genuine three-level nested Parallel and recursive fork fencing
 
-New draft compiler fixture `ParallelIrSmoke` constructs **unchanged Scala DSL**
+The now-merged compiler fixture `ParallelIrSmoke` constructs **unchanged Scala DSL**
 `Parallel` nodes at three nesting levels with deliberately repeated `Call`
 labels. That exposed a real Rust normalizer gap: the original DSL's
 `Parallel` is a `Step[NoValueT, NoValue]` *statement*. The compiler had
@@ -181,9 +218,9 @@ All actual executable object/step references remain strictly scope-checked.
 The 55/66 historical measurement still uses old helper dependencies; rerun
 an aligned source audit before comparing current coverage.
 
-The original November 11 compatibility figures below are **historical baseline snapshots**; in particular, rows stating that `Parallel`/`ParallelFor` are not implemented refer to the then-merged baseline, **not** current draft branches. Do not change those old audit counts without rerunning the identical constructed-AST audit against the newer compiler. The current changes are in **draft** [compiler-rust #18](https://github.com/awfl-us/compiler-rust/pull/18) and [server #82](https://github.com/awfl-us/server/pull/82) (`67e1184`), not on `main`.
+The original November 11 compatibility figures below are **historical baseline snapshots**; in particular, rows stating that `Parallel`/`ParallelFor` are not implemented refer to the then-merged baseline, **not** current compiler `main`. Do not change those old audit counts without rerunning the identical constructed-AST audit against the newer compiler. Compiler [#18](https://github.com/awfl-us/compiler-rust/pull/18) has merged as `a285f66`; paired server [#82](https://github.com/awfl-us/server/pull/82) remains an unmerged PR.
 
-- **Implemented in drafts:** original Scala `Parallel` and `ParallelFor` lower to separate Rust entry PCs and branch-local slot snapshots, with a version-pinned `native.parallel` fork. The Jobs worker creates deterministic, digest-pinned child records, dispatches bounded concurrent child effects through the existing journal, records one parent join, and reconstructs indexed loop results. Parent `Try` handles **confirmed** failed children, not uncertain remote outcomes. A parent fork lease is refreshed during execution; a shared *in-process* permit queue limits nested work without reserving permits while awaiting children.
+- **Merged compiler; server draft:** original Scala `Parallel` and `ParallelFor` lower to separate Rust entry PCs and branch-local slot snapshots, with a version-pinned `native.parallel` fork. The still-unmerged Jobs worker PR #82 creates deterministic, digest-pinned child records, dispatches bounded concurrent child effects through the existing journal, records one parent join, and reconstructs indexed loop results. Parent `Try` handles **confirmed** failed children, not uncertain remote outcomes. A parent fork lease is refreshed during execution; a shared *in-process* permit queue limits nested work without reserving permits while awaiting children.
 - **Verified:** Scala `ParallelIrSmoke`; four generated Rust crates built and Clippy-clean; a real compiled binary + worker + transaction-shaped in-memory Firestore store test covers overlapping HTTP effects, zero/one/many indexed lanes, crash after committed children before parent journal, replay, caught/uncaught `Raise`, and uncertain sibling outcomes. Server native discovery suite **85 tests: 63 passed, 0 failed, 22 skipped** (prior to the added emulator cases). **New:** the compiled Rust ELF suites passed **4/4 tests against the actual local Firestore emulator**—concurrent branches + fresh-store replay with duplicate-parent-lease rejection, takeover after injected post-child/pre-parent crash, zero/one/many indexed `ParallelFor` iterations, and parent cancellation fencing. Compiler GitHub Actions and paired server GitHub Actions passed on the prior revisions, including the first three emulator cases; updated four-case CI is being verified on the draft.
 - **Subsequent update:** independent Node worker death and parent lease
   takeover, nested three-level generated Rust forks and full ancestor
@@ -288,8 +325,9 @@ remaining compiler/runtime work belongs in the respective backends and server.
 | --- | --- | --- | --- |
 | `awfl-us/dsl` | PR [#2](https://github.com/awfl-us/dsl/pull/2), constants only, public AST unchanged | Application source name substitution deliberately deferred | No schema or DSL-API migration required for Rust fixtures |
 | `awfl-us/compiler-yaml` | PR [#1](https://github.com/awfl-us/compiler-yaml/pull/1), canonical names map back to Google while old literals still work | Continue YAML differential fixtures | No YAML routing changes |
-| `awfl-us/compiler-rust` | PRs [#1–#7](https://github.com/awfl-us/compiler-rust/pulls?q=is%3Apr+is%3Amerged), ABI3 frontend, CEL subset, literals, `in`/`//`, `Try`/`Raise`, unchanged Product, catch-only-PC fix and default-DSL logger regression | PR #7 merged as [`588dc2f`](https://github.com/awfl-us/compiler-rust/commit/588dc2f0a96ef037e35d55333b33b445cfb03f7a); full local suite and GitHub CI passed | No native production routing switch |
-| `awfl-us/server` | PR [#72](https://github.com/awfl-us/server/pull/72), native launcher/persistence; PR [#78](https://github.com/awfl-us/server/pull/78), confirmed-HTTP-error recovery; PR [#79](https://github.com/awfl-us/server/pull/79), bounded `log.write`, capability gates and real Rust/Node/Firestore-compatible recovery tests | PR #79 merged as [`250f57e`](https://github.com/awfl-us/server/commit/250f57e58ff1e543dcd0efc4e3f5c005a899596e); post-journal crash test is green | Code merge is not live-traffic approval; keep native routing off |
+| `awfl-us/compiler-rust` | PRs [#1–#7](https://github.com/awfl-us/compiler-rust/pulls?q=is%3Apr+is%3Amerged), plus **[#18](https://github.com/awfl-us/compiler-rust/pull/18)** (`a285f66`), ABI3, CEL, `Try`/`Raise`, nested `Parallel`/`ParallelFor`, `time.format`, JSON-text templates and `--only` variant selection | Compiler code is on `main`; source-emission audit **65/66**, focused native tests pass | No server PR #82 merge or native production routing switch is implied |
+| `awfl-us/server` | PR [#72](https://github.com/awfl-us/server/pull/72), native launcher/persistence; PR [#78](https://github.com/awfl-us/server/pull/78), confirmed-HTTP-error recovery; PR [#79](https://github.com/awfl-us/server/pull/79), bounded `log.write`, capability gates and real Rust/Node/Firestore-compatible recovery tests | **PR [#82](https://github.com/awfl-us/server/pull/82) remains open:** paired durable fork/join/Jobs worker and test improvements | Code merge is not live-traffic approval; keep native routing off |
+| `awfl-us/workflow-utils` | **[#8](https://github.com/awfl-us/workflow-utils/pull/8)** restores original `Llm.chatJson` object-to-string template; keeps Firebase 404 recovery fix | CI green; Rust compiler implements original template semantics | No public helper schema replacement required |
 | `awfl-us/workflows` | PR [#3](https://github.com/awfl-us/workflows/pull/3), private GCS static-musl native publisher and `NativePilot` | No application workflows migrated; published pilot is no-effect only | Keep Google workflow deployments active; GCS state and native artifact bucket are separate from cloud-env storage |
 
 ## Executable feature matrix
@@ -304,7 +342,9 @@ remaining compiler/runtime work belongs in the respective backends and server.
 | `Try`/`Raise` and nested rethrows | **Merged + tested** | CFG exception edges, explicit terminal `Failed`, pure CEL errors and confirmed HTTP failure recovery |
 | Existing DSL default `Try` logger | **Merged and locally verified** | Compiler PR #7 fixes catch-only PC; server PR #79 journals bounded `log.write`; post-journal crash restart tested |
 | Ordinary trusted HTTP GET/POST/PATCH/DELETE | **Local adapter and bounded integration tests** | Jobs IAM/OIDC, identity override, allowlist, HTTP-error catch; no production live-effect approval, uncertain outcome reconciliation missing |
-| `Parallel`, `ParallelFor` | **Draft implementation; not merged or production-validated** | Compiler #18/server #82 pass compiled-ELF/fake-store and four local Firestore emulator tests; descendant cancellation, independent multi-process workers and deployed Jobs remain gates |
+| `Parallel`, `ParallelFor` | **Compiler merged; server PR #82 open; not production-validated** | Compiler #18 generates nested fork/join and indexed loops; paired server worker branch passes compiled-ELF and Firestore emulator tests; no deployed Jobs parallel canary or complete Google differential parity |
+| `str(CelValue(obj(...)))` literal JSON text | **Merged + tested** | Original DSL/YAML semantics retained; `${example.title}` stays a string placeholder, while executable unbound object references still fail |
+| `NativeMain --only=<FullWorkflowName>` | **Merged + tested** | Compiles an individual named variant; default retains all-variant behavior, unknown selector fails |
 | Callback create/await, child workflow `workflow.run` | **Not implemented** | Need durable callback inbox, child-start idempotency, timeout and cancellation propagation |
 | Storage object get, Pub/Sub publish | **Not implemented** | Existing Google connector argument/return contracts need explicit server-side adapters |
 | Conversion/text/bytes/time/UUID/environment and arbitrary CEL | **Partial or not implemented** | Native clock/UUID are direct expressions; remaining overloads and authenticated env bindings need implementation; unknown names fail compile |
@@ -365,7 +405,7 @@ connector effects runnable.
 
 **Gate:** crash-injection matrix and tenant isolation tests pass for every supported effect, including concurrent takeovers and actual remote uncertainty; no untrusted native process inherits server credentials.
 
-### P3 — Durable `Parallel` and `ParallelFor` (implemented on draft branches; historical specification)
+### P3 — Durable `Parallel` and `ParallelFor` (compiler merged, server draft; historical specification)
 
 - Keep original DSL nodes. Normalize them to compiler-private fork/join operations with stable branch/iteration identifiers and isolated frame slots.
 - Store branch scheduling, cancellation, result/error states and join completion in server-owned durable records; use bounded concurrency rather than sequentializing or spawning unconstrained threads. Define legacy Google list ordering and shared-error semantics with differential fixtures.

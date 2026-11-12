@@ -1,5 +1,19 @@
 # Next milestone: real AWFL workflow execution and Google comparison
 
+**Post-merge checkpoint — November 12, 2026:**
+Compiler [#18](https://github.com/awfl-us/compiler-rust/pull/18)
+is **merged into `main`** as `a285f66`, including nested fork/join,
+JSON-text schema templates, `time.format`, and single-variant compilation.
+Merged [workflow-utils #8](https://github.com/awfl-us/workflow-utils/pull/8)
+restored the original `Llm.chatJson` template helper. Server
+[#82](https://github.com/awfl-us/server/pull/82) is still **open**.
+The aligned source-emission audit is **65/66**, with the remaining
+`initEnvResult_*` lexical-scope blocker intentionally deferred.
+Nothing in these merges establishes the awaited authenticated **effectful**
+Workflows → Cloud Tasks → Jobs → Firestore execution or a matched
+Google/native benchmark. Those are still the next concrete tasks.
+All IAM/infra adjustments belong in Terraform.
+
 **Decision / owner:** AWFL native Rust compiler + server, November 12, 2026.
 **Status:** plan only. No live effectful native canary, Google differential
 result, or production traffic migration has been completed under this plan.
@@ -78,9 +92,9 @@ still essential; they are **not** the removed distributed permit subsystem.
 | Local real Rust IPC timing | 40 invocations per stage; prepare-effect median **6.15 ms**, resume median **3.53 ms** | Cloud Tasks, Firestore, artifact lookup, actual HTTP, cold Jobs startup, or a Google speedup |
 | Earlier isolated pure GCP canary | One **6,836 ms** enqueue-to-result observation including startup | An effectful workflow or statistically useful latency comparison |
 
-Both draft branches were CI-green after the simplification: compiler-rust
-PR #18 / server PR #82. Confirm the **latest** commit/run before using this
-as a deployment preflight. Previous 65/66 constructed-AST *source-emission*
+Prior branch checks were green after simplification, and compiler-rust
+PR #18 is now merged while server PR #82 remains open. Confirm the **latest**
+commit/run before using this as a deployment preflight. The 65/66 constructed-AST *source-emission*
 coverage is not 65 runnable workflows; one known `initEnvResult_*` out-of-
 scope reference remains deliberately deferred.
 
