@@ -60,7 +60,9 @@ pub fn environment_get(
     };
     if let Some(value) = fallback {
         if !matches!(value, AwflValue::String(_)) {
-            return Err(ValueError::Type("sys.get_env default must be a string".into()));
+            return Err(ValueError::Type(
+                "sys.get_env default must be a string".into(),
+            ));
         }
     }
     if let Some(key) = trusted_key(name) {
@@ -70,7 +72,9 @@ pub fn environment_get(
     }
     match fallback {
         Some(default) => Ok(default.clone()),
-        None => Err(ValueError::MissingField(format!("trusted environment variable {name}"))),
+        None => Err(ValueError::MissingField(format!(
+            "trusted environment variable {name}"
+        ))),
     }
 }
 
@@ -492,7 +496,10 @@ mod tests {
     fn trusted_globals_are_separate_from_arbitrary_environment() {
         let globals = std::collections::BTreeMap::from([
             ("GOOGLE_CLOUD_WORKFLOW_ID".into(), "example".into()),
-            ("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID".into(), "native_1234".into()),
+            (
+                "GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID".into(),
+                "native_1234".into(),
+            ),
             ("GOOGLE_CLOUD_PROJECT_ID".into(), "awfl-us".into()),
             ("GOOGLE_CLOUD_LOCATION".into(), "us-central1".into()),
         ]);
@@ -524,9 +531,7 @@ mod tests {
         );
         assert!(environment_get(&globals, &AwflValue::String("PATH".into()), None).is_err());
         assert!(trusted_global(&std::collections::BTreeMap::new(), "execution.id").is_err());
-        assert!(environment_get(
-            &globals, &AwflValue::Integer(1), None
-        ).is_err());
+        assert!(environment_get(&globals, &AwflValue::Integer(1), None).is_err());
     }
 
     #[test]
