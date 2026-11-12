@@ -1,5 +1,34 @@
 # Native Rust execution: verified state, compatibility matrix, and roadmap
 
+## November 12 — simplify parallel scope; prioritize unchanged workflows
+
+**Decision:** native `Parallel` and `ParallelFor` are implemented sufficiently
+for the current **single-Jobs-worker per workflow** execution architecture.
+The per-root process-local eight-permit budget, durable branch records,
+checkpoint/effect journals, parent lease/epoch fencing and crash recovery
+remain. The experimental distributed Firestore permit layer in paired server
+PR #82 was **reverted** (not deployed): there is no independent Jobs worker
+per branch to coordinate. Global fleet quotas and orphan cleanup are deferred
+unless real usage establishes a need; they are not blockers to testing the
+existing architecture.
+
+**Next milestone: existing AWFL workloads.** The unchanged
+`LoadConversationHistory.scala` source from the workflows repository compiles
+to a native Rust ELF. Its real IPC effect request, continuation and replay
+pass the compiler's Python smoke test. The server's Jobs worker also executed
+that same compiled workflow with a **mocked** HTTP response: it recorded the
+effect once, produced `{ "status": "success" }`, and replayed the completed
+execution without sending the HTTP request again. This will be a mandatory
+test in the paired server CI. No live service call, production rollout or
+Google Workflows latency comparison has been performed in this checkpoint.
+
+**Near-term order:** (1) retain these real-workflow tests in CI, (2) test a
+representative effectful workflow through the authenticated Jobs path behind
+the existing native flag, (3) compare correctness and step-to-step latency
+with its Google Workflows version, and (4) address only concrete compiler or
+runtime gaps uncovered. The one known out-of-scope `initEnv` lexical-scope
+case remains deferred; do not generalize compiler scoping just for it.
+
 **Evidence date:** 2026-11-12 (original baseline below: 2026-11-11). **Status:** experimental, opt-in backend; **not production-ready**. This document distinguishes *merged*, *verified on a feature branch*, and *unimplemented*. It does not claim that passing tests equals Google Workflows parity.
 
 ## November 12 — genuine three-level nested Parallel and recursive fork fencing
