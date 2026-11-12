@@ -17,6 +17,63 @@ pub fn uuid_generate() -> AwflValue {
     AwflValue::String(uuid::Uuid::new_v4().to_string())
 }
 
+/// Only these Google Workflows built-ins may be supplied by the authenticated
+/// server. User workflow inputs and the executable's process environment are
+/// never sources for these values.
+fn trusted_key(name: &str) -> Option<&'static str> {
+    match name {
+        "workflow.id" | "GOOGLE_CLOUD_WORKFLOW_ID" => Some("GOOGLE_CLOUD_WORKFLOW_ID"),
+        "execution.id" | "GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID" => {
+            Some("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID")
+        }
+        "cloud.project_id" | "GOOGLE_CLOUD_PROJECT_ID" => Some("GOOGLE_CLOUD_PROJECT_ID"),
+        "cloud.region" | "GOOGLE_CLOUD_LOCATION" => Some("GOOGLE_CLOUD_LOCATION"),
+        _ => None,
+    }
+}
+
+/// Resolve a compiler-recognized global from the trusted execution envelope.
+/// Absence is an error; in particular, NEVER fall back to input.env or std::env.
+pub fn trusted_global(
+    globals: &std::collections::BTreeMap<String, String>,
+    name: &str,
+) -> Result<AwflValue, ValueError> {
+    let key = trusted_key(name)
+        .ok_or_else(|| ValueError::Type(format!("unsupported native global {name}")))?;
+    globals
+        .get(key)
+        .cloned()
+        .map(AwflValue::String)
+        .ok_or_else(|| ValueError::MissingField(format!("trusted global {key}")))
+}
+
+/// Native sys.get_env supports the same trusted built-ins as DSL globals.
+/// Arbitrary environment variables are never readable from the subprocess.
+/// An explicit string fallback works for absent or unsupported keys.
+pub fn environment_get(
+    globals: &std::collections::BTreeMap<String, String>,
+    name: &AwflValue,
+    fallback: Option<&AwflValue>,
+) -> Result<AwflValue, ValueError> {
+    let AwflValue::String(name) = name else {
+        return Err(ValueError::Type("sys.get_env name must be a string".into()));
+    };
+    if let Some(value) = fallback {
+        if !matches!(value, AwflValue::String(_)) {
+            return Err(ValueError::Type("sys.get_env default must be a string".into()));
+        }
+    }
+    if let Some(key) = trusted_key(name) {
+        if let Some(value) = globals.get(key) {
+            return Ok(AwflValue::String(value.clone()));
+        }
+    }
+    match fallback {
+        Some(default) => Ok(default.clone()),
+        None => Err(ValueError::MissingField(format!("trusted environment variable {name}"))),
+    }
+}
+
 pub fn int_value(value: &AwflValue) -> Result<i64, ValueError> {
     match value {
         AwflValue::Integer(n) => Ok(*n),
@@ -430,6 +487,47 @@ fn finite(n: f64) -> Result<AwflValue, ValueError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn trusted_globals_are_separate_from_arbitrary_environment() {
+        let globals = std::collections::BTreeMap::from([
+            ("GOOGLE_CLOUD_WORKFLOW_ID".into(), "example".into()),
+            ("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID".into(), "native_1234".into()),
+            ("GOOGLE_CLOUD_PROJECT_ID".into(), "awfl-us".into()),
+            ("GOOGLE_CLOUD_LOCATION".into(), "us-central1".into()),
+        ]);
+        assert_eq!(
+            trusted_global(&globals, "execution.id").unwrap(),
+            AwflValue::String("native_1234".into())
+        );
+        assert_eq!(
+            trusted_global(&globals, "cloud.project_id").unwrap(),
+            AwflValue::String("awfl-us".into())
+        );
+        assert_eq!(
+            environment_get(
+                &globals,
+                &AwflValue::String("GOOGLE_CLOUD_LOCATION".into()),
+                None
+            )
+            .unwrap(),
+            AwflValue::String("us-central1".into())
+        );
+        assert_eq!(
+            environment_get(
+                &globals,
+                &AwflValue::String("UNLISTED_ENV".into()),
+                Some(&AwflValue::String("safe-default".into()))
+            )
+            .unwrap(),
+            AwflValue::String("safe-default".into())
+        );
+        assert!(environment_get(&globals, &AwflValue::String("PATH".into()), None).is_err());
+        assert!(trusted_global(&std::collections::BTreeMap::new(), "execution.id").is_err());
+        assert!(environment_get(
+            &globals, &AwflValue::Integer(1), None
+        ).is_err());
+    }
 
     #[test]
     fn clock_and_uuid_are_native_independent_values() {
