@@ -38,72 +38,68 @@ Source snapshots (Git tree SHAs, not asserted commit SHAs):
 - server/workflows/callbacks/index.js already dispatches mcp_request callbacks locally, while workflow callbacks forward to Google. Extend the common callback service with a Rust execution kind.
 - server/workflows/exec/stop.js traverses execution relationships and cancels Google executions. Backend-aware cancellation belongs here, not in a second MCP-specific executor.
 
-## 2. Backend-neutral operation names WITHOUT changing the existing DSL AST
+## 2. Standard CEL names and backend-neutral Call connectors
 
-**Architecture decision (2026-11-11, supersedes the original typed-DSL plan):**
-`awfl-us/dsl` must retain **exactly** its existing `CelFunc(name: String,
-params: List[Cel])`, `CelOp(left, op: String, right)` and `Call(name, call:
-String, args)` representation, along with its original global Value
-placeholders, CEL operators, and helpers. Do not add `TypedCall`, `CelFunction`,
-`CelBinary`, `CelUnary`, `CelGlobal`, new typed literal AST, DSL-level
-`OperationRegistry`, or operator/return-value rewrites. The commit that added
-these classes was an overextension and has been corrected on the DSL PR.
+**Architecture decision (November 11, 2026; refined November 12):**
+Retain the original Scala `CelFunc(name: String, params: List[Cel])`,
+`CelOp`, and `Call(name, call: String, args)` AST nodes. No additional public
+AST variants, typed operations, or rewritten workflow control flow.
 
-The **only DSL functionality added** for Rust interoperability is a pair of
-ordinary backend-neutral string constant namespaces:
+**Standard-library functions use their existing CEL names verbatim.** The DSL
+exposes ordinary string constants organized by module and a separate
+top-level `us.awfl.dsl` objects whose helpers return the original `CelFunc`:
 
 ```scala
-CelFunc(CelFunctions.Length, myList.cel)
-Call("send", CallOperations.HttpPost, obj(args))
+import us.awfl.dsl.*
+
+val now = Value[Double](time.now())      // CelFunc(CelFunctions.Time.Now)
+val id = map.get(CelConst("payload"), "id") // CelFunc("map.get", ...)
+val lower = text.to_lower(id)              // CelFunc("text.to_lower", ...)
 ```
 
-Both constructors are the *original* constructors. Migration of existing
-workflows consists of replacing their literal function/call-name strings with
-these constants, without changing the expression/step shape or Scala type
-signatures. `CelOp` is unchanged and remains string-operator based. Helpers in
-`dsl/Value.scala` also only substitute name constants. The original
-`dsl/Global.scala` placeholders remain unchanged; the Rust compiler handles
-trusted context separately, without imposing new DSL classes.
+`CelFunctions.Time.Now` is the string `"sys.now"` — not `"clock.now"`. Scala `time.now()` avoids shadowing Scala `sys`.
+`CelFunctions.Map.Get` is `"map.get"`. Existing flat constants remain as
+transitional source-compatibility aliases, but now point to the original CEL
+names. `compiler-yaml` can emit these directly through its existing
+`CelFunc` encoder; Rust resolves the exact names in a private enum and
+validates support and arity. The helpers introduce no evaluated time, state,
+or new step type on their own.
 
-`compiler-yaml` maps each constant's semantic wire string to its original
-Google CEL function or connector name (`value.length` -> `len`, `workflow.run`
--> `googleapis.workflowexecutions.v1.projects.locations.workflows.executions.run`).
-During migration it **continues to accept the existing literal Google names**.
-The Rust compiler matches the constant strings to an **internal-only**
-operation enum with validated arity and native implementation support.
-Unknown names fail with a workflow/node diagnostic. The Rust compiler does
-not run a general CEL interpreter and does not silently fall back to YAML.
+**Connector names in `Call` are different:** `CallOperations.HttpPost`,
+`CallOperations.WorkflowRun`, `CallOperations.CallbackAwait`, etc. remain
+backend-neutral IDs. The YAML backend maps them to Google connectors, while
+the native backend maps them to server-owned operations.
 
-Keep operation semantics, arity/type checks, runtime capabilities, native
-source generation and error parity in the compilers and native runtime, **not
-in the public DSL**. New semantics are added there when backed by tests.
+This change supersedes the earlier proposed `value.length`,
+`bytes.base64_encode`, `text.lowercase`, and `clock.now` aliases for
+standard functions. Raw `Value("sys.now()")` occurrences can be replaced by
+`Value(time.now())` without changing their surrounding workflow logic; native
+clock evaluation still needs persisted nondeterministic results on resume.
 
-### Expression inventory and exact proposed mapping
+### Expression inventory (standard names, no renaming)
 
-| Existing name | Proposed ID | Required compatibility |
+| Standard CEL name | DSL constant | Required compatibility |
 | --- | --- | --- |
-| default | value.default | Null handling, evaluation/error behavior |
-| get_type | value.type | Google-compatible type labels, including bytes |
-| int | value.to_int | Conversion failures, truncation, range |
-| string | value.to_string | Supported input types and formatting |
-| len | value.length | Lists, maps, strings, bytes as supported |
-| map.get | map.get | Single key and key-path list; missing versus null |
-| map.merge | map.merge | Merge direction and shallow behavior |
-| list.concat | list.concat | Append exactly **one element** to a copy of a list (even when that element is a list); never flatten |
-| json.decode | json.decode | String/bytes, numeric representation, errors |
-| json.encode | json.encode_bytes | Produces bytes, not a JSON string |
-| json.encode_to_string | json.encode_string | Escaping and representation |
-| base64.encode | bytes.base64_encode | Byte input/output string |
-| text.encode | text.encode | Explicit/default encoding |
-| text.decode | text.decode | Byte input and decode errors |
-| text.split | text.split | Empty separator, empty segments, Unicode |
-| text.substring | text.substring | Index units, bounds, end exclusion |
-| text.to_lower | text.lowercase | Unicode behavior |
-| text.url_encode | text.url_encode | Reserved characters; avoid double encoding |
-| time.format | time.format | Epoch units, timezone/DST and formatting |
-| uuid.generate | uuid.generate | Journal each evaluated occurrence |
-| sys.now (raw strings) | clock.now | Epoch seconds; journal each occurrence |
-| sys.get_env (backend-generated) | environment.get | Explicit allowed bindings, not arbitrary worker environment |
+| default | CelFunctions.Core.Default | Null handling and evaluation/error behavior |
+| get_type | CelFunctions.Core.TypeOf | Google-compatible type labels, including bytes |
+| int | CelFunctions.Core.ToInt | Conversion failures, truncation and range |
+| string | CelFunctions.Core.ToString | Supported input types and formatting |
+| len | CelFunctions.Core.Length | Lists, maps, strings, bytes as supported |
+| map.get | CelFunctions.Map.Get | Key paths, missing values and null |
+| map.merge | CelFunctions.Map.Merge | Shallow merge direction and precedence |
+| list.concat | CelFunctions.List.Concat | Append one element, never flatten |
+| json.decode | CelFunctions.Json.Decode | String/bytes, numeric representation and errors |
+| json.encode | CelFunctions.Json.Encode | Produces JSON bytes, not a JSON string |
+| json.encode_to_string | CelFunctions.Json.EncodeToString | JSON escaping and formatting |
+| base64.encode | CelFunctions.Base64.Encode | Byte input and padded/unpadded output |
+| text.encode / text.decode | CelFunctions.Text.Encode / Decode | Character sets and errors |
+| text.split / text.substring | CelFunctions.Text.Split / Substring | Unicode/index behavior |
+| text.to_lower | CelFunctions.Text.ToLower | Unicode case conversion |
+| text.url_encode | CelFunctions.Text.UrlEncode | Reserved characters and escaping |
+| time.format | CelFunctions.Time.Format | Epoch units, timezone/DST and formatting |
+| uuid.generate | CelFunctions.Uuid.Generate | Persist each generated value on replay |
+| sys.now (Scala `time.now()`) | CelFunctions.Time.Now | Epoch seconds; persist each occurrence on replay |
+| sys.get_env (Scala `environment.get()`) | CelFunctions.Environment.Get | Explicit server-trusted bindings |
 
 **Implemented native CEL subset (November 11, 2026):** `len`, `default`,
 `get_type`, `map.get` (including nested key paths), `map.merge` (shallow),
@@ -130,14 +126,12 @@ in the manifest. A separate native `Try` fixture proves it through a
 restricted Node logging dispatcher with journal/resume/crash-after-commit tests
 merged in server PR #79; this is **not** yet live-effect validation.
 
-**Remaining:** numerical/string conversion, base64, text helpers, time/UUID,
-environment binding, and wider CEL operators are deliberately unsupported
-until individually implemented and tested. The current JSON implementation
-rejects bytes *as a value being encoded* and treats text/bytes as input to
-decode; exact Google error and encoding-edge parity still need differential
-tests. No existing workflows were migrated to new constants.
-
-Twenty distinct literal CelFunc names occur in the four scanned Scala repositories. clock.now and environment.get additionally cover raw expression/backend-generated behavior. list.concat is also emitted directly by compiler-yaml. The source-location appendix below records all literal CelFunc sites, including comments where present; compiled-AST validation will be the authoritative coverage check.
+**Remaining for native runtime:** persist nondeterministic `sys.now`
+and `uuid.generate` results; implement `sys.get_env` trust boundaries,
+`time.format`, broader text functions and Google-differential behavior;
+child workflow/callback connectors and parallel scheduling. The existing
+constructed-AST scan predates workflow source migration. The proposed
+`clock.now` and `environment.get` aliases are no longer used.
 
 ### Call inventory and exact proposed mapping
 

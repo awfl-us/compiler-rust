@@ -67,8 +67,10 @@ See the [protocol](../docs/native-ipc-v2.md) and
 [CFG architecture](../docs/native-control-flow-refactor-plan.md).
 
 The native compiler consumes the **original** `CelFunc`, `CelOp`, and `Call`
-DSL classes. Use `CelFunctions.Length`, `CallOperations.HttpPost`, and other
-backend-neutral operation-name constants in the existing constructors. The
+DSL classes. Standard CEL names remain unchanged: `time.now()` and
+`map.get(...)` from `import us.awfl.dsl.*` emit ordinary `CelFunc` nodes using
+`CelFunctions.Time.Now` and `CelFunctions.Map.Get` (exact standard names).
+Only `CallOperations.HttpPost` and other connector names are backend-neutral. The
 Rust frontend converts these strings into **compiler-private** operation IDs
 and compiled expressions. Operators keep their original `CelOp` representation;
 unknown function/call IDs fail with node-context diagnostics. YAML continues
