@@ -1,10 +1,13 @@
 # Native Rust workflow compiler and server execution plan
 
-Status: Scala-to-Rust ABI 3 implemented for sequential CFG, original `Try`/`Raise`,
-CEL subset and resumable HTTP effects; isolated pure GCP canary passed. Native
-production routing remains disabled. **Parallel, callbacks, children, provider
-connectors, reconciliation and OS sandbox are not ready.**
-Original plan: 2026-11-10; verification review: 2026-11-11.
+Status (2026-11-12): Scala-to-Rust ABI 3 implemented for sequential CFG,
+original `Try`/`Raise`, CEL subset and resumable HTTP effects; isolated pure
+GCP canary passed. **Native parallel fork/join is implemented and CI-tested
+on draft compiler #18 and server #82, but not merged or production validated.**
+Callbacks, nested child workflows, provider connectors, distributed admission,
+uncertain remote-effect reconciliation and OS sandbox are not ready.
+Production routing remains disabled.
+Original plan: 2026-11-10; verification reviews: 2026-11-11 and 2026-11-12.
 For the authoritative merged-versus-branch inventory, tests, remaining risk,
 prioritized milestones and acceptance gates, see
 [current-state-and-roadmap.md](current-state-and-roadmap.md).
@@ -289,6 +292,34 @@ Run equal-input benchmarks: 1,000 pure operations, 100 local mock HTTP steps, ne
 
 ## 6. Implementation phases and completion gates
 
+### Newer checkpoint — November 12, 2026 (draft parallel implementation)
+
+The historical November 11 checkpoint following this section records what was
+merged **then**, not the present state of the new parallel feature branches.
+Compiler-rust [#18](https://github.com/awfl-us/compiler-rust/pull/18)
+(`f4f4ff7`) and server [#82](https://github.com/awfl-us/server/pull/82)
+(`33cc4ba`) implement independent Rust branch entries, isolated lexical
+snapshots, bounded child worker concurrency, pinned durable lane records,
+parent join/fork journals, deterministic indexed `ParallelFor` results,
+confirmed failure propagation and replay after committed child effects.
+Actual generated Rust binaries execute through the native Jobs worker.
+
+Compiler and server CI are green on the preceding commits; local native server
+discovery reports **85 tests, 63 passing, 0 failing, 22 skipped** before the
+new emulator cases. **Three real Firestore emulator tests** now pass with a
+generated Rust ELF: concurrent child effects/fresh-store replay, recovery
+after a parent crash following child commits, and terminal parent cancellation
+fencing. This does **not** establish separate-process takeover, recursive
+child cancellation, distributed Jobs or general-workflow correctness.
+
+The next acceptance gates are: real emulator transactions/lease contention
+and crash windows; child/root cancellation plus unresolved remote outcome
+policy; nested and cross-process fanout budget; compatibility against
+unchanged real workflows and YAML error semantics; authenticated GCP canary;
+then latency, throughput, cost and rollback evaluation. Parallel production
+routing remains disabled. See [parallel implementation design and gate
+checklist](durable-parallel-fork-join.md).
+
 ### Implementation checkpoint — 2026-11-11 (tested, still experimental)
 
 **Merged / completed within tested scope:** original DSL constant-only change
@@ -319,7 +350,7 @@ exercise live HTTP, callbacks, child workflows, user-facing APIs, native
 logging, or general agent performance. The Cloud Run Jobs normal revision
 retains `AWFL_NATIVE_EXECUTION_ENABLED=0`.
 
-**Still unimplemented or materially unverified:** `Parallel`/`ParallelFor`,
+**Still unimplemented or materially unverified at the November 11 baseline:** `Parallel`/`ParallelFor`,
 callbacks, child workflow launch/await, storage/Pub/Sub adapters, many CEL
 functions/overloads, version-safe environment globals,
 Google differential error/retry semantics, remote-uncertain outcome
@@ -372,8 +403,10 @@ remote uncertain-outcome reconciliation remains unsolved.
 Gate: resume yields correct results, committed effects do not repeat, stale workers cannot commit, unknown outcomes are visible.
 
 ### Phase 4 — Callbacks, children, parallelism and connectors
-**Not implemented.** Treat this phase as a separate durable server
-orchestration project; adding IR lowering alone is not enough.
+**Partially implemented on draft branches (#18/#82):** native parallel branch
+dispatch and fork/join have real compiled-binary integration tests, but
+callbacks, children, cancellation and distributed reliability remain pending.
+IR lowering alone is not sufficient for production readiness.
 - Implement callback inbox/timers, nested workflow sync/async execution, cancellation propagation.
 - Add storage and messaging adapters with existing response envelopes.
 - Add parallel branches/loops, bounded scheduling, atomic joins/results and persisted errors.

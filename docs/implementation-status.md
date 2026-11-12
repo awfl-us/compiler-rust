@@ -1,4 +1,12 @@
-# Native Rust implementation status — November 11, 2026
+# Native Rust implementation status — November 12, 2026
+
+## Latest parallel checkpoint (2026-11-12)
+
+This document retains detailed **November 11 historical test/merge records** below. Those older sections are not a claim that `Parallel` remains unimplemented. Draft [compiler-rust #18](https://github.com/awfl-us/compiler-rust/pull/18) (`f4f4ff7`) and [server #82](https://github.com/awfl-us/server/pull/82) (`33cc4ba`) now generate and execute separate native Rust branches with pinned snapshots, bounded concurrent Jobs-worker scheduling, parent fork journaling, `ParallelFor` input ordering, journaled replay, crash recovery after child commit, confirmed `Raise` propagation and a per-root in-process concurrency budget. No Scala DSL AST changes were needed.
+
+**Verified on the draft branches:** compiler GitHub CI and server real-generated-binary integration CI green; four parallel Rust fixtures compiled and linted. Server local native discovery suite: 85 tests, 63 pass, 0 fail, 22 skip (before new emulator tests were added). The compiled fake-store tests were supplemented with **3/3 passing real local Firestore emulator tests** (concurrent branch effects, replay through a fresh store, post-child/pre-join crash recovery and terminal parent cancellation). Those tests use the actual Firestore client/transactions but **not deployed Jobs or separate worker processes**. No general workflow parity, distributed admission, full descendant cancellation policy, or live parallel canary is claimed. Native routing remains off.
+
+**Immediate next gate:** run the same compiled artifacts against the real Firestore emulator; verify lease fencing, fork journal recovery, child exactly-once *journal replay* (not exactly-once remote effects), root cancellation, and storage transaction conflicts. Then test nested parallel fanout, multi-worker processes and real workflow AST compatibility before considering merge. See [current roadmap](current-state-and-roadmap.md) and [parallel acceptance plan](durable-parallel-fork-join.md).
 
 ## Follow-on compatibility increment: native bytes and Base64
 

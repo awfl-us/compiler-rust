@@ -1,6 +1,6 @@
 # Native durable Parallel / ParallelFor — implementation design
 
-Status (2026-11-12): native `Parallel` and `ParallelFor` now lower into independently addressable, compiled Rust branch entries using ABI 3/protocol v2 and a version-pinned parallel capability. The paired server draft implements durable child records, an effect-journaled parent fork, bounded execution, and join. Generated ELF + Jobs worker integration tests cover overlapping effects, ordered joins, replay, a crash between child completion and parent journal, and caught/uncaught child `Raise`. These currently run against a transaction-shaped in-memory Firestore substitute, **not the real Firestore emulator or deployed Jobs path**. Production rollout remains disabled while emulator, cancellation, nested fanout budgeting, and broader workflow compatibility are completed.
+Status (2026-11-12): native `Parallel` and `ParallelFor` now lower into independently addressable, compiled Rust branch entries using ABI 3/protocol v2 and a version-pinned parallel capability. The paired server draft implements durable child records, an effect-journaled parent fork, bounded execution, and join. Generated ELF + Jobs worker integration tests cover overlapping effects, ordered joins, replay, a crash between child completion and parent journal, and caught/uncaught child `Raise`. **Three additional tests now pass against the actual local Firestore emulator**: concurrent compiled-ELF children and idempotent replay through a fresh store, recovery after child commit and parent interruption through a fresh store, and cancellation fencing of a parent join and subsequent redelivery. This is a *single local emulator process*, **not** deployed Jobs, independent worker processes, or a full sibling-cancellation solution. Production routing remains disabled while wider cancellation, nested fanout budgeting, and workflow compatibility are completed.
 
 ## Baseline and semantic contract
 
@@ -50,4 +50,23 @@ B. Add compiler-private parallel IR, scoped CFG branches and exact resume-slot/l
 
 C. Implement versioned fork/lane runtime envelope, GCP persistence and concurrency scheduler. Integrate compiled branch execution and authorized effect dispatch.
 
-D. Prove crash/retry/overlap/semantics with actual native executables (done with a transaction-shaped test store); additionally run real Firestore emulator, cancellation, uncertain-outcome, full nested-workflow and deployed Jobs tests. Keep production path disabled until the full rollout gates pass.
+D. Prove crash/retry/overlap/semantics with actual native executables (done with both a transaction-shaped test store and an actual local Firestore emulator for the three named scenarios); additionally test cross-process contender/takeover, cancellation propagation to descendants, uncertain outcome, nested-workflow semantics and deployed Jobs. Keep production path disabled until the full rollout gates pass.
+
+### Emulator reproduction and scope (November 12)
+
+With the server branch checked out, Node dependencies installed, the matching
+compiler #18 branch and its generated `native-parallel-branches` executable
+built, run the CI `Real Firestore emulator native Parallel fork, retry and
+cancellation` step. It launches `firebase-tools@13.35.1 emulators:exec` against
+`workflows/native/firebase.parallel-emulator.json`, using the demo-only
+`demo-awfl-native` project. `AWFL_NATIVE_PARALLEL_BRANCHES_BINARY` points to
+the generated ELF; `AWFL_NATIVE_FIRESTORE_PARALLEL_REQUIRED=1` ensures no
+silently skipped tests. The test uses the real Firestore client, transactions,
+lease epochs, native worker, artifact SHA-256 and compiled executable; its HTTP
+handlers are deterministic mocks (no production network effects).
+
+Observed local result: **3 pass, 0 fail, 0 skip**. The cancelled parent stays
+terminal even when already-dispatched child handlers settle; this does **not**
+prove already-started external calls can be undone, nor that children are
+recursively cancelled. Add descendant cleanup, orphan sweep, cross-process
+admission and Google differential tests before enabling real traffic.
