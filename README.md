@@ -119,3 +119,8 @@ not duplicated in the DSL AST or this compiler. The merged
 `awfl-us/compiler-yaml` backend maps these names back to Google operations
 and preserves original literals during gradual workflow migration.
 
+
+
+Post-migration coverage and prioritized native blockers:
+[canonical-operation compatibility audit](docs/canonical-operation-compatibility.md)
+(66 constructed workflow definitions; source emission is not production readiness).
