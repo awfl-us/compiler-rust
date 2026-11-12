@@ -1,11 +1,24 @@
 # Native Rust workflow compiler and server execution plan
 
+**Current priorities (supersedes the older phase-gate ordering below):**
+See [the unchanged-workflow pilot and benchmark plan](real-workflow-pilot-and-benchmark-plan.md)
+for the executable next milestone, safety conditions and acceptance criteria.
+The recent `Parallel`/`ParallelFor` implementation is **feature-complete for
+the current single-Jobs-worker model**: an eight-permit process-local budget,
+durable child records, effect journals, epoch-fenced claims and nested fork
+replay. The cross-process Firestore permit extension was *reverted* in server
+PR #82; orphan sweeping and distributed scheduling are **not** prerequisites
+for running a representative unchanged workflow. The next gate is a controlled
+authenticated effectful Jobs run with explicit Google fallback, followed by
+Google-vs-native semantic and latency comparison. Do not expand parallel
+orchestration absent a demonstrated problem.
+
 Status (2026-11-12): Scala-to-Rust ABI 3 implemented for sequential CFG,
 original `Try`/`Raise`, CEL subset and resumable HTTP effects; isolated pure
 GCP canary passed. **Native parallel fork/join is implemented and CI-tested
 on draft compiler #18 and server #82, but not merged or production validated.**
-Callbacks, nested child workflows, provider connectors, distributed admission,
-uncertain remote-effect reconciliation and OS sandbox are not ready.
+Callbacks, nested child workflows, provider connectors, reconciliation of
+unknown remote HTTP outcomes and OS sandboxing are not generally ready.
 Production routing remains disabled.
 Original plan: 2026-11-10; verification reviews: 2026-11-11 and 2026-11-12.
 For the authoritative merged-versus-branch inventory, tests, remaining risk,
@@ -292,6 +305,15 @@ Run equal-input benchmarks: 1,000 pure operations, 100 local mock HTTP steps, ne
 
 ## 6. Implementation phases and completion gates
 
+**Historical phases below are not a queue of work to complete before the
+next test.** The minimum real-workflow CI gate is complete; the immediate
+step is the isolated authenticated Jobs canary, then a matched Google
+comparison. Features such as distributed branch permits, fleet quotas,
+global orphan sweeping, callbacks, child workflows, storage and messaging
+adapters are implemented only when a selected workload requires them or
+operational evidence justifies them. The precise near-term order lives in
+[the pilot plan](real-workflow-pilot-and-benchmark-plan.md).
+
 ### Latest checkpoint — aligned helpers and native time.format (Nov 12)
 
 The prior 55/66 constructed-AST audit was a **stale helper classpath**:
@@ -353,13 +375,13 @@ replay; recovery after a parent crash following child commits; empty/one/many
 indexed `ParallelFor`; and terminal parent cancellation fencing. This does **not** establish separate-process takeover, recursive
 child cancellation, distributed Jobs or general-workflow correctness.
 
-The next acceptance gates are: real emulator transactions/lease contention
-and crash windows; child/root cancellation plus unresolved remote outcome
-policy; nested and cross-process fanout budget; compatibility against
-unchanged real workflows and YAML error semantics; authenticated GCP canary;
-then latency, throughput, cost and rollback evaluation. Parallel production
-routing remains disabled. See [parallel implementation design and gate
-checklist](durable-parallel-fork-join.md).
+**This paragraph's previous expanded parallel acceptance gate was superseded
+on November 12.** Emulator recovery, nested forks and unchanged-workflow
+worker integration have since passed. Do **not** block the next canary on a
+cross-process fanout budget or orphan sweep. Use the isolated authenticated
+Jobs run, Google correctness comparison and benchmark checklist in the
+[current pilot plan](real-workflow-pilot-and-benchmark-plan.md). Parallel
+production routing remains disabled until its own workload is validated.
 
 ### Implementation checkpoint — 2026-11-11 (tested, still experimental)
 
@@ -399,11 +421,10 @@ reconciliation, authenticated shared-launcher end-to-end audit, safe OS
 sandbox, lease/worker/orphan reliability, and representative performance.
 No workflow source migration and no regular production traffic switch.
 
-**Next gate order:** (P0) compiler/server pair **merged** with green CI;
-(P1) constructed AST compatibility inventory plus differential fixtures;
-(P2) server effect/child/callback reliability and sandbox; (P3) real durable
-parallel scheduling; (P4) latency/throughput/security acceptance and a
-rollback-capable native canary. See
+**Historical order, superseded:** the next milestone is now a *small,
+authenticated, rollback-capable effectful native canary* and a measured
+comparison with Google using a real unchanged workflow. Compiler/source
+compatibility work outside that selected workflow remains demand-driven. See
 [current-state-and-roadmap.md](current-state-and-roadmap.md) for detailed
 per-stage acceptance tests and dependencies.
 
@@ -444,9 +465,12 @@ remote uncertain-outcome reconciliation remains unsolved.
 Gate: resume yields correct results, committed effects do not repeat, stale workers cannot commit, unknown outcomes are visible.
 
 ### Phase 4 — Callbacks, children, parallelism and connectors
-**Partially implemented on draft branches (#18/#82):** native parallel branch
-dispatch and fork/join have real compiled-binary integration tests, but
-callbacks, children, cancellation and distributed reliability remain pending.
+**Implemented to the current scope on draft branches (#18/#82):** native
+parallel branch dispatch and fork/join have real compiled-binary and emulator
+tests, including nested replay and ancestor fencing. The in-process budget is
+intentional. Callbacks and nested workflow launch remain separate features;
+distributed branch scheduling has not been selected. Additional cancellation
+and remote-uncertainty semantics are tested as concrete workloads require.
 IR lowering alone is not sufficient for production readiness.
 - Implement callback inbox/timers, nested workflow sync/async execution, cancellation propagation.
 - Add storage and messaging adapters with existing response envelopes.

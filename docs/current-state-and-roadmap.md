@@ -1,5 +1,13 @@
 # Native Rust execution: verified state, compatibility matrix, and roadmap
 
+**Current execution plan (November 12):** [Real-workflow pilot and benchmark](real-workflow-pilot-and-benchmark-plan.md).
+That plan and the scope decision immediately below **supersede historical
+parallel delivery and release-gate checklists later in this document**.
+The next objective is one safely isolated authenticated Jobs run of an
+unchanged workflow, then semantic and latency comparison with Google.
+No additional parallel scheduler or cleanup subsystem is on the critical
+path unless actual testing demonstrates a need.
+
 ## November 12 — simplify parallel scope; prioritize unchanged workflows
 
 **Decision:** native `Parallel` and `ParallelFor` are implemented sufficiently
@@ -18,16 +26,27 @@ to a native Rust ELF. Its real IPC effect request, continuation and replay
 pass the compiler's Python smoke test. The server's Jobs worker also executed
 that same compiled workflow with a **mocked** HTTP response: it recorded the
 effect once, produced `{ "status": "success" }`, and replayed the completed
-execution without sending the HTTP request again. This will be a mandatory
-test in the paired server CI. No live service call, production rollout or
+execution without sending the HTTP request again. This is now a **mandatory
+test** in the paired server CI, which passed on commit `9885751` (run
+`43280844780`); the compiler CI also passed on commit `920ac23` (run
+`43280871676`). The simplified code passed **68/97** native Node tests
+(29 skipped) with the compiled binaries supplied and **7/7** separate real
+Firestore emulator tests. No live service call, production rollout or
 Google Workflows latency comparison has been performed in this checkpoint.
 
-**Near-term order:** (1) retain these real-workflow tests in CI, (2) test a
-representative effectful workflow through the authenticated Jobs path behind
-the existing native flag, (3) compare correctness and step-to-step latency
-with its Google Workflows version, and (4) address only concrete compiler or
-runtime gaps uncovered. The one known out-of-scope `initEnv` lexical-scope
-case remains deferred; do not generalize compiler scoping just for it.
+**Measured local-only IPC baseline:** 40 Rust subprocess invocations per
+stage, `LoadConversationHistory`: median **6.15 ms** to prepare the HTTP
+intent; median **3.53 ms** to resume after a supplied response. These are
+*not* cloud orchestration timings or a Google Workflows speedup claim.
+
+**Near-term order:** (1) completed: retain the unchanged real-workflow test
+in CI, (2) next: exercise a representative effectful workflow through the
+*authenticated* Jobs path in an isolated test deployment, with routing
+rollback, (3) compare correctness and end-to-end latency with its Google
+Workflows version, and (4) address only concrete compiler or runtime gaps
+uncovered. The one known out-of-scope `initEnv` lexical-scope case remains
+deferred; do not generalize compiler scoping just for it. Follow the
+[step-by-step pilot plan](real-workflow-pilot-and-benchmark-plan.md).
 
 **Evidence date:** 2026-11-12 (original baseline below: 2026-11-11). **Status:** experimental, opt-in backend; **not production-ready**. This document distinguishes *merged*, *verified on a feature branch*, and *unimplemented*. It does not claim that passing tests equals Google Workflows parity.
 
@@ -141,9 +160,21 @@ The original November 11 compatibility figures below are **historical baseline s
 
 - **Implemented in drafts:** original Scala `Parallel` and `ParallelFor` lower to separate Rust entry PCs and branch-local slot snapshots, with a version-pinned `native.parallel` fork. The Jobs worker creates deterministic, digest-pinned child records, dispatches bounded concurrent child effects through the existing journal, records one parent join, and reconstructs indexed loop results. Parent `Try` handles **confirmed** failed children, not uncertain remote outcomes. A parent fork lease is refreshed during execution; a shared *in-process* permit queue limits nested work without reserving permits while awaiting children.
 - **Verified:** Scala `ParallelIrSmoke`; four generated Rust crates built and Clippy-clean; a real compiled binary + worker + transaction-shaped in-memory Firestore store test covers overlapping HTTP effects, zero/one/many indexed lanes, crash after committed children before parent journal, replay, caught/uncaught `Raise`, and uncertain sibling outcomes. Server native discovery suite **85 tests: 63 passed, 0 failed, 22 skipped** (prior to the added emulator cases). **New:** the compiled Rust ELF suites passed **4/4 tests against the actual local Firestore emulator**—concurrent branches + fresh-store replay with duplicate-parent-lease rejection, takeover after injected post-child/pre-parent crash, zero/one/many indexed `ParallelFor` iterations, and parent cancellation fencing. Compiler GitHub Actions and paired server GitHub Actions passed on the prior revisions, including the first three emulator cases; updated four-case CI is being verified on the draft.
-- **Not yet verified:** separate-process lease expiry/takeover after an actual worker death (active-process lease conflicts are emulator-tested); recursive cancellation/orphaned sibling policy; cross-process admission control; long-running lease/fork heartbeat races; nested fanout and real workflow differential semantics; live effectful Cloud Tasks/Jobs routing. `AWFL_NATIVE_EXECUTION_ENABLED` remains disabled in normal production. Emulator tests are **not** a GCP production rollout.
+- **Subsequent update:** independent Node worker death and parent lease
+  takeover, nested three-level generated Rust forks and full ancestor
+  fencing now pass the real Firestore emulator (**7/7** after simplification).
+  Recursive child-record garbage collection and a cross-process admission
+  manager remain unimplemented **by design**; neither blocks the isolated
+  nonparallel pilot. Unverified: effectful deployed Jobs routing, remote
+  ambiguous-outcome semantics, and parity/latency against Google. Production
+  `AWFL_NATIVE_EXECUTION_ENABLED` remains disabled. Emulator tests are **not**
+  a live GCP traffic rollout.
 
-**Next gate order:** (1) maintain the four real Firestore emulator tests in CI; extend to child cancellation/orphan cleanup and independent *process* takeover, (2) nested fanout, uncertain-effect and cancellation propagation with bounded resources across server processes, (3) full constructed-AST and unchanged real-workflow audit and YAML differential fixtures, (4) authenticated deployed Jobs canary with artifact pinning and rollback, then latency/cost benchmarks. Details and acceptance checklist: [durable parallel fork/join](durable-parallel-fork-join.md).
+**Historical gate order (superseded November 12):** the earlier four-emulator
+and cross-process expansion plan below predates successful nested Rust
+emulator tests and the decision to stop expanding parallel infrastructure.
+The authoritative next gates are now [unchanged-workflow authenticated Jobs
+canary -> Google differential -> measured performance](real-workflow-pilot-and-benchmark-plan.md).
 
 ## November 12, 2026 — authenticated native globals and URL encoding (feature branch)
 
@@ -301,7 +332,7 @@ connector effects runnable.
 
 **Gate:** prioritized workflows have reproducible green/broken rows and fail-closed compiler diagnostics; backend drift has an explicit, reviewable exception list rather than being hidden by fallback.
 
-### P2 — Complete durable effects and reliability
+### P2 — Complete durable effects and reliability (broader follow-up; not all pilot prerequisites)
 
 - Implement per-operation policy for HTTP retry, idempotency, unknown outcome reconciliation, and recovery after worker deaths both before and after an external effect. Distinguish provider operation failure from infrastructure failure. Add live Firestore emulator / test-project contention, lease expiry/takeover, cancellation, and orphan sweeps.
 - Implement approved `workflow.run` sync/async child behavior and `callback.create`/`callback.await` with atomic inbox and event de-duplication; integrate existing session history and cancellation semantics. Then add storage and Pub/Sub provider adapters with exact envelopes.
@@ -309,15 +340,21 @@ connector effects runnable.
 
 **Gate:** crash-injection matrix and tenant isolation tests pass for every supported effect, including concurrent takeovers and actual remote uncertainty; no untrusted native process inherits server credentials.
 
-### P3 — Durable `Parallel` and `ParallelFor`
+### P3 — Durable `Parallel` and `ParallelFor` (implemented on draft branches; historical specification)
 
 - Keep original DSL nodes. Normalize them to compiler-private fork/join operations with stable branch/iteration identifiers and isolated frame slots.
 - Store branch scheduling, cancellation, result/error states and join completion in server-owned durable records; use bounded concurrency rather than sequentializing or spawning unconstrained threads. Define legacy Google list ordering and shared-error semantics with differential fixtures.
 - Verify duplicate delivery, repeated child branch launch, a crash before/after join, partial completion, sibling cancellation and large fan-out, without repeating committed effects.
 
-**Gate:** a real unchanged workflow using `Parallel`/`ParallelFor` compiles and correctly resumes after multi-worker takeover and passes differential concurrency/order/error tests.
+**Updated scope:** real compiled nested parallel, branch records, journaled
+effects, transactionally fenced ancestors, and replay are now verified in
+the local worker and Firestore emulator. There is no plan to schedule each
+branch as a separate Jobs worker, so a distributed permit manager is **not**
+required for this milestone. Differential parallel semantics can be tested
+when selecting a real parallel-bearing workflow; do not treat a cross-process
+capacity system or orphan sweeper as the next implementation deliverable.
 
-### P4 — Performance, canary and controlled rollout
+### P4 — Performance, canary and controlled rollout (now the immediate milestone)
 
 - Benchmark warm/cold native startup separately from engine cost. Compare Google and Rust with equivalent durability, simulated effects and at least one agent workflow; report p50/p95/p99, operations, Firestore writes/bytes, CPU/RSS, cost and effect latency. The one 6,836 ms cold pilot is *not* a speedup claim.
 - Validate GCS static-musl artifact publisher, pinned active manifests, authenticated `/workflows/execute`, session history, result/status/cancel, rollback of new starts and old-run continuation compatibility.
