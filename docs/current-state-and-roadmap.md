@@ -2,6 +2,39 @@
 
 **Evidence date:** 2026-11-12 (original baseline below: 2026-11-11). **Status:** experimental, opt-in backend; **not production-ready**. This document distinguishes *merged*, *verified on a feature branch*, and *unimplemented*. It does not claim that passing tests equals Google Workflows parity.
 
+## Latest verified compatibility checkpoint — November 12 (supersedes 55/66 below)
+
+**65 of 66 constructed AWFL workflow definitions now emit Rust source (98.5%).**
+The read-only audit uses unchanged `workflows/main` at `c84270f`, rebuilt
+against helper sources whose tree matches `workflow-utils/main` at `08bda2d`.
+The compiler frontend reflection scanner **also** uses the same newly
+published local snapshot (`AWFL_WORKFLOW_UTILS_SNAPSHOT=0.1.0-SNAPSHOT`),
+rather than silently loading its old `0.3.5` test dependency. Thus the
+historical 55/66 result was measuring older helper code and is **not** the
+remaining gap in current sources. A first aligned audit produced **56/66**
+with nine `time.format` blockers and one out-of-scope `initEnv` reference.
+
+The new native `time.format(seconds[,timezone])` implements an integer/float
+epoch to ISO 8601 with exactly six fractional digits, UTC `Z` or a tzdb/IANA
+offset (including DST, e.g. `America/New_York`); non-finite timestamps,
+invalid zone names and wrong types fail. Both the Scala-generated real Rust
+ELF and Rust unit tests pass the UTC, timezone, DST, negative fractional
+epoch, invalid-type and replay fixtures. **After this addition the identical
+audit reports 65 emitted, 1 blocked, 0 class-load errors and 0 unknown
+operation names.** The only first blocker is
+`evals-experiments-SweBenchLite` referring to `initEnvResult_71e5323f`
+outside its lexical scope; do **not** promote undeclared variables to globals
+or modify the application's `initEnv` structure without deciding its proper
+control-flow scope.
+
+CI now pins the merged helper revision, publishes its test-only local
+snapshot, compiles the unchanged workflow sources with that dependency, and
+forces the scanner to use the same library. Reproduce using
+`scripts/audit-real-workflows.sh` with `AWFL_WORKFLOW_UTILS_SNAPSHOT` and
+`AWFL_WORKFLOWS_ROOT`. These numbers concern **Rust source emission, not
+65 independently built/tested workflow executables, Google differential
+semantics, effect safety or native production readiness**.
+
 ## November 12 parallel implementation checkpoint — supersedes earlier parallel status
 
 ### Follow-on source-compatibility audit and native text.substring

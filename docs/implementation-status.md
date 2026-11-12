@@ -1,5 +1,27 @@
 # Native Rust implementation status — November 12, 2026
 
+## Latest: native time.format and correctly aligned helper audit
+
+**65/66 compiled workflow definitions emit Rust source**, with **one**
+remaining first blocker (`initEnvResult_71e5323f` used out of scope in
+`evals-experiments-SweBenchLite`). Zero class-loading errors and unknown
+operations. The earlier **55/66** result below is a historical audit using
+outdated test helper bytecode; do not interpret it as current source support.
+Rebuilding unchanged `workflows/main` (`c84270f`) with pinned merged
+`workflow-utils/main` (`08bda2d`) and setting the compiler scanner's
+`AWFL_WORKFLOW_UTILS_SNAPSHOT=0.1.0-SNAPSHOT` changed that to **56/66**.
+Implementing existing `time.format` then removed nine additional blockers.
+
+The runtime formats integer and floating epoch seconds to six-digit ISO-8601
+strings, with UTC or named IANA time zones and DST offsets; invalid types,
+nonfinite values and unrecognized zones fail. A standalone generated Rust
+binary, process-level retry/replay tests, Scala frontend emission tests,
+Rust workspace unit suite (24 pass), Rustfmt and Clippy pass locally. CI
+includes this fixture and the dependency-aligned compatibility audit.
+No workflow or public DSL changes; no production native rollout. The
+remaining initEnv question is a **semantic scope mismatch**, not permission
+to loosen name lookup. Source emission is not executable parity.
+
 ## Native text.substring / refreshed constructed-AST audit
 
 The existing `CelFunctions.Text.Substring` operation now compiles to a native

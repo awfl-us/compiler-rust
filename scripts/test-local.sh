@@ -29,6 +29,7 @@ echo '== Scala AST normalization, CFG liveness, and NativeMain =='
   'Test / runMain us.awfl.compiler.rust.TimeUuidSmoke' \
   'Test / runMain us.awfl.compiler.rust.CelStdlibSmoke' \
   'Test / runMain us.awfl.compiler.rust.TextSubstringSmoke' \
+  'Test / runMain us.awfl.compiler.rust.TimeFormatSmoke' \
   'Test / runMain us.awfl.compiler.rust.ConversionSmoke' \
   'Test / runMain us.awfl.compiler.rust.BytesSmoke' \
   'Test / runMain us.awfl.compiler.rust.LiteralCollectionsSmoke' \
@@ -79,6 +80,11 @@ echo '== Compile native text.substring and exercise Unicode, bounds and type err
 (cd "$ROOT" && cargo build --manifest-path fixtures/native-text-substring/Cargo.toml \
   && cargo clippy --manifest-path fixtures/native-text-substring/Cargo.toml --all-targets --locked -- -D warnings \
   && python3 scripts/test_text_substring.py)
+
+echo '== Compile native time.format with UTC/zone offsets, DST and strict types =='
+(cd "$ROOT" && cargo build --manifest-path fixtures/native-time-format/Cargo.toml \
+  && cargo clippy --manifest-path fixtures/native-time-format/Cargo.toml --all-targets --locked -- -D warnings \
+  && python3 scripts/test_time_format.py)
 
 echo '== Compile and execute native time.now and uuid.generate =='
 (cd "$ROOT" && cargo build --manifest-path fixtures/native-time-uuid/Cargo.toml   && cargo clippy --manifest-path fixtures/native-time-uuid/Cargo.toml --all-targets --locked -- -D warnings   && python3 scripts/test_time_uuid.py)

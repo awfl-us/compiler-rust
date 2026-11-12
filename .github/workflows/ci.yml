@@ -47,6 +47,7 @@ jobs:
             'Test / runMain us.awfl.compiler.rust.NativeCliSmoke' \
             'Test / runMain us.awfl.compiler.rust.CelStdlibSmoke' \
             'Test / runMain us.awfl.compiler.rust.TextSubstringSmoke' \
+            'Test / runMain us.awfl.compiler.rust.TimeFormatSmoke' \
             'Test / runMain us.awfl.compiler.rust.TimeUuidSmoke' \
             'Test / runMain us.awfl.compiler.rust.ScopedNamesSmoke' \
             'Test / runMain us.awfl.compiler.rust.ParallelIrSmoke' \
@@ -117,6 +118,11 @@ jobs:
           cargo build --manifest-path fixtures/native-text-substring/Cargo.toml
           cargo clippy --manifest-path fixtures/native-text-substring/Cargo.toml --all-targets --locked -- -D warnings
           python3 scripts/test_text_substring.py
+      - name: Compile and run native time.format with IANA zones and microseconds
+        run: |
+          cargo build --manifest-path fixtures/native-time-format/Cargo.toml
+          cargo clippy --manifest-path fixtures/native-time-format/Cargo.toml --all-targets --locked -- -D warnings
+          python3 scripts/test_time_format.py
       - name: Compile and execute native sys.now and UUIDv4
         run: |
           cargo build --manifest-path fixtures/native-time-uuid/Cargo.toml
@@ -187,17 +193,32 @@ jobs:
           repository: awfl-us/workflows
           ref: main
           path: _audit_workflows
+      - uses: actions/checkout@v4
+        with:
+          repository: awfl-us/workflow-utils
+          # Includes the already-merged literal schema and Firebase 404 fixes.
+          # Pin this checkout so compatibility results are reproducible.
+          ref: 08bda2dfd76d0dd45d21556e455d524d8760e670
+          path: _audit_utils
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '21'
       - uses: sbt/setup-sbt@v1
+      - name: Publish workflow helpers to local Ivy cache
+        run: |
+          cd _audit_utils
+          # CI=false selects the local snapshot; only the test job uses it.
+          CI=false sbt -batch publishLocal
       - name: Compile current workflows without modifying definitions
         run: |
           cd _audit_workflows
-          sbt -batch compile
+          sbt -batch \
+            'set dependencyOverrides += "us.awfl" %% "workflow-utils" % "0.1.0-SNAPSHOT"' \
+            compile
       - name: Audit constructed Scala DSL graphs against native compiler
         run: |
+          export AWFL_WORKFLOW_UTILS_SNAPSHOT=0.1.0-SNAPSHOT
           AWFL_WORKFLOWS_ROOT="$GITHUB_WORKSPACE/_audit_workflows" \
             ./scripts/audit-real-workflows.sh target/trusted-global-audit.json
           python3 - <<'PYTHON'
@@ -226,6 +247,22 @@ jobs:
               for item in report['workflows']
               if 'unsupported raw CEL/reference' in (item.get('reason') or '')
           ])
+          # Source emission is not runtime parity, but newly introduced
+          # undeclared variables or unimplemented operations should not
+          # silently pass this compatibility job. Only the already-known
+          # workflow-local initEnv scope issue is currently exempted.
+          unexpected = [
+              (item['workflow'], item.get('reason'))
+              for item in report['workflows']
+              if item['status'] != 'emitted' and not (
+                  item['workflow'] == 'evals-experiments-SweBenchLite'
+                  and 'initEnvResult_' in (item.get('reason') or '')
+                  and 'unsupported raw CEL/reference' in (item.get('reason') or '')
+              )
+          ]
+          assert not report['load_errors'], report['load_errors']
+          assert not report['unknown_operations'], report['unknown_operations']
+          assert not unexpected, unexpected
           PYTHON
       - uses: actions/upload-artifact@v4
         if: always()

@@ -292,6 +292,27 @@ Run equal-input benchmarks: 1,000 pure operations, 100 local mock HTTP steps, ne
 
 ## 6. Implementation phases and completion gates
 
+### Latest checkpoint — aligned helpers and native time.format (Nov 12)
+
+The prior 55/66 constructed-AST audit was a **stale helper classpath**:
+compiler-rust's test runner loaded published `workflow-utils:0.3.5` even
+when `workflows/main` classes were rebuilt with locally fixed helpers.
+Merged workflow-utils #6 already repaired unbound `example` prompts and
+undefined cache-404 results. An audit with identical helper artifacts in
+both workflow compilation and scanner initially gave **56/66 emitted**;
+the remaining nine first blockers were the already-declared `time.format`.
+
+The native compiler now lowers `time.format` to pure Rust ISO-8601 formatting
+with optional IANA timezone, DST and microsecond precision. Real generated
+ELF, Rust unit, Scala compiler, replay and error tests passed. The **new
+constructed-AST result is 65/66 source-emitted**, 0 unknown operation IDs,
+0 class-loading errors, leaving only an `initEnvResult_*` lexical-scope
+reference in `evals-experiments-SweBenchLite`. Do not silently widen scope.
+Reconsider that workflow's structure only after a Google YAML scope audit.
+CI now pins the matching helper commit and uses its test-only local snapshot
+in both compilation and reflection scanning. **Source emission does not
+establish full native executable compatibility or production readiness.**
+
 ### Newer checkpoint — November 12, 2026 (draft parallel implementation)
 
 **Follow-on compatibility increment:** Native `text.substring(source,start,end)`

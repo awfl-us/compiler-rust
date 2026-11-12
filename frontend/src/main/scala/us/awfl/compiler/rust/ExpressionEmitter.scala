@@ -65,6 +65,10 @@ object ExpressionEmitter {
       case Function(FunctionId.EnvironmentGet, Vector(name, fallback)) =>
         s"ops::environment_get(trusted_globals, &(${inner(name)}), Some(&(${inner(fallback)})))?"
       case Function(FunctionId.ClockNow, Vector()) => "ops::time_now()?"
+      case Function(FunctionId.TimeFormat, Vector(seconds)) =>
+        s"ops::time_format(&(${inner(seconds)}), None)?"
+      case Function(FunctionId.TimeFormat, Vector(seconds, timezone)) =>
+        s"ops::time_format(&(${inner(seconds)}), Some(&(${inner(timezone)})))?"
       case Function(FunctionId.UuidGenerate, Vector()) => "ops::uuid_generate()"
       case Function(FunctionId.Length, Vector(arg)) => s"ops::length(&(${inner(arg)}))?"
       case Function(FunctionId.Default, Vector(value, fallback)) =>
