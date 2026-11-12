@@ -259,7 +259,9 @@ pub fn to_int(value: &AwflValue) -> Result<AwflValue, ValueError> {
 /// and spaces are escaped, and spaces are never converted into '+'.
 pub fn text_url_encode(value: &AwflValue) -> Result<AwflValue, ValueError> {
     let AwflValue::String(source) = value else {
-        return Err(ValueError::Type("text.url_encode source must be a string".into()));
+        return Err(ValueError::Type(
+            "text.url_encode source must be a string".into(),
+        ));
     };
     const HEX: &[u8; 16] = b"0123456789ABCDEF";
     let mut encoded = String::with_capacity(source.len());
