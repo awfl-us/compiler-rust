@@ -58,17 +58,13 @@ pub fn environment_get(
     let AwflValue::String(name) = name else {
         return Err(ValueError::Type("sys.get_env name must be a string".into()));
     };
-    if let Some(value) = fallback {
-        if !matches!(value, AwflValue::String(_)) {
-            return Err(ValueError::Type(
-                "sys.get_env default must be a string".into(),
-            ));
-        }
+    if fallback.is_some_and(|value| !matches!(value, AwflValue::String(_))) {
+        return Err(ValueError::Type(
+            "sys.get_env default must be a string".into(),
+        ));
     }
-    if let Some(key) = trusted_key(name) {
-        if let Some(value) = globals.get(key) {
-            return Ok(AwflValue::String(value.clone()));
-        }
+    if let Some(value) = trusted_key(name).and_then(|key| globals.get(key)) {
+        return Ok(AwflValue::String(value.clone()));
     }
     match fallback {
         Some(default) => Ok(default.clone()),
