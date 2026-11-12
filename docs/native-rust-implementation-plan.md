@@ -298,7 +298,7 @@ The historical November 11 checkpoint following this section records what was
 merged **then**, not the present state of the new parallel feature branches.
 Compiler-rust [#18](https://github.com/awfl-us/compiler-rust/pull/18)
 (`f4f4ff7`) and server [#82](https://github.com/awfl-us/server/pull/82)
-(`33cc4ba`) implement independent Rust branch entries, isolated lexical
+(`67e1184`) implement independent Rust branch entries, isolated lexical
 snapshots, bounded child worker concurrency, pinned durable lane records,
 parent join/fork journals, deterministic indexed `ParallelFor` results,
 confirmed failure propagation and replay after committed child effects.
@@ -306,10 +306,10 @@ Actual generated Rust binaries execute through the native Jobs worker.
 
 Compiler and server CI are green on the preceding commits; local native server
 discovery reports **85 tests, 63 passing, 0 failing, 22 skipped** before the
-new emulator cases. **Three real Firestore emulator tests** now pass with a
-generated Rust ELF: concurrent child effects/fresh-store replay, recovery
-after a parent crash following child commits, and terminal parent cancellation
-fencing. This does **not** establish separate-process takeover, recursive
+new emulator cases. **Four real Firestore emulator tests** now pass with generated Rust
+ELFs: concurrent child effects, duplicate-lease rejection and fresh-store
+replay; recovery after a parent crash following child commits; empty/one/many
+indexed `ParallelFor`; and terminal parent cancellation fencing. This does **not** establish separate-process takeover, recursive
 child cancellation, distributed Jobs or general-workflow correctness.
 
 The next acceptance gates are: real emulator transactions/lease contention
