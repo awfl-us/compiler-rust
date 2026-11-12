@@ -1,6 +1,6 @@
 # Native durable Parallel / ParallelFor — implementation design
 
-Status: design committed for implementation; **not yet native-parallel execution support**. The single-worker ABI-3/protocol-v2 engine intentionally fails closed on `Parallel` and `ParallelFor`. This plan does not relax that gate until fork/join, recovery, and real effects pass tests.
+Status (2026-11-12): native `Parallel` and `ParallelFor` now lower into independently addressable, compiled Rust branch entries using ABI 3/protocol v2 and a version-pinned parallel capability. The paired server draft implements durable child records, an effect-journaled parent fork, bounded execution, and join. Generated ELF + Jobs worker integration tests cover overlapping effects, ordered joins, replay, a crash between child completion and parent journal, and caught/uncaught child `Raise`. These currently run against a transaction-shaped in-memory Firestore substitute, **not the real Firestore emulator or deployed Jobs path**. Production rollout remains disabled while emulator, cancellation, nested fanout budgeting, and broader workflow compatibility are completed.
 
 ## Baseline and semantic contract
 
@@ -50,4 +50,4 @@ B. Add compiler-private parallel IR, scoped CFG branches and exact resume-slot/l
 
 C. Implement versioned fork/lane runtime envelope, GCP persistence and concurrency scheduler. Integrate compiled branch execution and authorized effect dispatch.
 
-D. Prove crash/retry/overlap/semantics with local Firestore emulator and actual native executables; then update all documentation, CI and audit counts. Keep production path disabled until the full rollout gates pass.
+D. Prove crash/retry/overlap/semantics with actual native executables (done with a transaction-shaped test store); additionally run real Firestore emulator, cancellation, uncertain-outcome, full nested-workflow and deployed Jobs tests. Keep production path disabled until the full rollout gates pass.

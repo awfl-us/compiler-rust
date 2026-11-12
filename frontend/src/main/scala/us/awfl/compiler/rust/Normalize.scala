@@ -276,8 +276,16 @@ object Normalize {
                 symbols.clear()
                 symbols ++= snapshot
                 val code = steps(List(branch), branchNode)
-                (code, valueExpr(branch.resultValue,
-                  s"$where.branch[$branchIdx].result"))
+                // Raise/Return terminate the lane before its nominal result
+                // can be evaluated. Do not resolve an unreachable result
+                // reference, but retain strict validation in reachable lanes.
+                val terminal = code.lastOption.exists {
+                  case _: Throw | _: EarlyReturn => true
+                  case _ => false
+                }
+                val result = if (terminal) NullValue else valueExpr(
+                  branch.resultValue, s"$where.branch[$branchIdx].result")
+                (code, result)
               }
               val destination = s"s${slots.size}"
               slots += destination

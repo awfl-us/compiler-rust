@@ -42,6 +42,29 @@ object ParallelIrSmoke {
       java.nio.file.Paths.get("../fixtures/native-parallel-for").toAbsolutePath.normalize,
       java.nio.file.Paths.get("../runtime").toAbsolutePath.normalize)
 
+    // A confirmed failure in a child becomes a journaled fork failure and
+    // follows the parent Try handler. An unhandled Raise fails its root.
+    val failure = Raise("branch-failed",
+      obj(Error(str(CelStr("definitive branch failure")), OptValue[Int](CelConst("null")))))
+    val failingFork = Parallel("failing-fork", List(failure))
+    val wrapped = Try("catch-fork",
+      List[Step[?, ?]](failingFork) -> str(CelStr("unreachable")),
+      err => List.empty[Step[?, ?]] -> err.flatMap(_.message))
+    val withCatch = Normalize(Workflow(
+      (List[Step[?, ?]](wrapped), wrapped.resultValue),
+      Some("native-parallel-caught-failure")))
+    val caught = RustEmitter.write(withCatch,
+      java.nio.file.Paths.get("../fixtures/native-parallel-caught").toAbsolutePath.normalize,
+      java.nio.file.Paths.get("../runtime").toAbsolutePath.normalize)
+    assert(caught.source.contains("native.parallel"))
+    assert(caught.source.contains("error_slot"))
+    val withoutCatch = Normalize(Workflow(
+      (List[Step[?, ?]](failingFork), str(CelStr("unreachable"))),
+      Some("native-parallel-uncaught-failure")))
+    RustEmitter.write(withoutCatch,
+      java.nio.file.Paths.get("../fixtures/native-parallel-uncaught").toAbsolutePath.normalize,
+      java.nio.file.Paths.get("../runtime").toAbsolutePath.normalize)
+
     val sibling = Call[Map[String, Value[String]], String]("sibling", CallOperations.HttpPost,
       obj(Map("earlier" -> a.resultValue)))
     val dependent = Parallel("invalid", List(a, sibling))
