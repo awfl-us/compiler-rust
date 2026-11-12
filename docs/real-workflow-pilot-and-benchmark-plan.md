@@ -1,12 +1,27 @@
 # Next milestone: real AWFL workflow execution and Google comparison
 
+**Current measured checkpoint (November 12, 2026):** the end-to-end
+authenticated native `/workflows/execute` → Cloud Tasks → Jobs →
+Firestore test **succeeded** with unchanged `helpers-ToolDefs` and one
+journaled HTTP 200 effect. Server PRs #82, #86 and #87 are **merged**.
+The first matching-input Google-vs-native probe produced **5/5 successful
+executions on each engine**. Warm last-three medians were 0.422 s Google
+and 1.445 s native, but **different launch APIs prevent a fair speedup
+claim**. Details, revisions, raw timing and the still-needed same-API
+experiment: [November 12 differential](native-vs-google-tooldefs-2026-11-12.md).
+The priority is to measure the ~1s warm Jobs worker cost (artifact lookup,
+Firestore/effect persistence, signed HTTP) and retest fairly, rather than
+building extra fork/join orchestration. Stable native production routing
+remains disabled. The dated phase/checklist material below is historical.
+
 **Post-merge checkpoint — November 12, 2026:**
 Compiler [#18](https://github.com/awfl-us/compiler-rust/pull/18)
 is **merged into `main`** as `a285f66`, including nested fork/join,
 JSON-text schema templates, `time.format`, and single-variant compilation.
 Merged [workflow-utils #8](https://github.com/awfl-us/workflow-utils/pull/8)
 restored the original `Llm.chatJson` template helper. Server
-[#82](https://github.com/awfl-us/server/pull/82) is still **open**.
+[#82](https://github.com/awfl-us/server/pull/82) was still **open at this
+earlier compiler-only checkpoint**; it has since merged (see latest above).
 The aligned source-emission audit is **65/66**, with the remaining
 `initEnvResult_*` lexical-scope blocker intentionally deferred.
 Nothing in these merges establishes the awaited authenticated **effectful**

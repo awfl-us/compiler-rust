@@ -1,5 +1,35 @@
 # Native Rust execution: verified state, compatibility matrix, and roadmap
 
+## November 12 — authenticated native execution and Google differential (latest)
+
+**Live native API execution passed.** Merged server
+[#82](https://github.com/awfl-us/server/pull/82) provides the durable Jobs
+worker, [#86](https://github.com/awfl-us/server/pull/86) restored `/jobs`
+prefix compatibility, and [#87](https://github.com/awfl-us/server/pull/87)
+made AWFL API keys available through shared HTTP/MCP identity handling.
+An isolated zero-traffic native API revision ran the unchanged
+`helpers-ToolDefs` Rust artifact via `/workflows/execute` → Cloud Tasks →
+Jobs → Firestore; the API returned `SUCCEEDED` with `{"defs":[]}` in
+**14.35 s** on its one cold sample. Firestore confirms **one journaled
+HTTP 200 effect**. The temporary key was revoked (403 on reuse), the
+zero-traffic tag removed, and stable API native routing restored **off**.
+
+The first same-source/same-input cloud differential also passed for
+**5/5 Google and 5/5 native runs**, all returning `{"defs":[]}`. Warm
+last-three client median: **Google 0.422 s**, **native 1.445 s**;
+the *launch methods differ* (Google Executions REST vs native direct
+Firestore/Cloud Tasks), so this is directional and **not an API-vs-API
+benchmark**. Cloud Run Jobs' own warm request latencies are roughly
+**0.93–1.15 s**; profile that worker path before introducing another
+scheduler or tuning Rust core loops. See the
+[full measurements, execution IDs and caveats](native-vs-google-tooldefs-2026-11-12.md).
+
+**Next:** instrument the warm worker's actual bottleneck; then repeat via
+the **same AWFL API** on stable Google and isolated native revisions,
+and expand beyond this single HTTP effect. All infrastructure/IAM changes
+must stay in Terraform. Historical checkpoints below are intentionally
+retained as of their original dates.
+
 ## Post-merge checkpoint — November 12, 2026
 
 **Compiler [PR #18](https://github.com/awfl-us/compiler-rust/pull/18) is merged
@@ -8,8 +38,9 @@ The Scala frontend/native Rust runtime now include compiled nested
 `Parallel`/`ParallelFor`, `time.format`, original JSON object-to-string
 template semantics, and per-workflow `NativeMain --only=<FullWorkflowName>`
 selection. This is a **compiler merge**, not a full native deployment:
-paired server [PR #82](https://github.com/awfl-us/server/pull/82) remains
-open, and regular API/Jobs native routing remains disabled. Merged
+paired server [PR #82](https://github.com/awfl-us/server/pull/82) was **open
+at this earlier compiler-only checkpoint** (it has since merged; see above),
+and regular API/Jobs native routing remains disabled. Merged
 [workflow-utils #8](https://github.com/awfl-us/workflow-utils/pull/8) restores
 the original LLM schema expression while keeping the Firebase 404 scope fix.
 
