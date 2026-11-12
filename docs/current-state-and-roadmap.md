@@ -1,5 +1,34 @@
 # Native Rust execution: verified state, compatibility matrix, and roadmap
 
+## November 12 — server-side distributed fork admission follow-up
+
+The paired **draft** [server PR #82](https://github.com/awfl-us/server/pull/82)
+now has per-root, cross-process **eight-slot Firestore lease admission** for
+compiled native parallel workflow execution. This closes the previous gap
+where each Node/Jobs process independently enforced its own eight-permit
+in-memory budget. The existing local FIFO semaphore remains, while durable
+admission uses eight independently transacted slot documents per root, with
+owner/epoch fencing, root authorization, 120-second leases, 10-second renewal,
+and fail-closed acquisition timeouts. Nested fork coordinators do not hold
+slots while they wait for child effects.
+
+**Local verification:** all seven dedicated budget tests pass; all eight real
+Firestore emulator tests pass, including two independent processes racing
+for one slot and a crash with successful post-expiry takeover. The existing
+three-level Scala-generated Rust fork also passes with distributed permits
+enabled. The full server native Node suite reports **72 passed, 32 skipped,
+0 failed**, with emulator tests run separately rather than skipped overall.
+
+**Important limits:** These slots bound admitted work *within one root* across
+processes, not aggregate fleet-wide work across separate workflows. Expiring
+an in-flight permit cannot undo a previously dispatched HTTP request or
+forcibly kill a stuck subprocess; ambiguous effect outcomes still require
+reconciliation. Finished roots currently leave a bounded number of idle
+permit documents, pending a lifecycle cleanup policy. Live Cloud Tasks/Jobs
+canary, workflow differential parity and global fleet controls remain gates;
+the production native routing flag stays disabled. The compiler itself and
+the public Scala DSL were not changed by this server-side admission work.
+
 **Evidence date:** 2026-11-12 (original baseline below: 2026-11-11). **Status:** experimental, opt-in backend; **not production-ready**. This document distinguishes *merged*, *verified on a feature branch*, and *unimplemented*. It does not claim that passing tests equals Google Workflows parity.
 
 ## November 12 — genuine three-level nested Parallel and recursive fork fencing
