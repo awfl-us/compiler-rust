@@ -74,6 +74,56 @@ pub fn environment_get(
     }
 }
 
+/// Google Workflows time.format: render epoch seconds as RFC3339 with
+/// exactly six fractional digits and an IANA timezone offset.
+/// Invalid times, numeric types, and timezones return typed CEL value errors.
+pub fn time_format(
+    seconds: &AwflValue,
+    timezone: Option<&AwflValue>,
+) -> Result<AwflValue, ValueError> {
+    use chrono::TimeZone;
+    let unix = match seconds {
+        AwflValue::Integer(n) => *n as f64,
+        AwflValue::Float(n) if n.is_finite() => *n,
+        _ => {
+            return Err(ValueError::Type(
+                "time.format seconds must be numeric".into(),
+            ));
+        }
+    };
+    let micros = (unix * 1_000_000.0).round();
+    if !micros.is_finite() || micros < i64::MIN as f64 || micros >= i64::MAX as f64 {
+        return Err(ValueError::Type(
+            "time.format seconds outside supported range".into(),
+        ));
+    }
+    let moment = chrono::Utc
+        .timestamp_micros(micros as i64)
+        .single()
+        .ok_or_else(|| ValueError::Type("invalid time.format timestamp".into()))?;
+    let name = match timezone {
+        None => "UTC",
+        Some(AwflValue::String(name)) if name.is_empty() => "UTC",
+        Some(AwflValue::String(name)) if name == "GMT" => "UTC",
+        Some(AwflValue::String(name)) => name.as_str(),
+        _ => {
+            return Err(ValueError::Type(
+                "time.format timezone must be a string".into(),
+            ));
+        }
+    };
+    let tz: chrono_tz::Tz = name
+        .parse()
+        .map_err(|_| ValueError::Type(format!("unknown time.format timezone: {name}")))?;
+    let converted = moment.with_timezone(&tz);
+    let formatted = if tz == chrono_tz::UTC {
+        converted.format("%Y-%m-%dT%H:%M:%S%.6fZ").to_string()
+    } else {
+        converted.format("%Y-%m-%dT%H:%M:%S%.6f%:z").to_string()
+    };
+    Ok(AwflValue::String(formatted))
+}
+
 pub fn int_value(value: &AwflValue) -> Result<i64, ValueError> {
     match value {
         AwflValue::Integer(n) => Ok(*n),
@@ -510,6 +560,54 @@ fn finite(n: f64) -> Result<AwflValue, ValueError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn formats_epoch_seconds_with_microseconds_and_iana_dst() {
+        assert_eq!(
+            time_format(&AwflValue::Integer(1_720_788_633), None).unwrap(),
+            AwflValue::String("2024-07-12T12:50:33.000000Z".into())
+        );
+        assert_eq!(
+            time_format(
+                &AwflValue::Integer(1_720_788_633),
+                Some(&AwflValue::String("Europe/Paris".into()))
+            )
+            .unwrap(),
+            AwflValue::String("2024-07-12T14:50:33.000000+02:00".into())
+        );
+        assert_eq!(
+            time_format(
+                &AwflValue::Integer(1_720_788_633),
+                Some(&AwflValue::String("America/New_York".into()))
+            )
+            .unwrap(),
+            AwflValue::String("2024-07-12T08:50:33.000000-04:00".into())
+        );
+        assert_eq!(
+            time_format(
+                &AwflValue::Integer(1_705_277_633),
+                Some(&AwflValue::String("America/New_York".into()))
+            )
+            .unwrap(),
+            AwflValue::String("2024-01-14T19:13:53.000000-05:00".into())
+        );
+        assert_eq!(
+            time_format(
+                &AwflValue::Integer(1_720_788_633),
+                Some(&AwflValue::String("GMT".into()))
+            )
+            .unwrap(),
+            AwflValue::String("2024-07-12T12:50:33.000000Z".into())
+        );
+        assert!(time_format(&AwflValue::String("1".into()), None).is_err());
+        assert!(
+            time_format(
+                &AwflValue::Integer(0),
+                Some(&AwflValue::String("Invalid/Timezone".into()))
+            )
+            .is_err()
+        );
+    }
 
     #[test]
     fn url_encoding_matches_workflows_byte_semantics() {

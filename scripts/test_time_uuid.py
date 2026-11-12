@@ -32,6 +32,8 @@ def execute():
         assert str(parsed) == result[key]
         assert parsed.version == 4 and parsed.variant == uuid.RFC_4122
     assert result["id1"] != result["id2"], result
+    assert result["formattedUTC"] == "2024-07-12T12:50:33.000000Z", result
+    assert result["formattedParis"] == "2024-07-12T14:50:33.000000+02:00", result
     return result
 
 first = execute()
