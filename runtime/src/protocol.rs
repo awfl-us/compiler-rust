@@ -80,7 +80,9 @@ impl Request {
             ];
             if globals.len() != KEYS.len()
                 || KEYS.iter().any(|key| !globals.contains_key(*key))
-                || globals.values().any(|value| value.is_empty() || value.len() > 256)
+                || globals
+                    .values()
+                    .any(|value| value.is_empty() || value.len() > 256)
             {
                 return Err("invalid trusted native execution globals".into());
             }
@@ -191,7 +193,10 @@ mod tests {
     fn trusted_execution_context_requires_exact_builtins() {
         let globals = BTreeMap::from([
             ("GOOGLE_CLOUD_WORKFLOW_ID".into(), "wf".into()),
-            ("GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID".into(), "native_abc".into()),
+            (
+                "GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID".into(),
+                "native_abc".into(),
+            ),
             ("GOOGLE_CLOUD_PROJECT_ID".into(), "cloud-project".into()),
             ("GOOGLE_CLOUD_LOCATION".into(), "us-central1".into()),
         ]);
