@@ -38,6 +38,31 @@ this must instead atomically bind the tagged error and change the checkpoint
 to the compiled exception block; uncertain remote outcomes must **not** take
 either path until reconciled.
 
+## Trusted execution globals
+
+The protocol-v2 request optionally carries a `trusted_globals` object whose
+only valid keys are `GOOGLE_CLOUD_WORKFLOW_ID`,
+`GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID`, `GOOGLE_CLOUD_PROJECT_ID`,
+and `GOOGLE_CLOUD_LOCATION`. When supplied, all four nonempty string fields
+are required and bounded. Native Scala `WORKFLOW_ID`,
+`WORKFLOW_EXECUTION_ID`, `PROJECT_ID`, and `LOCATION` compile to reads
+of these fields, as does `environment.get` / `sys.get_env` for the same
+four built-ins. A missing built-in fails closed unless `sys.get_env` was
+given a string fallback. Other environment names require separate,
+explicitly designed deployment configuration support; native executables
+must never read arbitrary subprocess environment variables.
+
+**Trust boundary:** The Rust executable validates structure and types, but
+does not authenticate the request. Only the IAM-protected Jobs service may
+construct `trusted_globals`, using its persisted owner-checked execution
+and server-owned Google Cloud deployment identity. The Google Cloud project
+ID is **not** the AWFL tenant project ID and is never accepted from
+`input.env`. The generated ELF sees no GCP credentials, user tokens, or
+caller-provided raw environment. Subprocess tests with forged `input.env`
+and absent/invalid trusted context prove the default is to reject, not to
+silently fall back. Checkpoints continue to store ordinary result slots;
+globals are supplied by the server on each invocation.
+
 ## Wire representation
 
 The input is JSON with `protocol_version: 2`:
