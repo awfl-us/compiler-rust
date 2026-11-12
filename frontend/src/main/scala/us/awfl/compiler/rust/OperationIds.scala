@@ -22,7 +22,9 @@ enum FunctionId(val wireId: String, val minArity: Int, val maxArity: Int) {
   case TextEncode extends FunctionId(CelFunctions.Text.Encode, 1, 2)
   case TextDecode extends FunctionId(CelFunctions.Text.Decode, 1, 2)
   case TextSplit extends FunctionId(CelFunctions.Text.Split, 2, 2)
-  case TextSubstring extends FunctionId(CelFunctions.Text.Substring, 2, 3)
+  // Google Workflows requires both start and end. The DSL's two-argument
+  // convenience overload is not a deployable Workflows call.
+  case TextSubstring extends FunctionId(CelFunctions.Text.Substring, 3, 3)
   case TextLowercase extends FunctionId(CelFunctions.Text.ToLower, 1, 1)
   case TextUrlEncode extends FunctionId(CelFunctions.Text.UrlEncode, 1, 1)
   case TimeFormat extends FunctionId(CelFunctions.Time.Format, 1, 2)

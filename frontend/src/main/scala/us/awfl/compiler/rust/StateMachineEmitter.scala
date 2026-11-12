@@ -20,7 +20,7 @@ object StateMachineEmitter {
     val hasErrors = plan.blocks.exists(b =>
       b.onError.nonEmpty || b.op.isInstanceOf[ThrowError])
     val advancesPc = plan.blocks.exists(_.op match {
-      case _: Done | _: Invoke | _: ThrowError => false
+      case _: Done | _: Invoke | _: ForkInvoke | _: ThrowError => false
       case _ => true
     })
     val terminalPrefix = if (hasErrors) "Ok(Some(Outcome::"
@@ -55,6 +55,86 @@ object StateMachineEmitter {
                         ${put(item, "item")}
                         ${advance(body)}
                     } else { ${advance(done)} }"""
+    /** A ForkInvoke suspends just like any external Call, but its args
+      * contain statically compiled entry PCs and tagged parent slot captures.
+      * Independent child executions use ordinary continuation IPC, not a
+      * second bytecode interpreter or a serialized loop.
+      */
+    def renderFork(fork: ForkInvoke, block: Block): String = {
+      val effectId = q("fork_" + fork.nodeId.replace('.', '_'))
+      val dynamicId = fork.ancestors.map(id =>
+        s"""__awfl_effect_id.push('_');
+            let __awfl_ordinal = ${number(id)};
+            if __awfl_ordinal < 0 { return Err("invalid fork iteration ordinal".into()); }
+            __awfl_effect_id.push_str(&__awfl_ordinal.to_string());"""
+      ).mkString("\n                    ")
+      val effectBinding = if (fork.ancestors.isEmpty) "let" else "let mut"
+      val parentKeep = (liveness.resumeSlots(fork.next) ++
+        block.onError.toSet.flatMap(h => liveness.resumeSlots(h.next)))
+        .toVector.sorted
+      val saved = parentKeep.map(id =>
+        s"""if let Some(value) = slots.get(${q(id)}) {
+                __awfl_saved.insert(${q(id)}.to_owned(), value.clone());
+            }"""
+      ).mkString("\n                    ")
+      val savedBinding = if (parentKeep.isEmpty) "let" else "let mut"
+      val errorHandler = block.onError match {
+        case Some(h) => s"Some(EffectErrorHandler { next_step: ${h.next}, error_slot: ${q(h.slot)}.to_owned() })"
+        case None => "None"
+      }
+      def laneSnapshot(lane: ForkLane, withItem: Boolean): String = {
+        val refs = liveness.resumeSlots(lane.entry).toVector.sorted
+          .filterNot(id => lane.itemSlot.contains(id))
+        val captures = refs.map(id => s"(${q(id)}.to_owned(), ${slot(id)})")
+        val elements = captures ++
+          (if (withItem) lane.itemSlot.toVector.map(id =>
+            s"(${q(id)}.to_owned(), __awfl_item)") else Vector.empty)
+        s"std::collections::BTreeMap::<String, AwflValue>::from([${elements.mkString(", ")}])"
+      }
+      def laneValue(lane: ForkLane, withItem: Boolean): String =
+        s"""serde_json::json!({
+          "entry": ${q("pc_" + lane.entry)},
+          "slots": ${laneSnapshot(lane, withItem)}
+        })"""
+      val lanesExpr = fork.iterable match {
+        case None =>
+          "vec![" + fork.lanes.map(laneValue(_, false)).mkString(", ") + "]"
+        case Some(iterable) =>
+          val lane = fork.lanes.headOption.getOrElse(
+            throw CompileError(s"node=${fork.nodeId}", "parallel iteration has no branch"))
+          s"""ops::list_value(&(${expr(iterable, block.sourceNode)}))?
+            .into_iter().map(|__awfl_item|
+              -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+              Ok(${laneValue(lane, true)})
+            }).collect::<Result<Vec<_>, _>>()?"""
+      }
+      s"""let __awfl_lanes: Vec<serde_json::Value> = $lanesExpr;
+          if __awfl_lanes.len() > 1000 {
+              return Err("native parallel lane count exceeds limit".into());
+          }
+          $effectBinding __awfl_effect_id = String::from($effectId);
+          $dynamicId
+          let __awfl_args = serde_json::json!({
+              "generation": __awfl_effect_id,
+              "lanes": __awfl_lanes
+          });
+          $savedBinding __awfl_saved = std::collections::BTreeMap::new();
+          $saved
+          ${terminalPrefix}Suspended {
+              effect: EffectIntent {
+                  effect_id: __awfl_effect_id,
+                  node_id: ${q(fork.nodeId)}.to_owned(),
+                  operation: "native.parallel".to_owned(),
+                  result_slot: ${q(fork.resultSlot)}.to_owned(),
+                  args: __awfl_args,
+                  on_error: $errorHandler,
+              },
+              continuation: Continuation {
+                  next_step: ${fork.next}, slots: __awfl_saved, frames: vec![],
+              },
+          }$terminalSuffix"""
+    }
+
     def renderBlock(block: Block): String = {
       val code = block.op match {
         case Bind(name, value, next) =>
@@ -105,6 +185,7 @@ object StateMachineEmitter {
           s"""${put(result, expr(value, block.sourceNode))}
                     ${bumped(ordinal)}
                     ${advance(next)}"""
+        case fork: ForkInvoke => renderFork(fork, block)
         case Invoke(effect, ancestors, next) =>
           val effectId = q("call_" + effect.nodeId.replace('.', '_'))
           val dynamicId = ancestors.map { id =>
@@ -157,6 +238,7 @@ object StateMachineEmitter {
       }
       val tail = if (hasErrors && !block.op.isInstanceOf[Done] &&
                      !block.op.isInstanceOf[Invoke] &&
+                     !block.op.isInstanceOf[ForkInvoke] &&
                      !block.op.isInstanceOf[ThrowError]) "Ok(None)" else ""
       s"""            ${block.id} => {
                     // AWFL ${block.sourceNode}
@@ -197,7 +279,7 @@ fn awfl_error_value(error: &(dyn std::error::Error + 'static)) -> AwflValue {
 }
 """ else ""
     val mutatesSlots = errorRoutes.nonEmpty || plan.blocks.exists(_.op match {
-      case _: Done | _: Invoke | _: Test | _: ThrowError => false
+      case _: Done | _: Invoke | _: ForkInvoke | _: Test | _: ThrowError => false
       case _ => true
     })
     val slotsBinding = if (mutatesSlots) "let mut slots" else "let slots"

@@ -15,7 +15,8 @@ object NativeCompiler {
                             emitted: RustEmitter.Emitted)
 
   def compile(workflows: List[DslWorkflow[?]], baseName: String,
-              outputDirectory: Path, runtimeDirectory: Path): List[Artifact] = {
+              outputDirectory: Path, runtimeDirectory: Path,
+              only: Option[String] = None): List[Artifact] = {
     val named = workflows.zipWithIndex.map { (workflow, i) =>
       val name = workflow.name.map(n => s"$baseName-$n").getOrElse(baseName)
       if (name.isBlank) throw CompileError(s"workflow[$i]", "workflow name must not be empty")
@@ -27,7 +28,16 @@ object NativeCompiler {
     val duplicates = named.groupBy(_._3).collect { case (name, values) if values.size > 1 => name }
     if (duplicates.nonEmpty)
       throw CompileError("artifact names", s"duplicate artifact names: ${duplicates.mkString(", ")}")
-    named.map { (workflow, name, safeName) =>
+    val selected = only match {
+      case None => named
+      case Some(requested) =>
+        val matches = named.filter(_._2 == requested)
+        if (matches.isEmpty)
+          throw CompileError("workflow selection",
+            s"unknown workflow '$requested'; available: ${named.map(_._2).mkString(", ")}")
+        matches
+    }
+    selected.map { (workflow, name, safeName) =>
       // The compiled artifact identifies the fully qualified workflow name,
       // even when the DSL child has a shorter local name.
       val program = Normalize(workflow, name).copy(name = name)

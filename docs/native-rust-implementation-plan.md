@@ -1,10 +1,26 @@
 # Native Rust workflow compiler and server execution plan
 
-Status: Scala-to-Rust ABI 3 implemented for sequential CFG, original `Try`/`Raise`,
-CEL subset and resumable HTTP effects; isolated pure GCP canary passed. Native
-production routing remains disabled. **Parallel, callbacks, children, provider
-connectors, reconciliation and OS sandbox are not ready.**
-Original plan: 2026-11-10; verification review: 2026-11-11.
+**Current priorities (supersedes the older phase-gate ordering below):**
+See [the unchanged-workflow pilot and benchmark plan](real-workflow-pilot-and-benchmark-plan.md)
+for the executable next milestone, safety conditions and acceptance criteria.
+The recent `Parallel`/`ParallelFor` implementation is **feature-complete for
+the current single-Jobs-worker model**: an eight-permit process-local budget,
+durable child records, effect journals, epoch-fenced claims and nested fork
+replay. The cross-process Firestore permit extension was *reverted* in server
+PR #82; orphan sweeping and distributed scheduling are **not** prerequisites
+for running a representative unchanged workflow. The next gate is a controlled
+authenticated effectful Jobs run with explicit Google fallback, followed by
+Google-vs-native semantic and latency comparison. Do not expand parallel
+orchestration absent a demonstrated problem.
+
+Status (2026-11-12): Scala-to-Rust ABI 3 implemented for sequential CFG,
+original `Try`/`Raise`, CEL subset and resumable HTTP effects; isolated pure
+GCP canary passed. **Native parallel fork/join is implemented and CI-tested
+on draft compiler #18 and server #82, but not merged or production validated.**
+Callbacks, nested child workflows, provider connectors, reconciliation of
+unknown remote HTTP outcomes and OS sandboxing are not generally ready.
+Production routing remains disabled.
+Original plan: 2026-11-10; verification reviews: 2026-11-11 and 2026-11-12.
 For the authoritative merged-versus-branch inventory, tests, remaining risk,
 prioritized milestones and acceptance gates, see
 [current-state-and-roadmap.md](current-state-and-roadmap.md).
@@ -289,6 +305,84 @@ Run equal-input benchmarks: 1,000 pure operations, 100 local mock HTTP steps, ne
 
 ## 6. Implementation phases and completion gates
 
+**Historical phases below are not a queue of work to complete before the
+next test.** The minimum real-workflow CI gate is complete; the immediate
+step is the isolated authenticated Jobs canary, then a matched Google
+comparison. Features such as distributed branch permits, fleet quotas,
+global orphan sweeping, callbacks, child workflows, storage and messaging
+adapters are implemented only when a selected workload requires them or
+operational evidence justifies them. The precise near-term order lives in
+[the pilot plan](real-workflow-pilot-and-benchmark-plan.md).
+
+### Latest checkpoint — aligned helpers and native time.format (Nov 12)
+
+The prior 55/66 constructed-AST audit was a **stale helper classpath**:
+compiler-rust's test runner loaded published `workflow-utils:0.3.5` even
+when `workflows/main` classes were rebuilt with locally fixed helpers.
+Merged workflow-utils #6 already repaired unbound `example` prompts and
+undefined cache-404 results. An audit with identical helper artifacts in
+both workflow compilation and scanner initially gave **56/66 emitted**;
+the remaining nine first blockers were the already-declared `time.format`.
+
+The native compiler now lowers `time.format` to pure Rust ISO-8601 formatting
+with optional IANA timezone, DST and microsecond precision. Real generated
+ELF, Rust unit, Scala compiler, replay and error tests passed. The **new
+constructed-AST result is 65/66 source-emitted**, 0 unknown operation IDs,
+0 class-loading errors, leaving only an `initEnvResult_*` lexical-scope
+reference in `evals-experiments-SweBenchLite`. Do not silently widen scope.
+Reconsider that workflow's structure only after a Google YAML scope audit.
+CI now pins the matching helper commit and uses its test-only local snapshot
+in both compilation and reflection scanning. **Source emission does not
+establish full native executable compatibility or production readiness.**
+
+### Newer checkpoint — November 12, 2026 (draft parallel implementation)
+
+**Follow-on compatibility increment:** Native `text.substring(source,start,end)`
+now has a compiled Rust implementation with bounds/negative-index and Unicode
+tests, rejecting missing end and incorrect types without changing the public
+Scala DSL. A new standalone generated executable passes process-level tests,
+and compiler CI covers it. Constructed-AST source emission against cached
+unchanged classes improved **54/66 to 55/66**, leaving 11 first-blocking
+raw references (`example` and cache helper result symbols). Next investigate
+the scope and actual value lifetime of those references, compare with YAML,
+and only then decide whether to correct compiler scoping or workflow helper
+definitions. The emitted sources are not evidence of full runtime parity.
+
+**Reference blocker diagnosis:** All 11 first blockers trace to two already
+corrected helper patterns: unbound `Spec.init(Resolver("example"))` in LLM
+schema prompts (nine definitions), and an out-of-scope failed Firebase read
+result on 404 (two definitions). [workflow-utils PR #6](https://github.com/awfl-us/workflow-utils/pull/6)
+merged literal-schema and null-on-404 fixes. The workflow audit still uses
+older `workflow-utils` dependencies, even in CI on the latest workflows main.
+Align the released helper package and consuming classpaths, then repeat the
+exact same AST audit; **do not** relax native undefined-symbol validation.
+
+The historical November 11 checkpoint following this section records what was
+merged **then**, not the present state of the new parallel feature branches.
+Compiler-rust [#18](https://github.com/awfl-us/compiler-rust/pull/18)
+(`f4f4ff7`) and server [#82](https://github.com/awfl-us/server/pull/82)
+(`67e1184`) implement independent Rust branch entries, isolated lexical
+snapshots, bounded child worker concurrency, pinned durable lane records,
+parent join/fork journals, deterministic indexed `ParallelFor` results,
+confirmed failure propagation and replay after committed child effects.
+Actual generated Rust binaries execute through the native Jobs worker.
+
+Compiler and server CI are green on the preceding commits; local native server
+discovery reports **85 tests, 63 passing, 0 failing, 22 skipped** before the
+new emulator cases. **Four real Firestore emulator tests** now pass with generated Rust
+ELFs: concurrent child effects, duplicate-lease rejection and fresh-store
+replay; recovery after a parent crash following child commits; empty/one/many
+indexed `ParallelFor`; and terminal parent cancellation fencing. This does **not** establish separate-process takeover, recursive
+child cancellation, distributed Jobs or general-workflow correctness.
+
+**This paragraph's previous expanded parallel acceptance gate was superseded
+on November 12.** Emulator recovery, nested forks and unchanged-workflow
+worker integration have since passed. Do **not** block the next canary on a
+cross-process fanout budget or orphan sweep. Use the isolated authenticated
+Jobs run, Google correctness comparison and benchmark checklist in the
+[current pilot plan](real-workflow-pilot-and-benchmark-plan.md). Parallel
+production routing remains disabled until its own workload is validated.
+
 ### Implementation checkpoint — 2026-11-11 (tested, still experimental)
 
 **Merged / completed within tested scope:** original DSL constant-only change
@@ -319,7 +413,7 @@ exercise live HTTP, callbacks, child workflows, user-facing APIs, native
 logging, or general agent performance. The Cloud Run Jobs normal revision
 retains `AWFL_NATIVE_EXECUTION_ENABLED=0`.
 
-**Still unimplemented or materially unverified:** `Parallel`/`ParallelFor`,
+**Still unimplemented or materially unverified at the November 11 baseline:** `Parallel`/`ParallelFor`,
 callbacks, child workflow launch/await, storage/Pub/Sub adapters, many CEL
 functions/overloads, version-safe environment globals,
 Google differential error/retry semantics, remote-uncertain outcome
@@ -327,11 +421,10 @@ reconciliation, authenticated shared-launcher end-to-end audit, safe OS
 sandbox, lease/worker/orphan reliability, and representative performance.
 No workflow source migration and no regular production traffic switch.
 
-**Next gate order:** (P0) compiler/server pair **merged** with green CI;
-(P1) constructed AST compatibility inventory plus differential fixtures;
-(P2) server effect/child/callback reliability and sandbox; (P3) real durable
-parallel scheduling; (P4) latency/throughput/security acceptance and a
-rollback-capable native canary. See
+**Historical order, superseded:** the next milestone is now a *small,
+authenticated, rollback-capable effectful native canary* and a measured
+comparison with Google using a real unchanged workflow. Compiler/source
+compatibility work outside that selected workflow remains demand-driven. See
 [current-state-and-roadmap.md](current-state-and-roadmap.md) for detailed
 per-stage acceptance tests and dependencies.
 
@@ -372,8 +465,13 @@ remote uncertain-outcome reconciliation remains unsolved.
 Gate: resume yields correct results, committed effects do not repeat, stale workers cannot commit, unknown outcomes are visible.
 
 ### Phase 4 — Callbacks, children, parallelism and connectors
-**Not implemented.** Treat this phase as a separate durable server
-orchestration project; adding IR lowering alone is not enough.
+**Implemented to the current scope on draft branches (#18/#82):** native
+parallel branch dispatch and fork/join have real compiled-binary and emulator
+tests, including nested replay and ancestor fencing. The in-process budget is
+intentional. Callbacks and nested workflow launch remain separate features;
+distributed branch scheduling has not been selected. Additional cancellation
+and remote-uncertainty semantics are tested as concrete workloads require.
+IR lowering alone is not sufficient for production readiness.
 - Implement callback inbox/timers, nested workflow sync/async execution, cancellation propagation.
 - Add storage and messaging adapters with existing response envelopes.
 - Add parallel branches/loops, bounded scheduling, atomic joins/results and persisted errors.

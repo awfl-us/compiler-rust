@@ -1,4 +1,110 @@
-# Native Rust implementation status — November 11, 2026
+# Native Rust implementation status — November 12, 2026
+
+## Current engineering checkpoint and immediate work
+
+This page retains many dated implementation increments below. **The current
+priority is no longer parallel infrastructure.** See the authoritative
+[real-workflow pilot and benchmark plan](real-workflow-pilot-and-benchmark-plan.md)
+and [current roadmap](current-state-and-roadmap.md).
+
+- Native `Parallel` / `ParallelFor` currently use a shared **process-local
+  eight-permit** limit; nested fork compilation, durable child records,
+  effect journals, lease/epoch and ancestor fencing, and recovery passed
+  compiled-Rust and real Firestore emulator tests. The distributed Firestore
+  permit layer was **reverted**, not deployed. There is no multi-Jobs-worker
+  branch scheduler to justify one today.
+- The unchanged production `LoadConversationHistory.scala` compiled and ran
+  through the actual native worker with a mocked HTTP response, committed
+  an effect, and replayed without redispatch. This test is now mandatory in
+  server PR #82 CI. Local native suite **68 passed / 29 skipped / 0 failed**;
+  separate real Firestore emulator **7/7 passed**. Server run `43280844780`
+  and compiler run `43280871676` are **both green**.
+- Local Rust IPC measurement on that workflow (40 invocations per stage)
+  recorded median **6.15 ms** effect preparation and **3.53 ms** resume.
+  These numbers exclude Cloud Tasks, Jobs startup, Firestore and HTTP.
+- The **next task** is an isolated effectful run through the authenticated
+  Workflows -> Cloud Tasks -> IAM Jobs service path, without turning on
+  native production routing. Then compare semantics and latency against the
+  Google Workflows backend on equivalent deterministic inputs.
+- The compiler's previously aligned **65/66 constructed-AST source emission**
+  result remains a *source-emission audit*, not a production compatibility
+  claim; the remaining `initEnvResult_*` lexical reference is deferred.
+
+Do not promote distributed permits, orphan sweeping, callback/child-workflow
+support or the remaining `initEnv` scope mismatch to immediate requirements
+without evidence from the chosen workflow. Older sections below document
+their historical test checkpoints, not the active plan.
+
+## Latest: native time.format and correctly aligned helper audit
+
+**Paired server reliability:** server PR #82 (`d776d76`) additionally passes
+real emulator assertions from a **second Node process**: a live forked
+parent's lease cannot be stolen, and a completed parent's result can be
+observed without re-execution. The same four compiled-binary emulator tests
+pass locally. This does not verify process-crash takeover or distributed
+capacity limits; both remain outstanding.
+
+**65/66 compiled workflow definitions emit Rust source**, with **one**
+remaining first blocker (`initEnvResult_71e5323f` used out of scope in
+`evals-experiments-SweBenchLite`). Zero class-loading errors and unknown
+operations. The earlier **55/66** result below is a historical audit using
+outdated test helper bytecode; do not interpret it as current source support.
+Rebuilding unchanged `workflows/main` (`c84270f`) with pinned merged
+`workflow-utils/main` (`08bda2d`) and setting the compiler scanner's
+`AWFL_WORKFLOW_UTILS_SNAPSHOT=0.1.0-SNAPSHOT` changed that to **56/66**.
+Implementing existing `time.format` then removed nine additional blockers.
+
+The runtime formats integer and floating epoch seconds to six-digit ISO-8601
+strings, with UTC or named IANA time zones and DST offsets; invalid types,
+nonfinite values and unrecognized zones fail. A standalone generated Rust
+binary, process-level retry/replay tests, Scala frontend emission tests,
+Rust workspace unit suite (24 pass), Rustfmt and Clippy pass locally. CI
+includes this fixture and the dependency-aligned compatibility audit.
+No workflow or public DSL changes; no production native rollout. The
+remaining initEnv question is a **semantic scope mismatch**, not permission
+to loosen name lookup. Source emission is not executable parity.
+
+## Native text.substring / refreshed constructed-AST audit
+
+The existing `CelFunctions.Text.Substring` operation now compiles to a native
+Rust helper with the Workflows-required `source, start, end` signature (both
+indexes required). String indexes are Unicode character offsets with negative
+and out-of-range clamping; reversed bounds yield empty text. Invalid operand
+types and a missing end are rejected. This required **no public DSL changes**.
+Rust unit tests and real Scala-generated ELF process tests pass; CI and local
+test scripts now exercise the same fixture.
+
+The rerun against cached, unchanged constructed workflow classes reported
+**55 emitted / 11 blocked / 66 total**, up from **54 / 12 / 66**; newly
+emitted: `evals-SweBenchLiteEval`. Zero unknown operations and zero loading
+errors. The remaining first blockers are eleven raw CEL references: `example`
+in nine workflow graphs and cache-result symbols in two. Do not interpret
+source emitted as deployed or end-to-end executed, and re-audit a fresh pinned
+workflows revision before claiming whole-repository coverage.
+
+The 11 blockers are attributable to **two helper bugs, not eleven unrelated
+compiler operations**. Merged
+[workflow-utils #6](https://github.com/awfl-us/workflow-utils/pull/6)
+already replaces the unbound `example` schema value in `Llm.chatJson` and the
+invalid failed-call return in `Firebase.read`'s 404 case. Current audited
+classpaths still reference older packaged helpers (`workflow-utils` test
+dependency `0.3.5` and workflows' prior snapshot), so the recompiled source
+must be audited against an aligned freshly published helper artifact before
+deciding whether any compiler changes remain. Rejecting unbound names is
+correct and must not be weakened to inflate emission counts.
+
+## Latest parallel checkpoint (2026-11-12)
+
+This document retains detailed **November 11 historical test/merge records** below. Those older sections are not a claim that `Parallel` remains unimplemented. Draft [compiler-rust #18](https://github.com/awfl-us/compiler-rust/pull/18) and [server #82](https://github.com/awfl-us/server/pull/82) (`67e1184`) now generate and execute separate native Rust branches with pinned snapshots, bounded concurrent Jobs-worker scheduling, parent fork journaling, `ParallelFor` input ordering, journaled replay, crash recovery after child commit, confirmed `Raise` propagation and a per-root in-process concurrency budget. No Scala DSL AST changes were needed.
+
+**Verified on the draft branches:** compiler GitHub CI and server real-generated-binary integration CI green on prior commits; four parallel Rust fixtures compiled and linted. Server local native discovery suite: 85 tests, 63 pass, 0 fail, 22 skip (before new emulator tests were added). The compiled fake-store tests were supplemented with **4/4 passing real local Firestore emulator tests** (concurrent branch effects and duplicate-lease rejection, replay through a fresh store, post-child/pre-join crash recovery, ordered `ParallelFor` for zero/one/many inputs, and terminal parent cancellation). Those tests use the actual Firestore client/transactions but **not deployed Jobs or separate worker processes**. No general workflow parity, distributed admission, full descendant cancellation policy, or live parallel canary is claimed. Native routing remains off.
+
+**Historical next gate, superseded November 12:** these proposed parallel
+expansions are not the active work queue. Nested fork and cross-process
+parent-lease fencing have since been tested, while distributed permits were
+reverted. **The immediate gate is a controlled real-workflow Jobs canary and
+matched Google correctness/latency comparison**, not orphan sweeping or
+cross-process admission. See [current pilot plan](real-workflow-pilot-and-benchmark-plan.md).
 
 ## Follow-on compatibility increment: native bytes and Base64
 
@@ -324,6 +430,14 @@ attempt to trigger the release workflow returned HTTP 403; the validated
 artifact was published using the existing injected GCP IAM credentials.
 
 ## Outstanding gates (priority order)
+
+**Updated November 12:** The numbered items below originated in the
+sequential/`Try` era and are retained for historical scope and eventual
+product parity. For the next engineering deliverable, use the isolated
+real-workflow canary, Google differential and benchmark sequence in the
+[current pilot plan](real-workflow-pilot-and-benchmark-plan.md). Parallel
+fork/join is already implemented to the single-worker scope; distributed
+admission and orphan cleanup are deferred.
 
 1. **Completed current delivery:** compiler [PR #7](https://github.com/awfl-us/compiler-rust/pull/7)
    (catch-only Rust PC) and server [PR #79](https://github.com/awfl-us/server/pull/79)

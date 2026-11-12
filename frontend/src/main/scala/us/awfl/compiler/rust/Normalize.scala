@@ -34,6 +34,60 @@ object Normalize {
 
     def fail(where: String, why: String): Nothing = throw CompileError(where, why)
 
+    /** Legacy YAML stringifies an Obj nested in str(CelValue(obj(...))) as
+      * JSON text. Resolved fields become literal `${...}` placeholders,
+      * not references that must be bound in the workflow.
+      */
+    def templateCel(node: Cel, where: String): String = node match {
+      case CelConst(value) => value
+      case CelStr(value) => s"\"${CelStr(value).safe.content}\""
+      case CelValue(value: Resolved[?]) => templateCel(value.resolver.path, where)
+      case CelValue(value: Obj[?]) => templateJson(value.value, where).toString
+      case CelPath(path) => path.map(templateCel(_, where)).mkString(".")
+      case CelOp(left, op, right) =>
+        s"(${templateCel(left, where)} $op ${templateCel(right, where)})"
+      case CelFunc(name, params) =>
+        s"$name(${params.map(templateCel(_, where)).mkString(", ")})"
+      case CelAt(list, index) =>
+        s"${templateCel(list.resolver.path, where)}[${templateCel(index, where)}]"
+      case other => fail(where, s"unsupported CEL inside literal JSON template: $other")
+    }
+
+    def templateJson(value: Any, where: String): io.circe.Json = {
+      import io.circe.Json
+      value match {
+        case null => Json.Null
+        case resolved: Resolved[?] =>
+          Json.fromString("${" + templateCel(resolved.resolver.path, where) + "}")
+        case opt: OptResolved[?] => templateJson(opt.getOrElse(Value.nil(opt.spec)), where)
+        case opt: OptList[?] => templateJson(opt.getOrElse(us.awfl.dsl.ListValue.nil(opt.spec)), where)
+        case OptObj(v) => templateJson(v.value, where)
+        case Obj(v) => templateJson(v, where)
+        case Some(v) => templateJson(v, where)
+        case None => Json.fromString("${null}")
+        case values: scala.List[?] => Json.fromValues(values.zipWithIndex.map { (v, i) =>
+          templateJson(v, s"$where[$i]")
+        })
+        case values: scala.collection.Map[?, ?] =>
+          val fields = values.toSeq.map {
+            case (name: String, v) => name -> templateJson(v, s"$where.$name")
+            case (key, _) => fail(where, s"invalid JSON template key: $key")
+          }
+          Json.fromFields(fields)
+        case product: Product =>
+          Json.fromFields(product.productElementNames.zip(product.productIterator).map {
+            (name, field) => name -> templateJson(field, s"$where.$name")
+          }.toSeq)
+        case v: String => Json.fromString(v)
+        case v: Boolean => Json.fromBoolean(v)
+        case v: Int => Json.fromInt(v)
+        case v: Long => Json.fromLong(v)
+        case v: Double => Json.fromDoubleOrNull(v)
+        case v: Float => Json.fromFloatOrNull(v)
+        case v => fail(where, s"unsupported JSON template value: ${v.getClass.getName}")
+      }
+    }
+
     def obj(value: Any, where: String): Expr = value match {
       case null => NullValue
       case v: String => StringValue(v)
@@ -162,6 +216,13 @@ object Normalize {
     }
 
     def valueExpr(value: BaseValue[?], where: String): Expr = value match {
+      // `str(CelValue(obj(...)))` means JSON text, not a runtime map. Only
+      // string-typed wrappers take this path; ordinary Obj stays executable.
+      case resolved: Value[?] if resolved.spec == stringSpec =>
+        resolved.resolver.path.path match {
+          case CelValue(Obj(data)) :: Nil => StringValue(templateJson(data, where).toString)
+          case _ => cel(resolved.resolver.path, where)
+        }
       case resolved: Resolved[?] => cel(resolved.resolver.path, where)
       case Obj(value) => obj(value, where)
     }
@@ -266,6 +327,66 @@ object Normalize {
               errSlot, rescueSteps, recovery, resultSlot))
           case raised: us.awfl.dsl.Raise =>
             Vector(Throw(nodeId, label, valueExpr(raised.raise, where)))
+          case parallel: us.awfl.dsl.Parallel =>
+            // All branches see the same pre-fork bindings: no branch may
+            // accidentally depend on results of an earlier sibling.
+            val snapshot = symbols.toMap
+            val branches = parallel.branches.zipWithIndex.map { (branch, branchIdx) =>
+              val branchNode = s"$nodeId.branch$branchIdx"
+              val (body, result) = scoped {
+                symbols.clear()
+                symbols ++= snapshot
+                val code = steps(List(branch), branchNode)
+                // Raise/Return terminate the lane before its nominal result
+                // can be evaluated. Do not resolve an unreachable result
+                // reference, but retain strict validation in reachable lanes.
+                val terminal = code.lastOption.exists {
+                  case _: Throw | _: EarlyReturn => true
+                  case _ => false
+                }
+                // Parallel is an existing DSL *statement* with NoValueT,
+                // unlike a value-producing Call or ParallelFor. Its nested
+                // effects run and join, but it has no implicit result symbol
+                // to resolve or export to this containing fork.
+                val result = if (terminal || branch.isInstanceOf[us.awfl.dsl.Parallel])
+                  NullValue
+                else valueExpr(branch.resultValue, s"$where.branch[$branchIdx].result")
+                (code, result)
+              }
+              val destination = s"s${slots.size}"
+              slots += destination
+              val exposed = branch match {
+                case _: us.awfl.dsl.Parallel => None
+                case _ => branch.resultValue match {
+                case resolved: Resolved[?] =>
+                  resolved.resolver.path.path match {
+                    case CelConst(resultName) :: Nil => Some(resultName)
+                    case _ => None // No stable result-root alias to export.
+                  }
+                case _ => None
+                }
+              }
+              (ForkBranch(branchNode, body, result, destination), exposed)
+            }.toVector
+            // Only explicit branch results cross the join. Internal values
+            // and iterator bindings do not escape their lexical scope.
+            branches.foreach { (branch, exposed) =>
+              exposed.foreach(name => symbols(name) = branch.joinedSlot)
+            }
+            Vector(Fork(nodeId, label, branches.map(_._1)))
+          case parallel: us.awfl.dsl.ParallelFor[?, ?] =>
+            val iterable = valueExpr(parallel.in, s"$where.in")
+            val (itemSlot, body, result) = scoped {
+              val itemName = parallel.item.resolver.path.path match {
+                case CelConst(name) :: Nil => name
+                case other => fail(where, s"invalid parallel iterator path: $other")
+              }
+              val slot = local(itemName, where)
+              val code = steps(parallel.each._1, s"$nodeId.each")
+              (slot, code, valueExpr(parallel.each._2, s"$where.each.result"))
+            }
+            val resultSlot = register(parallel.resultValue, where)
+            Vector(ForkEach(nodeId, label, iterable, itemSlot, body, result, resultSlot))
           case loop: ForRange[?] =>
             val from = cel(loop.from, s"$where.from")
             val until = cel(loop.to, s"$where.until")
@@ -306,8 +427,7 @@ object Normalize {
             }
             Vector(ReduceEach(nodeId, label, initial, iterable, itemSlot,
               body, result, resultSlot))
-          case other =>
-            fail(where, s"${other.getClass.getSimpleName} requires native lowering before Rust emission; cannot silently interpret YAML")
+          case null => fail(where, "null workflow step")
         }
       }.toVector
     }

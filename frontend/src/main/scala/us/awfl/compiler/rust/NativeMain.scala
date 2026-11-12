@@ -14,12 +14,16 @@ import us.awfl.compiler.rust.Ir.CompileError
   */
 object NativeMain {
   private val usage =
-    "Usage: NativeMain <WorkflowClassName> [OutputDirectory] [RustRuntimeDirectory]"
+    "Usage: NativeMain <WorkflowClassName> [OutputDirectory] [RustRuntimeDirectory] [--only=<FullWorkflowName>]"
 
   def compile(args: Array[String]): List[NativeCompiler.Artifact] = {
-    if (args.isEmpty || args.length > 3 || args.exists(_.startsWith("--")))
+    val selector = args.lastOption.filter(_.startsWith("--only="))
+    val positional = if (selector.nonEmpty) args.dropRight(1) else args
+    if (positional.isEmpty || positional.length > 3 ||
+        positional.exists(_.startsWith("--")) ||
+        selector.exists(_ == "--only="))
       throw IllegalArgumentException(usage)
-    val loaded = WorkflowLoader.loadFirst(WorkflowLoader.resolveCandidates(args(0)))
+    val loaded = WorkflowLoader.loadFirst(WorkflowLoader.resolveCandidates(positional(0)))
     val fqcn = loaded.fqcn
     val module = loaded.module
     if (module == null || !classOf[CoreWorkflow].isAssignableFrom(module.getClass))
@@ -28,9 +32,10 @@ object NativeMain {
     val workflows = workflow.workflows.asInstanceOf[List[DslWorkflow[?]]]
     if (workflows.isEmpty)
       throw CompileError(fqcn, "workflow builder produced no workflows")
-    val output = Paths.get(args.lift(1).getOrElse("rust_gens"))
-    val runtime = Paths.get(args.lift(2).getOrElse("../runtime"))
-    NativeCompiler.compile(workflows, workflow.workflowName, output, runtime)
+    val output = Paths.get(positional.lift(1).getOrElse("rust_gens"))
+    val runtime = Paths.get(positional.lift(2).getOrElse("../runtime"))
+    NativeCompiler.compile(workflows, workflow.workflowName, output, runtime,
+      selector.map(_.stripPrefix("--only=")))
   }
 
   def main(args: Array[String]): Unit = {

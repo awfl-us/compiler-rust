@@ -1,6 +1,205 @@
 # Native Rust execution: verified state, compatibility matrix, and roadmap
 
-**Evidence date:** 2026-11-11. **Status:** experimental, opt-in backend; **not production-ready**. This document distinguishes *merged*, *verified on a feature branch*, and *unimplemented*. It does not claim that passing tests equals Google Workflows parity.
+**Current execution plan (November 12):** [Real-workflow pilot and benchmark](real-workflow-pilot-and-benchmark-plan.md).
+That plan and the scope decision immediately below **supersede historical
+parallel delivery and release-gate checklists later in this document**.
+The next objective is one safely isolated authenticated Jobs run of an
+unchanged workflow, then semantic and latency comparison with Google.
+No additional parallel scheduler or cleanup subsystem is on the critical
+path unless actual testing demonstrates a need.
+
+## November 12 — simplify parallel scope; prioritize unchanged workflows
+
+**Decision:** native `Parallel` and `ParallelFor` are implemented sufficiently
+for the current **single-Jobs-worker per workflow** execution architecture.
+The per-root process-local eight-permit budget, durable branch records,
+checkpoint/effect journals, parent lease/epoch fencing and crash recovery
+remain. The experimental distributed Firestore permit layer in paired server
+PR #82 was **reverted** (not deployed): there is no independent Jobs worker
+per branch to coordinate. Global fleet quotas and orphan cleanup are deferred
+unless real usage establishes a need; they are not blockers to testing the
+existing architecture.
+
+**Next milestone: existing AWFL workloads.** The unchanged
+`LoadConversationHistory.scala` source from the workflows repository compiles
+to a native Rust ELF. Its real IPC effect request, continuation and replay
+pass the compiler's Python smoke test. The server's Jobs worker also executed
+that same compiled workflow with a **mocked** HTTP response: it recorded the
+effect once, produced `{ "status": "success" }`, and replayed the completed
+execution without sending the HTTP request again. This is now a **mandatory
+test** in the paired server CI, which passed on commit `9885751` (run
+`43280844780`); the compiler CI also passed on commit `920ac23` (run
+`43280871676`). The simplified code passed **68/97** native Node tests
+(29 skipped) with the compiled binaries supplied and **7/7** separate real
+Firestore emulator tests. No live service call, production rollout or
+Google Workflows latency comparison has been performed in this checkpoint.
+
+**Measured local-only IPC baseline:** 40 Rust subprocess invocations per
+stage, `LoadConversationHistory`: median **6.15 ms** to prepare the HTTP
+intent; median **3.53 ms** to resume after a supplied response. These are
+*not* cloud orchestration timings or a Google Workflows speedup claim.
+
+**Near-term order:** (1) completed: retain the unchanged real-workflow test
+in CI, (2) next: exercise a representative effectful workflow through the
+*authenticated* Jobs path in an isolated test deployment, with routing
+rollback, (3) compare correctness and end-to-end latency with its Google
+Workflows version, and (4) address only concrete compiler or runtime gaps
+uncovered. The one known out-of-scope `initEnv` lexical-scope case remains
+deferred; do not generalize compiler scoping just for it. Follow the
+[step-by-step pilot plan](real-workflow-pilot-and-benchmark-plan.md).
+
+**Evidence date:** 2026-11-12 (original baseline below: 2026-11-11). **Status:** experimental, opt-in backend; **not production-ready**. This document distinguishes *merged*, *verified on a feature branch*, and *unimplemented*. It does not claim that passing tests equals Google Workflows parity.
+
+## November 12 — genuine three-level nested Parallel and recursive fork fencing
+
+New draft compiler fixture `ParallelIrSmoke` constructs **unchanged Scala DSL**
+`Parallel` nodes at three nesting levels with deliberately repeated `Call`
+labels. That exposed a real Rust normalizer gap: the original DSL's
+`Parallel` is a `Step[NoValueT, NoValue]` *statement*. The compiler had
+incorrectly tried to resolve its phantom `resultValue` as if it were a
+registered Call result when `Parallel` itself was an outer parallel branch.
+`Normalize` now lowers that nested branch's result to `null`, without
+inventing a global name, exporting an undeclared binding or changing the DSL.
+
+**Local verification:** `ParallelIrSmoke` emits the nested crate, Cargo
+1.99.1 builds it, Clippy `-D warnings` passes, and the Python native-IPC
+regression traverses all three fork levels and four effects using the **real
+generated ELF**. The paired server's worker executes the same ELF using
+isolated child execution records: all four effects overlap as permitted,
+the root completes `nested-complete`, and a repeat delivery sends no extra
+effects. These checks use synthetic effect handlers, not live Google services.
+
+The paired [server PR #82](https://github.com/awfl-us/server/pull/82) also
+adds bounded, transactionally checked full ancestor-fork lineage. It passes
+**6/6** real Firestore emulator tests locally (including actual worker process
+death/recovery and a three-level stale-root-fork fence) and **20/20** focused
+unit tests. The stale-root case currently constructs nested Firestore records;
+it is distinct from the newly compiled nested ELF worker test. No production
+native routing was enabled. Cross-process concurrency admission, orphan
+cleanup, live effects, and unchanged-workflow Google/YAML differential parity
+remain release gates.
+
+## Latest verified compatibility checkpoint — November 12 (supersedes 55/66 below)
+
+**Original LLM JSON-template semantics restored (November 12, subsequent check).**
+The `workflow-utils` [revert PR #8](https://github.com/awfl-us/workflow-utils/pull/8)
+is merged: `Llm.chatJson` again uses
+`str(CelValue(obj(implicitly[Spec[T]].init(Resolver("example")))))`.
+The Rust normalizer now preserves this exact object-to-JSON-*string* use case,
+instead of trying to bind `example` as a runtime variable. Ordinary executable
+objects still resolve their values strictly and reject undefined names.
+Focused Scala normalization tests and the actual generated Rust ELF prove that
+`${example.title}` and `${example.summary}` stay literal for both empty input
+and input containing an unrelated `example` object. CI now runs these tests.
+Recompiling the unchanged `workflows/main` source at `c84270f` against the
+reverted, locally published `workflow-utils` helper and running the same
+constructed-AST audit yields **66 scanned, 65 emitted, 1 blocked, 0 load errors**.
+The sole blocker remains the existing `evals-experiments-SweBenchLite` reference
+to `initEnvResult_71e5323f` outside its lexical scope. The older 21/66 result
+from a stale workflow *feature* checkout is not the current main-branch baseline.
+As before, Rust source emission does not prove cloud execution or effect parity.
+
+**Parallel durability follow-through:** Paired server draft
+[#82](https://github.com/awfl-us/server/pull/82) (`d776d76`) extended the
+four-test real Firestore emulator suite: a separate Node process with its own
+Firestore client receives a lease conflict while a parent is forking, and
+observes the terminal result after parent join. All four tests passed locally
+with actual generated Rust binaries. This verifies **cross-process active
+parent lease exclusion**, *not* process-crash lease takeover, cross-process
+concurrency permits, recursive cancellation or production Jobs durability.
+
+**65 of 66 constructed AWFL workflow definitions now emit Rust source (98.5%).**
+The read-only audit uses unchanged `workflows/main` at `c84270f`, rebuilt
+against helper sources whose tree matches `workflow-utils/main` at `08bda2d`.
+The compiler frontend reflection scanner **also** uses the same newly
+published local snapshot (`AWFL_WORKFLOW_UTILS_SNAPSHOT=0.1.0-SNAPSHOT`),
+rather than silently loading its old `0.3.5` test dependency. Thus the
+historical 55/66 result was measuring older helper code and is **not** the
+remaining gap in current sources. A first aligned audit produced **56/66**
+with nine `time.format` blockers and one out-of-scope `initEnv` reference.
+
+The new native `time.format(seconds[,timezone])` implements an integer/float
+epoch to ISO 8601 with exactly six fractional digits, UTC `Z` or a tzdb/IANA
+offset (including DST, e.g. `America/New_York`); non-finite timestamps,
+invalid zone names and wrong types fail. Both the Scala-generated real Rust
+ELF and Rust unit tests pass the UTC, timezone, DST, negative fractional
+epoch, invalid-type and replay fixtures. **After this addition the identical
+audit reports 65 emitted, 1 blocked, 0 class-load errors and 0 unknown
+operation names.** The only first blocker is
+`evals-experiments-SweBenchLite` referring to `initEnvResult_71e5323f`
+outside its lexical scope; do **not** promote undeclared variables to globals
+or modify the application's `initEnv` structure without deciding its proper
+control-flow scope.
+
+CI now pins the merged helper revision, publishes its test-only local
+snapshot, compiles the unchanged workflow sources with that dependency, and
+forces the scanner to use the same library. Reproduce using
+`scripts/audit-real-workflows.sh` with `AWFL_WORKFLOW_UTILS_SNAPSHOT` and
+`AWFL_WORKFLOWS_ROOT`. These numbers concern **Rust source emission, not
+65 independently built/tested workflow executables, Google differential
+semantics, effect safety or native production readiness**.
+
+## November 12 parallel implementation checkpoint — supersedes earlier parallel status
+
+### Follow-on source-compatibility audit and native text.substring
+
+Rerunning `AWFL_WORKFLOWS_ROOT=/workspace/workflows-raw-audit scripts/audit-real-workflows.sh`
+against the **unchanged, cached compiled workflow classes** after adding the
+existing `text.substring` operation to native Rust gives **66 constructed
+definitions, 55 Rust sources emitted, 11 first-blocking definitions, zero
+load errors, zero unknown operation IDs**. This improves the immediately
+preceding branch audit from **54 emitted / 12 blocked**; the newly emitted
+definition is `evals-SweBenchLiteEval`. The 11 remaining first blockers are
+invalid/raw CEL references (`example` in nine constructed graphs and two
+cache-result symbols). The fixed `text.substring` implements the exact required
+three-argument Workflows signature, Unicode character offsets, negative and
+clamped indexes; standalone generated ELF and Rust unit/replay/invalid-type
+tests pass. Neither source-emission count nor those fixtures proves execution
+of every emitted workflow or Google differential parity. The workflow classes
+were precompiled from a historical `workflows` checkout; rerun this audit
+against an explicitly pinned fresh `workflows/main` checkout before using
+these counts as a release gate.
+
+**Dependency-provenance finding:** The same **55/66** count was independently
+confirmed by the GitHub Actions `real-workflow-compatibility` job checking out
+`workflows/main` on this compiler branch. Both audits still resolve an old
+`workflow-utils` artifact. The nine unbound `example` CEL paths come from
+`Llm.chatJson` constructing a `Spec.init(Resolver("example"))` for a *JSON-text
+schema template* wrapped in `str(CelValue(obj(...)))`; this was **not** a
+reference intended for runtime evaluation. The YAML encoder stringified the
+object and kept `${example.title}` as text inside quoted JSON, whereas the
+old Rust normalizer walked into each field and erroneously tried to resolve
+`example` as a bound symbol. The other two failures involved a real
+`Firebase.read` 404 handler reference to a failed request's out-of-scope
+result. [workflow-utils PR #6](https://github.com/awfl-us/workflow-utils/pull/6)
+temporarily changed the LLM helper to generate `SchemaExample[T]` directly;
+that change was reverted in merged
+[workflow-utils PR #8](https://github.com/awfl-us/workflow-utils/pull/8),
+in favor of preserving **existing DSL semantics in the Rust compiler**,
+while retaining the unrelated Firebase 404 fix.
+All actual executable object/step references remain strictly scope-checked.
+The 55/66 historical measurement still uses old helper dependencies; rerun
+an aligned source audit before comparing current coverage.
+
+The original November 11 compatibility figures below are **historical baseline snapshots**; in particular, rows stating that `Parallel`/`ParallelFor` are not implemented refer to the then-merged baseline, **not** current draft branches. Do not change those old audit counts without rerunning the identical constructed-AST audit against the newer compiler. The current changes are in **draft** [compiler-rust #18](https://github.com/awfl-us/compiler-rust/pull/18) and [server #82](https://github.com/awfl-us/server/pull/82) (`67e1184`), not on `main`.
+
+- **Implemented in drafts:** original Scala `Parallel` and `ParallelFor` lower to separate Rust entry PCs and branch-local slot snapshots, with a version-pinned `native.parallel` fork. The Jobs worker creates deterministic, digest-pinned child records, dispatches bounded concurrent child effects through the existing journal, records one parent join, and reconstructs indexed loop results. Parent `Try` handles **confirmed** failed children, not uncertain remote outcomes. A parent fork lease is refreshed during execution; a shared *in-process* permit queue limits nested work without reserving permits while awaiting children.
+- **Verified:** Scala `ParallelIrSmoke`; four generated Rust crates built and Clippy-clean; a real compiled binary + worker + transaction-shaped in-memory Firestore store test covers overlapping HTTP effects, zero/one/many indexed lanes, crash after committed children before parent journal, replay, caught/uncaught `Raise`, and uncertain sibling outcomes. Server native discovery suite **85 tests: 63 passed, 0 failed, 22 skipped** (prior to the added emulator cases). **New:** the compiled Rust ELF suites passed **4/4 tests against the actual local Firestore emulator**—concurrent branches + fresh-store replay with duplicate-parent-lease rejection, takeover after injected post-child/pre-parent crash, zero/one/many indexed `ParallelFor` iterations, and parent cancellation fencing. Compiler GitHub Actions and paired server GitHub Actions passed on the prior revisions, including the first three emulator cases; updated four-case CI is being verified on the draft.
+- **Subsequent update:** independent Node worker death and parent lease
+  takeover, nested three-level generated Rust forks and full ancestor
+  fencing now pass the real Firestore emulator (**7/7** after simplification).
+  Recursive child-record garbage collection and a cross-process admission
+  manager remain unimplemented **by design**; neither blocks the isolated
+  nonparallel pilot. Unverified: effectful deployed Jobs routing, remote
+  ambiguous-outcome semantics, and parity/latency against Google. Production
+  `AWFL_NATIVE_EXECUTION_ENABLED` remains disabled. Emulator tests are **not**
+  a live GCP traffic rollout.
+
+**Historical gate order (superseded November 12):** the earlier four-emulator
+and cross-process expansion plan below predates successful nested Rust
+emulator tests and the decision to stop expanding parallel infrastructure.
+The authoritative next gates are now [unchanged-workflow authenticated Jobs
+canary -> Google differential -> measured performance](real-workflow-pilot-and-benchmark-plan.md).
 
 ## November 12, 2026 — authenticated native globals and URL encoding (feature branch)
 
@@ -105,7 +304,7 @@ remaining compiler/runtime work belongs in the respective backends and server.
 | `Try`/`Raise` and nested rethrows | **Merged + tested** | CFG exception edges, explicit terminal `Failed`, pure CEL errors and confirmed HTTP failure recovery |
 | Existing DSL default `Try` logger | **Merged and locally verified** | Compiler PR #7 fixes catch-only PC; server PR #79 journals bounded `log.write`; post-journal crash restart tested |
 | Ordinary trusted HTTP GET/POST/PATCH/DELETE | **Local adapter and bounded integration tests** | Jobs IAM/OIDC, identity override, allowlist, HTTP-error catch; no production live-effect approval, uncertain outcome reconciliation missing |
-| `Parallel`, `ParallelFor` | **Not implemented** | Need deterministic branch/iteration IDs, bounded scheduling, isolated state, durable join, failure/cancel semantics |
+| `Parallel`, `ParallelFor` | **Draft implementation; not merged or production-validated** | Compiler #18/server #82 pass compiled-ELF/fake-store and four local Firestore emulator tests; descendant cancellation, independent multi-process workers and deployed Jobs remain gates |
 | Callback create/await, child workflow `workflow.run` | **Not implemented** | Need durable callback inbox, child-start idempotency, timeout and cancellation propagation |
 | Storage object get, Pub/Sub publish | **Not implemented** | Existing Google connector argument/return contracts need explicit server-side adapters |
 | Conversion/text/bytes/time/UUID/environment and arbitrary CEL | **Partial or not implemented** | Native clock/UUID are direct expressions; remaining overloads and authenticated env bindings need implementation; unknown names fail compile |
@@ -158,7 +357,7 @@ connector effects runnable.
 
 **Gate:** prioritized workflows have reproducible green/broken rows and fail-closed compiler diagnostics; backend drift has an explicit, reviewable exception list rather than being hidden by fallback.
 
-### P2 — Complete durable effects and reliability
+### P2 — Complete durable effects and reliability (broader follow-up; not all pilot prerequisites)
 
 - Implement per-operation policy for HTTP retry, idempotency, unknown outcome reconciliation, and recovery after worker deaths both before and after an external effect. Distinguish provider operation failure from infrastructure failure. Add live Firestore emulator / test-project contention, lease expiry/takeover, cancellation, and orphan sweeps.
 - Implement approved `workflow.run` sync/async child behavior and `callback.create`/`callback.await` with atomic inbox and event de-duplication; integrate existing session history and cancellation semantics. Then add storage and Pub/Sub provider adapters with exact envelopes.
@@ -166,15 +365,21 @@ connector effects runnable.
 
 **Gate:** crash-injection matrix and tenant isolation tests pass for every supported effect, including concurrent takeovers and actual remote uncertainty; no untrusted native process inherits server credentials.
 
-### P3 — Durable `Parallel` and `ParallelFor`
+### P3 — Durable `Parallel` and `ParallelFor` (implemented on draft branches; historical specification)
 
 - Keep original DSL nodes. Normalize them to compiler-private fork/join operations with stable branch/iteration identifiers and isolated frame slots.
 - Store branch scheduling, cancellation, result/error states and join completion in server-owned durable records; use bounded concurrency rather than sequentializing or spawning unconstrained threads. Define legacy Google list ordering and shared-error semantics with differential fixtures.
 - Verify duplicate delivery, repeated child branch launch, a crash before/after join, partial completion, sibling cancellation and large fan-out, without repeating committed effects.
 
-**Gate:** a real unchanged workflow using `Parallel`/`ParallelFor` compiles and correctly resumes after multi-worker takeover and passes differential concurrency/order/error tests.
+**Updated scope:** real compiled nested parallel, branch records, journaled
+effects, transactionally fenced ancestors, and replay are now verified in
+the local worker and Firestore emulator. There is no plan to schedule each
+branch as a separate Jobs worker, so a distributed permit manager is **not**
+required for this milestone. Differential parallel semantics can be tested
+when selecting a real parallel-bearing workflow; do not treat a cross-process
+capacity system or orphan sweeper as the next implementation deliverable.
 
-### P4 — Performance, canary and controlled rollout
+### P4 — Performance, canary and controlled rollout (now the immediate milestone)
 
 - Benchmark warm/cold native startup separately from engine cost. Compare Google and Rust with equivalent durability, simulated effects and at least one agent workflow; report p50/p95/p99, operations, Firestore writes/bytes, CPU/RSS, cost and effect latency. The one 6,836 ms cold pilot is *not* a speedup claim.
 - Validate GCS static-musl artifact publisher, pinned active manifests, authenticated `/workflows/execute`, session history, result/status/cancel, rollback of new starts and old-run continuation compatibility.

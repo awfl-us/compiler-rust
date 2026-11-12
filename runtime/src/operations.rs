@@ -2,6 +2,58 @@
 //! a workflow AST evaluator or a mechanism for making external side effects.
 use crate::{AwflValue, ValueError};
 use base64::Engine;
+use chrono::{DateTime, SecondsFormat, Utc};
+use chrono_tz::Tz;
+
+/// Workflows time.format: Unix seconds (integer or float) to an ISO 8601
+/// timestamp with exactly six fractional digits and a tzdb zone. The UTC
+/// spelling uses Z; zone offsets use +/-HH:MM. Convert using integer
+/// microseconds so negative fractional epochs work across second boundaries.
+pub fn time_format(
+    seconds: &AwflValue,
+    timezone: Option<&AwflValue>,
+) -> Result<AwflValue, ValueError> {
+    let (epoch_seconds, nanos) = match seconds {
+        AwflValue::Integer(s) => (*s, 0),
+        AwflValue::Float(s) if s.is_finite() => {
+            let us = (*s * 1_000_000.0).round();
+            if !us.is_finite() || us < i64::MIN as f64 || us >= i64::MAX as f64 {
+                return Err(ValueError::Type(
+                    "time.format timestamp out of range".into(),
+                ));
+            }
+            let us = us as i64;
+            (
+                us.div_euclid(1_000_000),
+                (us.rem_euclid(1_000_000) as u32) * 1000,
+            )
+        }
+        _ => {
+            return Err(ValueError::Type(
+                "time.format seconds must be finite integer or float".into(),
+            ));
+        }
+    };
+    let date = DateTime::<Utc>::from_timestamp(epoch_seconds, nanos)
+        .ok_or_else(|| ValueError::Type("time.format timestamp out of range".into()))?;
+    let zone_name = match timezone {
+        None => "UTC",
+        Some(AwflValue::String(s)) if s.is_empty() => "UTC",
+        Some(AwflValue::String(s)) => s.as_str(),
+        Some(_) => {
+            return Err(ValueError::Type(
+                "time.format timezone must be string".into(),
+            ));
+        }
+    };
+    let zone: Tz = zone_name
+        .parse()
+        .map_err(|_| ValueError::Type(format!("time.format unsupported timezone '{zone_name}'")))?;
+    Ok(AwflValue::String(
+        date.with_timezone(&zone)
+            .to_rfc3339_opts(SecondsFormat::Micros, true),
+    ))
+}
 
 /// Current Unix epoch seconds, as a float compatible with Google Workflows sys.now.
 /// Evaluated when encountered; existing step slots/continuations own persistence.
@@ -282,6 +334,40 @@ pub fn text_lowercase(value: &AwflValue) -> Result<AwflValue, ValueError> {
         AwflValue::String(text) => Ok(AwflValue::String(text.to_lowercase())),
         _ => Err(ValueError::Type("text.to_lower requires a string".into())),
     }
+}
+
+/// Workflows text.substring uses zero-based Unicode character offsets,
+/// inclusive at start and exclusive at end. Negative indices count back
+/// from the end, and out-of-range indices clamp rather than failing.
+pub fn text_substring(
+    source: &AwflValue,
+    start: &AwflValue,
+    end: &AwflValue,
+) -> Result<AwflValue, ValueError> {
+    let (AwflValue::String(source), AwflValue::Integer(start), AwflValue::Integer(end)) =
+        (source, start, end)
+    else {
+        return Err(ValueError::Type(
+            "text.substring requires string, integer, integer".into(),
+        ));
+    };
+    let len = i64::try_from(source.chars().count()).map_err(|_| ValueError::Overflow)?;
+    let clamp = |index: i64| -> usize {
+        let offset = if index < 0 {
+            len.saturating_add(index)
+        } else {
+            index
+        };
+        offset.clamp(0, len) as usize
+    };
+    let from = clamp(*start);
+    let to = clamp(*end);
+    if from >= to {
+        return Ok(AwflValue::String(String::new()));
+    }
+    Ok(AwflValue::String(
+        source.chars().skip(from).take(to - from).collect(),
+    ))
 }
 
 /// Limit initial charset support to the two encodings used by native fixtures.
@@ -643,6 +729,112 @@ mod tests {
         );
         assert!(text_lowercase(&AwflValue::Integer(1)).is_err());
     }
+    #[test]
+    fn time_format_uses_microseconds_and_iana_timezone_dst() {
+        let format = |value: AwflValue, zone: Option<&str>| -> String {
+            let tz = zone.map(|s| AwflValue::String(s.into()));
+            match time_format(&value, tz.as_ref()).unwrap() {
+                AwflValue::String(text) => text,
+                _ => panic!("expected text timestamp"),
+            }
+        };
+        assert_eq!(
+            format(AwflValue::Integer(1_720_788_633), None),
+            "2024-07-12T12:50:33.000000Z"
+        );
+        assert_eq!(
+            format(AwflValue::Integer(1_720_788_633), Some("GMT")),
+            "2024-07-12T12:50:33.000000Z"
+        );
+        assert_eq!(
+            format(AwflValue::Integer(1_720_788_633), Some("Europe/Paris")),
+            "2024-07-12T14:50:33.000000+02:00"
+        );
+        assert_eq!(
+            format(AwflValue::Integer(1_720_788_633), Some("America/New_York")),
+            "2024-07-12T08:50:33.000000-04:00"
+        );
+        assert_eq!(
+            format(AwflValue::Integer(0), Some("America/New_York")),
+            "1969-12-31T19:00:00.000000-05:00"
+        );
+        assert_eq!(
+            format(AwflValue::Float(-0.25), None),
+            "1969-12-31T23:59:59.750000Z"
+        );
+        assert_eq!(
+            format(AwflValue::Float(0.615087), None),
+            "1970-01-01T00:00:00.615087Z"
+        );
+        assert_eq!(
+            format(AwflValue::Integer(0), Some("")),
+            "1970-01-01T00:00:00.000000Z"
+        );
+        for value in [
+            AwflValue::Bool(true),
+            AwflValue::String("42".into()),
+            AwflValue::Float(f64::NAN),
+            AwflValue::Float(f64::INFINITY),
+            AwflValue::Float(1.0e40),
+        ] {
+            assert!(time_format(&value, None).is_err());
+        }
+        assert!(time_format(&AwflValue::Integer(0), Some(&AwflValue::Integer(3))).is_err());
+        assert!(
+            time_format(
+                &AwflValue::Integer(0),
+                Some(&AwflValue::String("Bogus/Timezone".into()))
+            )
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn text_substring_clamps_negative_bounds_and_preserves_unicode() {
+        let slice = |source: &str, start: i64, end: i64| {
+            text_substring(
+                &AwflValue::String(source.into()),
+                &AwflValue::Integer(start),
+                &AwflValue::Integer(end),
+            )
+            .unwrap()
+        };
+        assert_eq!(slice("hello", 2, 4), AwflValue::String("ll".into()));
+        assert_eq!(slice("hello", -10, 10), AwflValue::String("hello".into()));
+        assert_eq!(slice("hello", -3, -1), AwflValue::String("ll".into()));
+        assert_eq!(slice("a🙂éZ", 1, 3), AwflValue::String("🙂é".into()));
+        assert_eq!(slice("hello", 4, 2), AwflValue::String(String::new()));
+        assert_eq!(
+            slice("hello", i64::MIN, i64::MAX),
+            AwflValue::String("hello".into())
+        );
+        assert_eq!(slice("", -1, 10), AwflValue::String(String::new()));
+        assert!(
+            text_substring(
+                &AwflValue::Integer(1),
+                &AwflValue::Integer(0),
+                &AwflValue::Integer(1)
+            )
+            .is_err()
+        );
+        assert!(
+            text_substring(
+                &AwflValue::String("hello".into()),
+                &AwflValue::Float(1.0),
+                &AwflValue::Integer(3)
+            )
+            .is_err()
+        );
+        assert!(
+            text_substring(
+                &AwflValue::String("hello".into()),
+                &AwflValue::Integer(0),
+                &AwflValue::String("3".into())
+            )
+            .is_err()
+        );
+    }
+
     #[test]
     fn utf8_ascii_and_base64_are_explicit_and_replayable() {
         let utf8 = text_encode(&AwflValue::String("Hello 🙂".into()), None).unwrap();
