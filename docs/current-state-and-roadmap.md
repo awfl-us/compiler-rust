@@ -23,6 +23,20 @@ were precompiled from a historical `workflows` checkout; rerun this audit
 against an explicitly pinned fresh `workflows/main` checkout before using
 these counts as a release gate.
 
+**Dependency-provenance finding:** The same **55/66** count was independently
+confirmed by the GitHub Actions `real-workflow-compatibility` job checking out
+`workflows/main` on this compiler branch. Both audits still resolve an old
+`workflow-utils` artifact. The nine unbound `example` CEL paths come from
+`Llm.chatJson` constructing a `Spec.init(Resolver("example"))` as a runtime
+expression; the other two come from `Firebase.read`'s 404 handler returning the
+failed request's out-of-scope result. These defects were already fixed at
+their source in merged [workflow-utils PR #6](https://github.com/awfl-us/workflow-utils/pull/6)
+(literal schema examples and null-on-404, merged November 12). The compiler
+frontend still resolves `workflow-utils:0.3.5` in test scope, while the
+workflows build also uses its older local snapshot. **Next action is a
+reproducible release/dependency alignment and a fresh constructed-AST audit,
+not loosening compiler name lookup to accept undefined CEL variables.**
+
 The original November 11 compatibility figures below are **historical baseline snapshots**; in particular, rows stating that `Parallel`/`ParallelFor` are not implemented refer to the then-merged baseline, **not** current draft branches. Do not change those old audit counts without rerunning the identical constructed-AST audit against the newer compiler. The current changes are in **draft** [compiler-rust #18](https://github.com/awfl-us/compiler-rust/pull/18) and [server #82](https://github.com/awfl-us/server/pull/82) (`67e1184`), not on `main`.
 
 - **Implemented in drafts:** original Scala `Parallel` and `ParallelFor` lower to separate Rust entry PCs and branch-local slot snapshots, with a version-pinned `native.parallel` fork. The Jobs worker creates deterministic, digest-pinned child records, dispatches bounded concurrent child effects through the existing journal, records one parent join, and reconstructs indexed loop results. Parent `Try` handles **confirmed** failed children, not uncertain remote outcomes. A parent fork lease is refreshed during execution; a shared *in-process* permit queue limits nested work without reserving permits while awaiting children.

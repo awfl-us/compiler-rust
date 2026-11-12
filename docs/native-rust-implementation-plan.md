@@ -305,6 +305,15 @@ the scope and actual value lifetime of those references, compare with YAML,
 and only then decide whether to correct compiler scoping or workflow helper
 definitions. The emitted sources are not evidence of full runtime parity.
 
+**Reference blocker diagnosis:** All 11 first blockers trace to two already
+corrected helper patterns: unbound `Spec.init(Resolver("example"))` in LLM
+schema prompts (nine definitions), and an out-of-scope failed Firebase read
+result on 404 (two definitions). [workflow-utils PR #6](https://github.com/awfl-us/workflow-utils/pull/6)
+merged literal-schema and null-on-404 fixes. The workflow audit still uses
+older `workflow-utils` dependencies, even in CI on the latest workflows main.
+Align the released helper package and consuming classpaths, then repeat the
+exact same AST audit; **do not** relax native undefined-symbol validation.
+
 The historical November 11 checkpoint following this section records what was
 merged **then**, not the present state of the new parallel feature branches.
 Compiler-rust [#18](https://github.com/awfl-us/compiler-rust/pull/18)

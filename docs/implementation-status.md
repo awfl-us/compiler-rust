@@ -18,6 +18,17 @@ in nine workflow graphs and cache-result symbols in two. Do not interpret
 source emitted as deployed or end-to-end executed, and re-audit a fresh pinned
 workflows revision before claiming whole-repository coverage.
 
+The 11 blockers are attributable to **two helper bugs, not eleven unrelated
+compiler operations**. Merged
+[workflow-utils #6](https://github.com/awfl-us/workflow-utils/pull/6)
+already replaces the unbound `example` schema value in `Llm.chatJson` and the
+invalid failed-call return in `Firebase.read`'s 404 case. Current audited
+classpaths still reference older packaged helpers (`workflow-utils` test
+dependency `0.3.5` and workflows' prior snapshot), so the recompiled source
+must be audited against an aligned freshly published helper artifact before
+deciding whether any compiler changes remain. Rejecting unbound names is
+correct and must not be weakened to inflate emission counts.
+
 ## Latest parallel checkpoint (2026-11-12)
 
 This document retains detailed **November 11 historical test/merge records** below. Those older sections are not a claim that `Parallel` remains unimplemented. Draft [compiler-rust #18](https://github.com/awfl-us/compiler-rust/pull/18) and [server #82](https://github.com/awfl-us/server/pull/82) (`67e1184`) now generate and execute separate native Rust branches with pinned snapshots, bounded concurrent Jobs-worker scheduling, parent fork journaling, `ParallelFor` input ordering, journaled replay, crash recovery after child commit, confirmed `Raise` propagation and a per-root in-process concurrency budget. No Scala DSL AST changes were needed.
