@@ -284,6 +284,40 @@ pub fn text_lowercase(value: &AwflValue) -> Result<AwflValue, ValueError> {
     }
 }
 
+/// Workflows text.substring uses zero-based Unicode character offsets,
+/// inclusive at start and exclusive at end. Negative indices count back
+/// from the end, and out-of-range indices clamp rather than failing.
+pub fn text_substring(
+    source: &AwflValue,
+    start: &AwflValue,
+    end: &AwflValue,
+) -> Result<AwflValue, ValueError> {
+    let (AwflValue::String(source), AwflValue::Integer(start), AwflValue::Integer(end)) =
+        (source, start, end)
+    else {
+        return Err(ValueError::Type(
+            "text.substring requires string, integer, integer".into(),
+        ));
+    };
+    let len = i64::try_from(source.chars().count()).map_err(|_| ValueError::Overflow)?;
+    let clamp = |index: i64| -> usize {
+        let offset = if index < 0 {
+            len.saturating_add(index)
+        } else {
+            index
+        };
+        offset.clamp(0, len) as usize
+    };
+    let from = clamp(*start);
+    let to = clamp(*end);
+    if from >= to {
+        return Ok(AwflValue::String(String::new()));
+    }
+    Ok(AwflValue::String(
+        source.chars().skip(from).take(to - from).collect(),
+    ))
+}
+
 /// Limit initial charset support to the two encodings used by native fixtures.
 /// Unknown IANA names must fail closed, not silently use UTF-8.
 fn charset(value: Option<&AwflValue>) -> Result<&'static str, ValueError> {
@@ -643,6 +677,52 @@ mod tests {
         );
         assert!(text_lowercase(&AwflValue::Integer(1)).is_err());
     }
+    #[test]
+    fn text_substring_clamps_negative_bounds_and_preserves_unicode() {
+        let slice = |source: &str, start: i64, end: i64| {
+            text_substring(
+                &AwflValue::String(source.into()),
+                &AwflValue::Integer(start),
+                &AwflValue::Integer(end),
+            )
+            .unwrap()
+        };
+        assert_eq!(slice("hello", 2, 4), AwflValue::String("ll".into()));
+        assert_eq!(slice("hello", -10, 10), AwflValue::String("hello".into()));
+        assert_eq!(slice("hello", -3, -1), AwflValue::String("ll".into()));
+        assert_eq!(slice("a🙂éZ", 1, 3), AwflValue::String("🙂é".into()));
+        assert_eq!(slice("hello", 4, 2), AwflValue::String(String::new()));
+        assert_eq!(
+            slice("hello", i64::MIN, i64::MAX),
+            AwflValue::String("hello".into())
+        );
+        assert_eq!(slice("", -1, 10), AwflValue::String(String::new()));
+        assert!(
+            text_substring(
+                &AwflValue::Integer(1),
+                &AwflValue::Integer(0),
+                &AwflValue::Integer(1)
+            )
+            .is_err()
+        );
+        assert!(
+            text_substring(
+                &AwflValue::String("hello".into()),
+                &AwflValue::Float(1.0),
+                &AwflValue::Integer(3)
+            )
+            .is_err()
+        );
+        assert!(
+            text_substring(
+                &AwflValue::String("hello".into()),
+                &AwflValue::Integer(0),
+                &AwflValue::String("3".into())
+            )
+            .is_err()
+        );
+    }
+
     #[test]
     fn utf8_ascii_and_base64_are_explicit_and_replayable() {
         let utf8 = text_encode(&AwflValue::String("Hello 🙂".into()), None).unwrap();

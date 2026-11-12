@@ -1,5 +1,23 @@
 # Native Rust implementation status — November 12, 2026
 
+## Native text.substring / refreshed constructed-AST audit
+
+The existing `CelFunctions.Text.Substring` operation now compiles to a native
+Rust helper with the Workflows-required `source, start, end` signature (both
+indexes required). String indexes are Unicode character offsets with negative
+and out-of-range clamping; reversed bounds yield empty text. Invalid operand
+types and a missing end are rejected. This required **no public DSL changes**.
+Rust unit tests and real Scala-generated ELF process tests pass; CI and local
+test scripts now exercise the same fixture.
+
+The rerun against cached, unchanged constructed workflow classes reported
+**55 emitted / 11 blocked / 66 total**, up from **54 / 12 / 66**; newly
+emitted: `evals-SweBenchLiteEval`. Zero unknown operations and zero loading
+errors. The remaining first blockers are eleven raw CEL references: `example`
+in nine workflow graphs and cache-result symbols in two. Do not interpret
+source emitted as deployed or end-to-end executed, and re-audit a fresh pinned
+workflows revision before claiming whole-repository coverage.
+
 ## Latest parallel checkpoint (2026-11-12)
 
 This document retains detailed **November 11 historical test/merge records** below. Those older sections are not a claim that `Parallel` remains unimplemented. Draft [compiler-rust #18](https://github.com/awfl-us/compiler-rust/pull/18) and [server #82](https://github.com/awfl-us/server/pull/82) (`67e1184`) now generate and execute separate native Rust branches with pinned snapshots, bounded concurrent Jobs-worker scheduling, parent fork journaling, `ParallelFor` input ordering, journaled replay, crash recovery after child commit, confirmed `Raise` propagation and a per-root in-process concurrency budget. No Scala DSL AST changes were needed.

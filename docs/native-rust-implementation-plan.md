@@ -294,6 +294,17 @@ Run equal-input benchmarks: 1,000 pure operations, 100 local mock HTTP steps, ne
 
 ### Newer checkpoint — November 12, 2026 (draft parallel implementation)
 
+**Follow-on compatibility increment:** Native `text.substring(source,start,end)`
+now has a compiled Rust implementation with bounds/negative-index and Unicode
+tests, rejecting missing end and incorrect types without changing the public
+Scala DSL. A new standalone generated executable passes process-level tests,
+and compiler CI covers it. Constructed-AST source emission against cached
+unchanged classes improved **54/66 to 55/66**, leaving 11 first-blocking
+raw references (`example` and cache helper result symbols). Next investigate
+the scope and actual value lifetime of those references, compare with YAML,
+and only then decide whether to correct compiler scoping or workflow helper
+definitions. The emitted sources are not evidence of full runtime parity.
+
 The historical November 11 checkpoint following this section records what was
 merged **then**, not the present state of the new parallel feature branches.
 Compiler-rust [#18](https://github.com/awfl-us/compiler-rust/pull/18)

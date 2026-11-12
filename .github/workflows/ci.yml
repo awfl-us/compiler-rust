@@ -46,6 +46,7 @@ jobs:
             'Test / runMain us.awfl.compiler.rust.ControlFlowSmoke' \
             'Test / runMain us.awfl.compiler.rust.NativeCliSmoke' \
             'Test / runMain us.awfl.compiler.rust.CelStdlibSmoke' \
+            'Test / runMain us.awfl.compiler.rust.TextSubstringSmoke' \
             'Test / runMain us.awfl.compiler.rust.TimeUuidSmoke' \
             'Test / runMain us.awfl.compiler.rust.ScopedNamesSmoke' \
             'Test / runMain us.awfl.compiler.rust.ParallelIrSmoke' \
@@ -111,6 +112,11 @@ jobs:
           cargo build --manifest-path fixtures/native-cel-stdlib/Cargo.toml
           cargo clippy --manifest-path fixtures/native-cel-stdlib/Cargo.toml --all-targets --locked -- -D warnings
           python3 scripts/test_cel_stdlib.py
+      - name: Compile and execute native text.substring with Unicode and index bounds
+        run: |
+          cargo build --manifest-path fixtures/native-text-substring/Cargo.toml
+          cargo clippy --manifest-path fixtures/native-text-substring/Cargo.toml --all-targets --locked -- -D warnings
+          python3 scripts/test_text_substring.py
       - name: Compile and execute native sys.now and UUIDv4
         run: |
           cargo build --manifest-path fixtures/native-time-uuid/Cargo.toml

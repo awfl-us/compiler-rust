@@ -4,6 +4,25 @@
 
 ## November 12 parallel implementation checkpoint — supersedes earlier parallel status
 
+### Follow-on source-compatibility audit and native text.substring
+
+Rerunning `AWFL_WORKFLOWS_ROOT=/workspace/workflows-raw-audit scripts/audit-real-workflows.sh`
+against the **unchanged, cached compiled workflow classes** after adding the
+existing `text.substring` operation to native Rust gives **66 constructed
+definitions, 55 Rust sources emitted, 11 first-blocking definitions, zero
+load errors, zero unknown operation IDs**. This improves the immediately
+preceding branch audit from **54 emitted / 12 blocked**; the newly emitted
+definition is `evals-SweBenchLiteEval`. The 11 remaining first blockers are
+invalid/raw CEL references (`example` in nine constructed graphs and two
+cache-result symbols). The fixed `text.substring` implements the exact required
+three-argument Workflows signature, Unicode character offsets, negative and
+clamped indexes; standalone generated ELF and Rust unit/replay/invalid-type
+tests pass. Neither source-emission count nor those fixtures proves execution
+of every emitted workflow or Google differential parity. The workflow classes
+were precompiled from a historical `workflows` checkout; rerun this audit
+against an explicitly pinned fresh `workflows/main` checkout before using
+these counts as a release gate.
+
 The original November 11 compatibility figures below are **historical baseline snapshots**; in particular, rows stating that `Parallel`/`ParallelFor` are not implemented refer to the then-merged baseline, **not** current draft branches. Do not change those old audit counts without rerunning the identical constructed-AST audit against the newer compiler. The current changes are in **draft** [compiler-rust #18](https://github.com/awfl-us/compiler-rust/pull/18) and [server #82](https://github.com/awfl-us/server/pull/82) (`67e1184`), not on `main`.
 
 - **Implemented in drafts:** original Scala `Parallel` and `ParallelFor` lower to separate Rust entry PCs and branch-local slot snapshots, with a version-pinned `native.parallel` fork. The Jobs worker creates deterministic, digest-pinned child records, dispatches bounded concurrent child effects through the existing journal, records one parent join, and reconstructs indexed loop results. Parent `Try` handles **confirmed** failed children, not uncertain remote outcomes. A parent fork lease is refreshed during execution; a shared *in-process* permit queue limits nested work without reserving permits while awaiting children.
