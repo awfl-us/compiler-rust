@@ -283,19 +283,27 @@ object Normalize {
                   case _: Throw | _: EarlyReturn => true
                   case _ => false
                 }
-                val result = if (terminal) NullValue else valueExpr(
-                  branch.resultValue, s"$where.branch[$branchIdx].result")
+                // Parallel is an existing DSL *statement* with NoValueT,
+                // unlike a value-producing Call or ParallelFor. Its nested
+                // effects run and join, but it has no implicit result symbol
+                // to resolve or export to this containing fork.
+                val result = if (terminal || branch.isInstanceOf[us.awfl.dsl.Parallel])
+                  NullValue
+                else valueExpr(branch.resultValue, s"$where.branch[$branchIdx].result")
                 (code, result)
               }
               val destination = s"s${slots.size}"
               slots += destination
-              val exposed = branch.resultValue match {
+              val exposed = branch match {
+                case _: us.awfl.dsl.Parallel => None
+                case _ => branch.resultValue match {
                 case resolved: Resolved[?] =>
                   resolved.resolver.path.path match {
                     case CelConst(resultName) :: Nil => Some(resultName)
                     case _ => None // No stable result-root alias to export.
                   }
                 case _ => None
+                }
               }
               (ForkBranch(branchNode, body, result, destination), exposed)
             }.toVector

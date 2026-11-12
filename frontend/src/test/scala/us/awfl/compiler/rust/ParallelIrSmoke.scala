@@ -65,6 +65,27 @@ object ParallelIrSmoke {
       java.nio.file.Paths.get("../fixtures/native-parallel-uncaught").toAbsolutePath.normalize,
       java.nio.file.Paths.get("../runtime").toAbsolutePath.normalize)
 
+    // Three genuine nested Scala Parallel levels. The same source step label
+    // is reused deliberately: compiler-private structural IDs, not labels,
+    // must keep every child effect and fork generation separate.
+    val deepA = Call[String, String]("sameName", CallOperations.HttpPost, obj("deep-a"))
+    val deepB = Call[String, String]("sameName", CallOperations.HttpPost, obj("deep-b"))
+    val nestedDeep = Parallel("nestedDeep", List(deepA, deepB))
+    val middleCall = Call[String, String]("sameName", CallOperations.HttpPost, obj("middle"))
+    val nestedMiddle = Parallel("nestedMiddle", List(nestedDeep, middleCall))
+    val outerCall = Call[String, String]("sameName", CallOperations.HttpPost, obj("outer"))
+    val nestedOuter = Parallel("nestedOuter", List(nestedMiddle, outerCall))
+    val nestedProgram = Normalize(Workflow((
+      List[Step[?, ?]](nestedOuter), str(CelStr("nested-complete"))),
+      Some("native-parallel-nested")))
+    val nestedEffects = nestedProgram.effects.map(_.nodeId)
+    assert(nestedEffects.size == 4 && nestedEffects.distinct.size == 4)
+    val nestedGenerated = RustEmitter.write(nestedProgram,
+      java.nio.file.Paths.get("../fixtures/native-parallel-nested").toAbsolutePath.normalize,
+      java.nio.file.Paths.get("../runtime").toAbsolutePath.normalize)
+    assert(nestedGenerated.source.contains("native.parallel"))
+    assert(nestedGenerated.manifest.contains("parallel_version"))
+
     val sibling = Call[Map[String, Value[String]], String]("sibling", CallOperations.HttpPost,
       obj(Map("earlier" -> a.resultValue)))
     val dependent = Parallel("invalid", List(a, sibling))

@@ -61,6 +61,8 @@ jobs:
           cargo clippy --manifest-path fixtures/native-parallel-branches/Cargo.toml --all-targets --locked -- -D warnings
           cargo build --manifest-path fixtures/native-parallel-for/Cargo.toml
           cargo clippy --manifest-path fixtures/native-parallel-for/Cargo.toml --all-targets --locked -- -D warnings
+          cargo build --manifest-path fixtures/native-parallel-nested/Cargo.toml
+          cargo clippy --manifest-path fixtures/native-parallel-nested/Cargo.toml --all-targets --locked -- -D warnings
           for name in native-parallel-caught native-parallel-uncaught; do
             cargo build --manifest-path "fixtures/$name/Cargo.toml"
             cargo clippy --manifest-path "fixtures/$name/Cargo.toml" --all-targets --locked -- -D warnings

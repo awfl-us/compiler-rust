@@ -2,6 +2,35 @@
 
 **Evidence date:** 2026-11-12 (original baseline below: 2026-11-11). **Status:** experimental, opt-in backend; **not production-ready**. This document distinguishes *merged*, *verified on a feature branch*, and *unimplemented*. It does not claim that passing tests equals Google Workflows parity.
 
+## November 12 — genuine three-level nested Parallel and recursive fork fencing
+
+New draft compiler fixture `ParallelIrSmoke` constructs **unchanged Scala DSL**
+`Parallel` nodes at three nesting levels with deliberately repeated `Call`
+labels. That exposed a real Rust normalizer gap: the original DSL's
+`Parallel` is a `Step[NoValueT, NoValue]` *statement*. The compiler had
+incorrectly tried to resolve its phantom `resultValue` as if it were a
+registered Call result when `Parallel` itself was an outer parallel branch.
+`Normalize` now lowers that nested branch's result to `null`, without
+inventing a global name, exporting an undeclared binding or changing the DSL.
+
+**Local verification:** `ParallelIrSmoke` emits the nested crate, Cargo
+1.99.1 builds it, Clippy `-D warnings` passes, and the Python native-IPC
+regression traverses all three fork levels and four effects using the **real
+generated ELF**. The paired server's worker executes the same ELF using
+isolated child execution records: all four effects overlap as permitted,
+the root completes `nested-complete`, and a repeat delivery sends no extra
+effects. These checks use synthetic effect handlers, not live Google services.
+
+The paired [server PR #82](https://github.com/awfl-us/server/pull/82) also
+adds bounded, transactionally checked full ancestor-fork lineage. It passes
+**6/6** real Firestore emulator tests locally (including actual worker process
+death/recovery and a three-level stale-root-fork fence) and **20/20** focused
+unit tests. The stale-root case currently constructs nested Firestore records;
+it is distinct from the newly compiled nested ELF worker test. No production
+native routing was enabled. Cross-process concurrency admission, orphan
+cleanup, live effects, and unchanged-workflow Google/YAML differential parity
+remain release gates.
+
 ## Latest verified compatibility checkpoint — November 12 (supersedes 55/66 below)
 
 **Parallel durability follow-through:** Paired server draft

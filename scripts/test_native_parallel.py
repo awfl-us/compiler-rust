@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Execute DSL-compiled Parallel and ParallelFor ELF binaries across fork/join IPC."""
 import json
+import os
 import subprocess
 import tomllib
 from pathlib import Path
@@ -12,7 +13,7 @@ def binary(crate_name):
     crate = root / "fixtures" / crate_name
     with (crate / "Cargo.toml").open("rb") as f:
         package = tomllib.load(f)["package"]["name"]
-    return crate / "target" / "debug" / package
+    return Path(os.environ.get("CARGO_TARGET_DIR", crate / "target")) / "debug" / package
 
 
 def invoke(crate, input_value, continuation=None):
@@ -30,6 +31,8 @@ def invoke(crate, input_value, continuation=None):
 
 
 def tagged(v):
+    if v is None:
+        return {"type": "null"}
     if isinstance(v, str):
         return {"type": "string", "value": v}
     if isinstance(v, list):
@@ -79,6 +82,43 @@ parent = join_parent(crate, initial, results, None)
 assert parent == {"protocol_version": 2, "status": "completed",
                   "result": {"a": "value-0", "b": "value-1"}}, parent
 
+# A Parallel branch may itself be another (no-value) Parallel statement.
+# Walk a three-level fork from the unchanged Scala DSL, issuing tagged
+# responses to real emitted Rust executables with no Google/YAML interpreter.
+crate = "native-parallel-nested"
+root_response = invoke(crate, None)
+effects = []
+forks = []
+
+
+def nested_lane(lane):
+    response = invoke(crate, None, lane_continuation(lane))
+    while response["status"] == "suspended":
+        effect = response["effect"]
+        if effect["operation"] == "native.parallel":
+            forks.append(effect["effect_id"])
+            values = [nested_lane(inner) for inner in effect["args"]["lanes"]]
+            response = join_parent(crate, response, values, None)
+        elif effect["operation"] == "http.post":
+            effects.append(effect["args"])
+            cont = response["continuation"]
+            cont["slots"][effect["result_slot"]] = tagged(effect["args"] + "-done")
+            response = invoke(crate, None, cont)
+        else:
+            raise AssertionError(f"unexpected nested operation: {effect}")
+    assert response["status"] == "completed", response
+    return response["result"]
+
+
+assert root_response["effect"]["operation"] == "native.parallel", root_response
+forks.append(root_response["effect"]["effect_id"])
+outer_results = [nested_lane(lane) for lane in root_response["effect"]["args"]["lanes"]]
+final = join_parent(crate, root_response, outer_results, None)
+assert final == {"protocol_version": 2, "status": "completed",
+                 "result": "nested-complete"}, final
+assert sorted(effects) == ["deep-a", "deep-b", "middle", "outer"], effects
+assert len(forks) == 3 and len(set(forks)) == 3, forks
+
 # ParallelFor has one compiled entry PC, N independent item slot snapshots,
 # and deterministic input ordering; zero items produces an empty fork.
 crate = "native-parallel-for"
@@ -100,4 +140,4 @@ for items in ([], ["first"], ["c", "a", "b"]):
                       "result": items}, parent
 
 print("PARALLEL: compiled sibling effects, independent resumes, parent join, "
-      "0/1/N ParallelFor lanes and stable ordering: PASS")
+      "three nested forks, 0/1/N ParallelFor lanes and stable ordering: PASS")
