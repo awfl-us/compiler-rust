@@ -1,5 +1,25 @@
 # Native Rust workflow compiler and server execution plan
 
+**Post-merge status (November 12, 2026):**
+[compiler-rust #18](https://github.com/awfl-us/compiler-rust/pull/18)
+has **merged into `main`** at
+[`a285f66`](https://github.com/awfl-us/compiler-rust/commit/a285f66df11efd1b2c9811fbd494dcd45541aa7e).
+The native compiler implements nested `Parallel`/`ParallelFor`,
+`time.format`, the original DSL's JSON object-to-string schema template
+behavior, and exact `NativeMain --only=<FullWorkflowName>` selection.
+The aligned audit remains **65/66 source emissions**, with only the known
+out-of-scope `initEnvResult_*` reference blocked; these are not 65 proven
+running cloud workflows. The paired server fork/join
+[PR #82](https://github.com/awfl-us/server/pull/82) remains **unmerged**.
+[workflow-utils #8](https://github.com/awfl-us/workflow-utils/pull/8) merged
+the restoration of `Llm.chatJson`'s original helper (without undoing the
+Firebase 404 scope fix). Native production routing is still disabled.
+The next milestone is **one authenticated effectful native Jobs run** and
+a same-input Google-vs-native semantic/end-to-end latency comparison. All
+infrastructure and IAM belong in Terraform. The sections below are the
+original implementation design and dated engineering history; consult the
+current [roadmap](current-state-and-roadmap.md) for merged/remaining state.
+
 **Current priorities (supersedes the older phase-gate ordering below):**
 See [the unchanged-workflow pilot and benchmark plan](real-workflow-pilot-and-benchmark-plan.md)
 for the executable next milestone, safety conditions and acceptance criteria.
@@ -15,8 +35,9 @@ orchestration absent a demonstrated problem.
 
 Status (2026-11-12): Scala-to-Rust ABI 3 implemented for sequential CFG,
 original `Try`/`Raise`, CEL subset and resumable HTTP effects; isolated pure
-GCP canary passed. **Native parallel fork/join is implemented and CI-tested
-on draft compiler #18 and server #82, but not merged or production validated.**
+GCP canary passed. **Native parallel compilation is merged in compiler #18;
+paired server #82 is still in PR, and the combined system has not been
+production validated.**
 Callbacks, nested child workflows, provider connectors, reconciliation of
 unknown remote HTTP outcomes and OS sandboxing are not generally ready.
 Production routing remains disabled.
@@ -465,8 +486,8 @@ remote uncertain-outcome reconciliation remains unsolved.
 Gate: resume yields correct results, committed effects do not repeat, stale workers cannot commit, unknown outcomes are visible.
 
 ### Phase 4 — Callbacks, children, parallelism and connectors
-**Implemented to the current scope on draft branches (#18/#82):** native
-parallel branch dispatch and fork/join have real compiled-binary and emulator
+**Compiler merged (#18); paired server still draft (#82):** native parallel
+branch dispatch and fork/join have real compiled-binary and emulator
 tests, including nested replay and ancestor fencing. The in-process budget is
 intentional. Callbacks and nested workflow launch remain separate features;
 distributed branch scheduling has not been selected. Additional cancellation

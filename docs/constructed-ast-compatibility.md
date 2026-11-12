@@ -1,15 +1,27 @@
 # Constructed-AST compatibility snapshot
 
+> **Historical baseline only (November 11).** The **2/66** counts and the
+> per-definition first blockers below describe the early compiler before
+> operation-name migration and merged compiler
+> [#18](https://github.com/awfl-us/compiler-rust/pull/18).
+> **Current aligned November 12 result: 65/66 emit Rust source, 1 blocked
+> (`evals-experiments-SweBenchLite` / `initEnvResult_*`), 0 loading errors.**
+> The current scan uses unchanged `workflows/main` and the locally aligned
+> `workflow-utils` snapshot after merged
+> [#8](https://github.com/awfl-us/workflow-utils/pull/8) restored the original
+> LLM JSON template. See the [roadmap](current-state-and-roadmap.md).
+> Counts here are not executable, effect, or Google parity claims.
+
 Generated from **unchanged** compiled AWFL workflow classes, using
 `scripts/audit-real-workflows.sh` and `scripts/render_compatibility_report.py`.
 The scanner walks expanded helper-built DSL graphs and attempts CFG/Rust
 source emission. It **does not** compile Cargo binaries, exercise effects,
 or prove Google Workflows behavioral parity.
 
-- Workflow definitions: **66**
-- Rust source emitted: **2**
-- Source emission blocked: **64**
-- Class-loading errors: **0**
+- Workflow definitions at the historical baseline: **66**
+- Rust source emitted at the historical baseline: **2**
+- Source emission blocked at the historical baseline: **64**
+- Class-loading errors at the historical baseline: **0**
 
 ## First blocker by workflow
 

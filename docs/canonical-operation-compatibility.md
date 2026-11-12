@@ -1,5 +1,17 @@
 # Native source-emission compatibility after the canonical operation migration
 
+> **Historical migration snapshot, not the current compiler result.**
+> The **4/66** migrated-source figure below predates later compiler work.
+> After merged [compiler-rust #18](https://github.com/awfl-us/compiler-rust/pull/18)
+> (`a285f66`) and merged
+> [workflow-utils #8](https://github.com/awfl-us/workflow-utils/pull/8),
+> the aligned November 12 `workflows/main` audit is **65/66 source emissions,
+> 1 blocked (`initEnvResult_*` lexical scope), 0 class-loading errors**.
+> Original JSON schema placeholders are string templates, not runtime
+> variable references. See [the current roadmap](current-state-and-roadmap.md)
+> for the current state and next steps. Source emission remains distinct from
+> compiled binaries and Google/runtime equivalence.
+
 **Measured:** November 12, 2026, from merged workflows PR #8
 and workflow-utils PR #4, using compiler-rust main **after PR #14**.
 All results come from instantiated Scala DSL graphs, not a search of source strings.
@@ -7,7 +19,7 @@ The original-source baseline is retained separately in constructed-ast-compatibi
 
 ## Original baseline versus current migrated source
 
-| Measurement | Original source | Migrated source (latest native compiler) |
+| Measurement | Original source | Migrated source (historical compiler snapshot) |
 | --- | ---: | ---: |
 | Workflow definitions | 66 | 66 |
 | Rust source emitted | 2 | 4 |
