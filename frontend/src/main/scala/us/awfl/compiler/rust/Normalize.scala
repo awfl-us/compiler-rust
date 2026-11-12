@@ -230,7 +230,17 @@ object Normalize {
               val cond = cel(condition, s"$where.case[$caseIdx].condition")
               scoped {
                 val body = steps(run, s"$nodeId.case$caseIdx")
-                ChoiceCase(cond, body, valueExpr(out, s"$where.case[$caseIdx].result"))
+                // A Raise or explicit Return unconditionally terminates the
+                // branch. Its declared output cannot execute and need not
+                // resolve stale/out-of-scope DSL references (Cache uses this
+                // pattern for its fallback error branch).
+                val terminal = body.lastOption.exists {
+                  case _: Throw | _: EarlyReturn => true
+                  case _ => false
+                }
+                val result = if (terminal) NullValue
+                  else valueExpr(out, s"$where.case[$caseIdx].result")
+                ChoiceCase(cond, body, result)
               }
             }.toVector
             val slot = register(branch.resultValue, where)
