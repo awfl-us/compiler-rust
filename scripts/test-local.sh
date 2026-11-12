@@ -29,7 +29,8 @@ echo '== Scala AST normalization, CFG liveness, and NativeMain =='
   'Test / runMain us.awfl.compiler.rust.CelStdlibSmoke' \
   'Test / runMain us.awfl.compiler.rust.LiteralCollectionsSmoke' \
   'Test / runMain us.awfl.compiler.rust.CelOperatorsSmoke' \
-  'Test / runMain us.awfl.compiler.rust.TryRaiseSmoke')
+  'Test / runMain us.awfl.compiler.rust.TryRaiseSmoke' \
+  'Test / runMain us.awfl.compiler.rust.CompatibilitySmoke')
 
 echo '== Compile unmodified production workflow source =='
 (cd "$ROOT/frontend" && sbt -batch \
@@ -51,6 +52,11 @@ echo '== Compile and run pure and real workflow Rust binaries =='
   && cargo build --manifest-path fixtures/real-load-history/LoadConversationHistory/Cargo.toml \
        --target-dir "$ROOT/target/local-real-workflow" \
   && python3 scripts/test_real_workflow.py "$ROOT/target/local-real-workflow")
+
+echo '== Compile FlatMap projection and verify effect continuation =='
+(cd "$ROOT" && cargo build --manifest-path fixtures/native-flatmap/Cargo.toml \
+  --target-dir "$ROOT/target/local-flatmap" \
+  && python3 scripts/test_flatmap.py "$ROOT/target/local-flatmap")
 
 echo '== Execute real Product combinator across single, Cartesian and empty inputs =='
 (cd "$ROOT" && for name in single cartesian empty; do

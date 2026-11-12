@@ -62,6 +62,22 @@ object FrontendSmoke {
     assert(protocol.manifest.contains("http.post"))
     assert(protocol.manifest.contains("\"runtime_abi\":3"))
 
+    // Existing FlatMap wrappers must neither drop nor dispatch their
+    // underlying Call twice. The projection is a pure result expression.
+    val projected = FlatMap[String, String, Value[String]]("project",
+      call, str(call.resultValue.cel + CelStr("!")))
+    val projectedFlow = Workflow((List[Step[?, ?]](projected),
+      projected.resultValue), Some("flatmap-projection"))
+    val projectedIr = Normalize(projectedFlow)
+    assert(projectedIr.effects.map(_.id) == Vector(CallId.HttpPost))
+    assert(projectedIr.effects.map(_.resultSlot) == Vector("s0"))
+    assert(projectedIr.effects.map(_.nodeId) == Vector("0.0.0"))
+    assert(RustEmitter.emit(projectedIr).source.contains("ops::add"))
+    assert(projectedIr == Normalize(projectedFlow))
+    RustEmitter.write(projectedIr,
+      Paths.get("../fixtures/native-flatmap").toAbsolutePath.normalize,
+      Paths.get("../runtime").toAbsolutePath.normalize)
+
     // The existing CEL/Call constructors work without a parallel typed AST.
     val known = Value[Int](CelFunc(CelFunctions.Length, CelConst("input")))
     assert(RustEmitter.emit(Normalize(Workflow((List.empty[Step[?, ?]], known))))

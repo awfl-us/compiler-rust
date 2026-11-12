@@ -192,6 +192,12 @@ object Normalize {
             Vector(EarlyReturn(nodeId, step.name, valueExpr(ret.value, where)))
           case block: Block[?, ?] =>
             steps(block.steps, nodeId)
+          case mapped: FlatMap[?, ?, ?] =>
+            // FlatMap is an existing DSL projection wrapper, not a new
+            // instruction. Its resultVal points into the wrapped step's
+            // value, so lower the wrapped step exactly once at this node.
+            // Its projected result is evaluated by the parent/return site.
+            steps(List(mapped.step), nodeId)
           case branch: Switch[?, ?] =>
             // The second Switch type parameter is a match type (ValueType[T,V]).
             // At this boundary, all variants are BaseValue; the local erasure

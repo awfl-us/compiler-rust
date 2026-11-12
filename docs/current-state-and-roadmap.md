@@ -59,6 +59,14 @@
 
 ### P1 — Build a constructed-AST compatibility and Google comparison matrix
 
+**Progress (November 11, after P0):** read-only scanner and reproducible
+[compatibility report](constructed-ast-compatibility.md) now cover 66
+instantiated definitions from unchanged application bytecode. Two emit Rust
+source (`LoadConversationHistory`, `helpers-ToolDefs`); 64 fail closed at a
+recorded first unsupported operation. The compiler now lowers existing
+`FlatMap` wrappers without DSL/application edits. This is **source-emission**
+coverage, not 2/66 executable conformance or Google differential parity.
+
 - Enumerate *actual instantiated* workflows and dependencies from `workflows`, `workflow-utils`, DSL and compiler: `CelFunc`, `CelOp`, raw `CelConst`, callbacks and all `Call` names; include names hidden inside helpers. Preserve original DSL; migrate constants in application sources **later** as a simple name-only operation.
 - Select increasingly realistic unchanged workflows (queue helpers, dispatcher, task/callback workflows, then full `ProjectManager` dependency graph). Label each as compiles, executes purely, executes with mock effects, differential-conformant, or blocked, with the exact missing operation and source location.
 - Build golden YAML-vs-native fixtures for result, exceptions, retries, null/missing/bytes, JSON encoding, integer edges, Unicode, clock/UUID, globals, and HTTP 4xx/5xx vs uncertain failure. Use deterministic mocked services and avoid duplicate live agent/LLM/tool side effects.
