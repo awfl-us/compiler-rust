@@ -321,7 +321,7 @@ retains `AWFL_NATIVE_EXECUTION_ENABLED=0`.
 
 **Still unimplemented or materially unverified:** `Parallel`/`ParallelFor`,
 callbacks, child workflow launch/await, storage/Pub/Sub adapters, many CEL
-functions/overloads, clock/UUID journaling, version-safe environment globals,
+functions/overloads, version-safe environment globals,
 Google differential error/retry semantics, remote-uncertain outcome
 reconciliation, authenticated shared-launcher end-to-end audit, safe OS
 sandbox, lease/worker/orphan reliability, and representative performance.
@@ -367,7 +367,7 @@ Gate: generated Rust compiles and executes conformance fixtures; constant-only w
 confirmed HTTP catches. Logging is merged and locally tested;
 remote uncertain-outcome reconciliation remains unsolved.
 - Add backend dispatch, artifact registry, worker IPC, leases, checkpoint/value/effect storage and traces.
-- Add HTTP/log adapters, legacy retry policy and clock/UUID journaling.
+- Add HTTP/log adapters and legacy retry policy; use the existing slot checkpoints for step results.
 - Test crash points before dispatch, after dispatch, before commit and after commit.
 Gate: resume yields correct results, committed effects do not repeat, stale workers cannot commit, unknown outcomes are visible.
 

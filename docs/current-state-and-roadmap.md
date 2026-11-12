@@ -36,7 +36,7 @@
 | `Parallel`, `ParallelFor` | **Not implemented** | Need deterministic branch/iteration IDs, bounded scheduling, isolated state, durable join, failure/cancel semantics |
 | Callback create/await, child workflow `workflow.run` | **Not implemented** | Need durable callback inbox, child-start idempotency, timeout and cancellation propagation |
 | Storage object get, Pub/Sub publish | **Not implemented** | Existing Google connector argument/return contracts need explicit server-side adapters |
-| Conversion/text/bytes/time/UUID/environment and arbitrary CEL | **Partial or not implemented** | Must implement overload-by-overload, clock/UUID journaling and authenticated env bindings; unknown names fail compile |
+| Conversion/text/bytes/time/UUID/environment and arbitrary CEL | **Partial or not implemented** | Native clock/UUID are direct expressions; remaining overloads and authenticated env bindings need implementation; unknown names fail compile |
 | Google equivalence and whole agent graph | **Not established** | No complete ProjectManager dependency closure, differential error/retry/parallel ordering or traced live comparison |
 | Production isolation and operations | **Not established** | OS/network sandbox, lease maintenance, orphan sweeper, monitoring, benchmarks, rollback and failure drills |
 
