@@ -1,5 +1,62 @@
 # `helpers-ToolDefs`: Google Workflows vs native Rust — first cloud differential
 
+## Follow-up: simpler in-memory worker state and pinned artifact cache
+
+**Measured:** November 12, 2026, isolated Jobs revision `jobs-00147-siv`
+(`native-profile` zero-traffic tag during the test). Server
+[#91](https://github.com/awfl-us/server/pull/91) caches small, SHA-256-
+verified artifact bytes within a warm Jobs instance; server
+[#92](https://github.com/awfl-us/server/pull/92) passes already committed,
+fenced execution state between transitions within the active Jobs request.
+No new in-memory database, state synchronization process, Rust IPC format,
+or Terraform resource was introduced. Firestore still commits effect intent
+**before** HTTP and atomically journals the outcome with its continuation.
+The dispatcher retains a fresh Firestore lease/intent check before the
+external effect; recovery, cancellation and parent-fork fencing remain.
+
+| Trial | Client: Firestore create → Tasks → Jobs → completion | Jobs request |
+| --- | ---: | ---: |
+| Cold | 2.298 s | 1,811 ms |
+| Warm 1 | 0.952 s | 517 ms |
+| Warm 2 | 0.966 s | 526 ms |
+| Warm 3 | 0.882 s | 517 ms |
+| Warm 4 | 0.863 s | 507 ms |
+
+**Five of five** runs succeeded, with `{"defs":[]}`, a single HTTP 200
+effect, and a durable Firestore journal. The **four warm client runs have
+median 0.917 s**; corresponding Jobs request median **517 ms**. This is
+about **37% lower** client-observed time than the older 1.445 s warm native
+median, but it reflects **both** the artifact cache and worker-state reuse
+and is *not* a controlled isolated A/B test. It is still slower than the
+previous warmed Google Workflows sample (~0.422 s), with different launch
+APIs. Results from five sequential runs do not establish p95, cost, or
+concurrency scaling.
+
+| Per-execution profiling metric | Earlier median | New median |
+| --- | ---: | ---: |
+| Firestore document reads | 4 calls / 116.8 ms | 2 calls / 57.3 ms |
+| Firestore claims | 2 calls / 159.7 ms | 1 call / 74.6 ms |
+| Firestore renewal | 1 call / 73.2 ms | 0 |
+| GCS artifact materialization | 241.3 ms | 4.9 ms warm |
+| Firestore prepare effect | 103.8 ms | 91.6 ms |
+| Firestore journal/outcome | 106.7 ms | 111.4 ms |
+| Firestore completion | 78.4 ms | 76.3 ms |
+
+Measured through Cloud Run structured logs `awfl_native_job_timing`,
+new request IDs: `native_4c8ca34941bb4ac4a35f3c25e75775f5`,
+`native_5caef1f82a294bf794a5cabb42556c5f`,
+`native_9a61b829783c4a8e97a12ed400b77d53`,
+`native_95ad7be7b89c40ef8d10a764282426c8`,
+`native_a9e7cf18c63f43bdbf6e93fa77936cc2`.
+
+**Next:** avoid additional state stores and running Rust processes until
+a longer, multi-effect workflow demonstrates a need. Remaining latency is
+largely the **necessary** Firestore effect-intent, journal and completion
+transactions, plus Tasks/Jobs dispatch. A same-AWFL-API Google/native
+comparison and a representative multi-effect workflow are still needed.
+
+---
+
 **Measured:** November 12, 2026, `us-central1`, project `awfl-us`.
 
 ## Inputs, revisions, and correctness

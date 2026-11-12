@@ -1,5 +1,15 @@
 # Next milestone: real AWFL workflow execution and Google comparison
 
+**Latest:** Server #91 (small per-process verified artifact cache) and #92
+(reuse durable in-memory state within an active Jobs execution) passed GCP
+canaries. Five native `helpers-ToolDefs` executions completed with a
+four-warm-run median of 0.917 s; the worker now needs only two document
+reads, one claim, no renewals, and the same durable effect writes. See
+[the follow-up measurements](native-vs-google-tooldefs-2026-11-12.md).
+The outstanding task is still a same-AWFL-API comparison and a more
+representative multi-effect workflow; avoid expanding orchestration.
+
+
 **Current measured checkpoint (November 12, 2026):** the end-to-end
 authenticated native `/workflows/execute` → Cloud Tasks → Jobs →
 Firestore test **succeeded** with unchanged `helpers-ToolDefs` and one
