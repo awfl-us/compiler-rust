@@ -2,6 +2,31 @@
 
 **Evidence date:** 2026-11-11. **Status:** experimental, opt-in backend; **not production-ready**. This document distinguishes *merged*, *verified on a feature branch*, and *unimplemented*. It does not claim that passing tests equals Google Workflows parity.
 
+## November 12, 2026 — scoped step/result symbols (newer audit)
+
+The source DSL intentionally allows repeated step labels. The YAML backend
+globally uniquifies *step labels* using numeric suffixes; its result
+references are still textual. Rust now gives every result, Try-error and
+iterator occurrence a distinct compiler-private slot, and uniquely suffixes
+human-readable step labels. Textual value references are resolved at
+normalization time within the active lexical scope, with branch/loop
+shadowing and restoration. Structural node IDs identify external Calls and
+continuations independently of labels. No public DSL or special persistence
+changes are required.
+
+After removing the previous 18 first-blocking symbol collisions, the
+66-definition constructed-AST audit has 0 collision failures, 0 unknown
+operations and 0 class-loading errors; 4 emit Rust source and 62 first
+block on 37 trusted execution globals, 15 Parallel/ParallelFor nodes and
+10 unsupported raw CEL/reference cases. These are first blockers only; no
+claim of 66 full native executables is made. The older audit below and
+the existing per-workflow table remain historical pre-fix snapshots.
+
+Compiler tests verify repeated Call labels, structurally equal step results,
+independent branch bindings, repeated Try-error symbols and nested iterator
+shadowing. The generated Rust process test checks two same-named Calls
+preserve distinct slots through two resumptions.
+
 ## November 12, 2026 — canonical operation migration update
 
 The sections below document the original November 11 execution foundation
