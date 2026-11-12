@@ -4,6 +4,64 @@
 **Status:** plan only. No live effectful native canary, Google differential
 result, or production traffic migration has been completed under this plan.
 
+## November 12 live baseline and workflow selection
+
+`LoadConversationHistory.scala` and its original Jobs ingestion handler date
+to 2025. They remain useful **unchanged-source compiler and effect-journal
+fixtures**, but are **not representative of current AWFL agent workloads**.
+The first live Google invocation of `LoadConversationHistoryDev` failed with
+HTTP **400**: Jobs middleware moves the legacy request-body `userId` into
+`req.userId`, then removes the body field; the legacy handler incorrectly
+read it again. The paired server PR #82 fixes the handler to use the
+middleware-resolved identity and tests a synthetic empty JSON-array input
+without Firestore writes. Do not conflate that code fix with an observed
+successful native or Google execution after deployment.
+
+For the **current Jobs transport/OIDC smoke**, the newer deployed
+`AwflApiProbeDev` Google Workflow (updated November 10) calls `GET /health`
+at the Jobs origin with OIDC. Its November 12 live execution succeeded with
+HTTP **200**, body `OK`, and a **739 ms** start-to-end duration (execution
+`d801c57f-8540-4242-ba1a-8de9fa380cef`). **One run, not a benchmark**.
+This probe is deployed YAML and has **no matching unchanged Scala source**
+in the workflows repository, so it cannot by itself establish Scala-Rust
+compiler parity. For a meaningful real-world differential, choose a current
+Scala-defined workflow such as `Summaries`/an active agent after a separate
+health/OIDC smoke and pin the exact definition and safe deterministic inputs.
+
+Deployed service conventions: `jobs/native`, `jobs/producer`, `jobs/callbacks`
+and LLM usage handlers consume middleware-populated `req.userId` /
+`req.projectId`; older Firebase and workflow-execution routers retain
+body/query fallbacks. Current native effect dispatch overwrites forwarded
+user/project identity with its trusted execution scope. Preserve that
+behavior when comparing against Google Workflows. The two forms of user ID
+must **not** silently drift between the backends.
+
+Terraform remains authoritative for **all infrastructure and IAM**:
+`server/infra/native-execution` owns queue/task-invoker/Jobs IAM; the
+`workflows/infra` root owns the native GCS artifact bucket and its IAM.
+The GKE consumer's Node ADC identity cannot read native release objects,
+create Cloud Tasks, or write native Firestore executions; the separately
+injected gcloud credential was able to publish a canary-only release.
+The deployed runtime already has the required IAM. **Do not grant the
+development identity broad roles solely for a canary.** Use runtime and
+GitHub deployment identities, review a Terraform plan before any IAM/infra
+change, and leave global native routing off.
+
+**November 12 candidate correction:** `LoadConversationHistory.scala` (last
+source change December 2025) is an appropriate *compiler and native worker
+smoke fixture*, but **not the representative Google-vs-native performance
+candidate**. Its older Jobs handler relies on a hard-coded GCS bucket and
+global `convo.sessions` collection. A direct Google Workflows run against a
+synthetic three-byte JSON file reached that handler but returned HTTP 400:
+the Jobs identity middleware strips `body.userId` and the legacy handler
+still expects it. The observed **11.93 s** failure is a bug baseline, **not**
+an orchestration performance measurement. The current Jobs API convention
+is `req.userId` from `workflowsUserInject` and `req.projectId` from
+`projectIdMiddleware`; application bodies carry effect arguments. A small
+separate server PR #85 addresses the legacy handler, but must not block the
+native milestone. Select a current supported Scala workflow exercising the
+standard Jobs service contract before claiming backend parity or speedup.
+
 ## Objective and scope
 
 Prove that the **existing** Scala -> native Rust -> authenticated Workflows
@@ -59,27 +117,34 @@ scope reference remains deliberately deferred.
 
 ## Phase 2 — Controlled authenticated Jobs canary (next)
 
-1. Reconfirm native production routing stays **off**
+1. Select a **current representative Scala workflow** whose Jobs endpoint
+   uses authenticated `req.userId` and `req.projectId` and whose effects can
+   be exercised with deterministic synthetic inputs. Do not use the old
+   conversation importer as the sole live correctness/performance workload.
+   If the candidate requires unsupported operations, record the concrete
+   compiler gap and choose the smallest suitable current workflow; do not
+   invent a new parallel execution subsystem to make it run.
+2. Reconfirm native production routing stays **off**
    (`AWFL_NATIVE_EXECUTION_ENABLED=0`), regular Google routing is unaffected,
    and existing revisions and current IAM resources are understood. Capture
    the exact deployed Jobs/Workflows revisions, artifact bucket and Terraform
    state owner; do not make ad hoc infrastructure changes.
-2. Prepare one **isolated test** workflow deployment and safe test endpoint
+3. Prepare one **isolated test** workflow deployment and safe test endpoint
    (or an approved, deterministic mock adapter), with no customer data or
    non-idempotent production side effects. Publish the static Rust ELF through
    the existing authorized artifact path, pin digest, ABI and allowed effect
    operations. Keep secrets entirely in server-owned auth; never supply cloud
    credentials to the Rust process.
-3. Start it via the authenticated **Workflows service API**, rather than
+4. Start it via the authenticated **Workflows service API**, rather than
    directly fabricating a Firestore record or invoking Jobs. Follow the
    existing OIDC-signed Cloud Tasks dispatch to the trusted Jobs service.
    Scope any native opt-in to the test deployment only, not global routing.
-4. Trace request -> task -> job -> artifact resolution -> checkpoint/effect
+5. Trace request -> task -> job -> artifact resolution -> checkpoint/effect
    journal -> terminal status and history. Check tenant isolation, correct
    headers, result payload, and error codes. Duplicate delivery must not
    resend an effect that is *already journaled*. A pre-journal ambiguous HTTP
    outcome must remain uncertain/reconcilable, never auto-replayed.
-5. Demonstrate a **rollback for new starts** to Google Workflows; keep
+6. Demonstrate a **rollback for new starts** to Google Workflows; keep
    existing native runs pinned to their original artifact for resume. Verify
    status/cancellation and that normal production feature flags are unchanged.
 
