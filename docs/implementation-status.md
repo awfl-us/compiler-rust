@@ -1,5 +1,22 @@
 # Native Rust implementation status — November 11, 2026
 
+## Follow-on compatibility increment: native bytes and Base64
+
+The existing generic `CelFunctions.TextEncode`, `CelFunctions.TextDecode`
+and `CelFunctions.Base64Encode` IDs now lower to native Rust operations.
+UTF-8 (the default) and US-ASCII charsets are implemented, with case-insensitive
+names. UTF-8 decoding replaces malformed sequences with U+FFFD rather than
+crashing. Base64 uses RFC 4648 and supports default padding or explicitly
+disabling padding, matching Google's optional boolean argument.
+
+The runtime rejects incompatible value types, unsupported IANA charsets, and
+US-ASCII encoding of non-ASCII characters. Additional charsets (including
+ISO-8859 variants), provider error taxonomy and Google-vs-Rust differential
+fixtures remain prerequisites before declaring full text module parity.
+Scala generated Cargo executable and Rust unit tests cover byte round-trip,
+Unicode, Base64, padding, JSON-to-Base64, invalid inputs and replay.
+No application Scala, public DSL, server, or production routing changes.
+
 ## Follow-on compatibility increment: pure conversions
 
 The existing `CelFunctions.ToInt`, `CelFunctions.ToString`, and

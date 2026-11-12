@@ -74,6 +74,12 @@ not alter the last *unchanged-application-source* 2/66 compatibility inventory;
 legacy name-only substitutions are deliberately separate from the compiler
 implementation, and connector/clock/fork-join readiness gates remain open.
 
+**Byte/text increment:** the native compiler also supports the existing
+generic Base64 encoder and UTF-8/US-ASCII text encode/decode functions.
+Remaining IANA charsets fail closed. This closes common pure dependencies
+of queue/storage helpers but does not make storage, Pub/Sub or child-workflow
+connector effects runnable.
+
 - Enumerate *actual instantiated* workflows and dependencies from `workflows`, `workflow-utils`, DSL and compiler: `CelFunc`, `CelOp`, raw `CelConst`, callbacks and all `Call` names; include names hidden inside helpers. Preserve original DSL; migrate constants in application sources **later** as a simple name-only operation.
 - Select increasingly realistic unchanged workflows (queue helpers, dispatcher, task/callback workflows, then full `ProjectManager` dependency graph). Label each as compiles, executes purely, executes with mock effects, differential-conformant, or blocked, with the exact missing operation and source location.
 - Build golden YAML-vs-native fixtures for result, exceptions, retries, null/missing/bytes, JSON encoding, integer edges, Unicode, clock/UUID, globals, and HTTP 4xx/5xx vs uncertain failure. Use deterministic mocked services and avoid duplicate live agent/LLM/tool side effects.
