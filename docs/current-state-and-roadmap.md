@@ -9,23 +9,25 @@ and are retained for historical context. **The newer source-compatibility
 measurement is in [canonical-operation-compatibility.md](canonical-operation-compatibility.md).**
 After switching AWFL workflows and helpers to top-level standard CEL
 helpers and generic Call operation IDs, the constructed-AST audit now finds
-**3 of 66 workflows emit Rust source, 63 remain blocked, and 0 have class
+**4 of 66 workflows emit Rust source, 62 remain blocked, and 0 have class
 loading errors or unknown CEL/Call identifiers** (prior baseline: 2/66).
-First blockers: 21 trusted execution globals, 18 step-result symbol collisions,
-14 Parallel/ParallelFor, 9 missing clock semantics, and 1 raw CEL expression.
+First blockers: 29 trusted execution globals, 18 step-result symbol collisions,
+14 Parallel/ParallelFor, and 1 raw CEL reference.
+Clock/UUID functions are compiled directly after PR #14 and require
+no special journal; existing materialized result slots are checkpointed.
 This is source emission only—not completed native binaries or live workflows.
 
 DSL v0.3.5, YAML compiler v0.3.2, and migrated workflow-utils v0.3.5
 preserve the old DSL AST while matching canonical standard function names.
 The YAML backend resolves generic connector IDs to Google names.
-The migrated application workflow source is reviewed in workflows PR #8.
+The migrated application workflow source is merged in workflows PR #8.
 Future changes to Scala workflow code must remain name-level substitutions;
 remaining compiler/runtime work belongs in the respective backends and server.
 
 ## Executive view
 
 - **Working native pipeline:** unchanged Scala AWFL DSL objects -> compiler-private normalized expressions and IR -> one statically generated Rust CFG -> content-addressed Cargo/ELF artifact with `runtime_abi: 3` -> `protocol_version: 2` JSON IPC -> server-managed durable external effects. No YAML/CEL interpreter is involved in native execution.
-- **Original public DSL remains intact:** `CelFunc(name, params)`, `CelOp(left, op, right)`, `Call(name, call, args)`, `Try`, `Raise`, `For`, `Fold`, `Switch`, `Parallel` and `ParallelFor` retain their shapes. Only string namespaces `CelFunctions` and `CallOperations` were added. Never add public typed AST variants as part of this compiler. Most application workflows have **not** switched to the constants.
+- **Original public DSL remains intact:** `CelFunc(name, params)`, `CelOp(left, op, right)`, `Call(name, call, args)`, `Try`, `Raise`, `For`, `Fold`, `Switch`, `Parallel` and `ParallelFor` retain their shapes. Only string namespaces `CelFunctions` and `CallOperations` were added. Never add public typed AST variants as part of this compiler. The name-only application source migration is in workflows PR #8.
 - **Verified real workflows:** unchanged `LoadConversationHistory.scala` compiled to native Rust and exercised HTTP intent/checkpoint/replay with no actual HTTP; unchanged `evals/Product.scala` compiled to three real Rust binaries returning 2 (single), 4 (Cartesian), and 0 (empty) results. The `Product` test covers its pure success path; its failure-path logging is tested with a separate real DSL-built `Try` fixture.
 - **Durable effects:** effect intent is persisted before dispatch; outcome/error and resumed checkpoint are journaled together in Firestore under lease-epoch fencing. Successful outcomes aren't redispatched after a committed journal entry. Confirmed HTTP 4xx/5xx errors can enter a compiled `Try` catch; ambiguous transport outcomes cannot safely be treated as a confirmed failure.
 - **Single live GCP pilot:** an isolated, **pure** statically linked `NativePilot` ran Cloud Tasks -> tagged Jobs -> Firestore, returned `[2,3,9,9]`, and survived duplicate delivery. Observed time was **6,836 ms for one cold-path sample**, not a useful percentile or a representative speedup measurement.
