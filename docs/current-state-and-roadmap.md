@@ -12,12 +12,15 @@ owner/epoch fencing, root authorization, 120-second leases, 10-second renewal,
 and fail-closed acquisition timeouts. Nested fork coordinators do not hold
 slots while they wait for child effects.
 
-**Local verification:** all seven dedicated budget tests pass; all eight real
+**Local verification:** all eight dedicated budget tests pass; all eight real
 Firestore emulator tests pass, including two independent processes racing
 for one slot and a crash with successful post-expiry takeover. The existing
 three-level Scala-generated Rust fork also passes with distributed permits
-enabled. The full server native Node suite reports **72 passed, 32 skipped,
-0 failed**, with emulator tests run separately rather than skipped overall.
+enabled. The full server native Node suite reports **75 passed, 30 skipped,
+0 failed** with all generated parallel and Try/Raise ELFs supplied; emulator
+tests ran separately. The server also rejects results from expired permits
+and returns the durable terminal outcome for an uncaught confirmed child
+failure without trying to acquire another permit.
 
 **Important limits:** These slots bound admitted work *within one root* across
 processes, not aggregate fleet-wide work across separate workflows. Expiring
