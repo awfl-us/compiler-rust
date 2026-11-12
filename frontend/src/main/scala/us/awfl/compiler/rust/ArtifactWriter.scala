@@ -10,18 +10,39 @@ import io.circe.Json
 object ArtifactWriter {
   def pack(program: Program, source: String): RustEmitter.Emitted = {
     val sha = MessageDigest.getInstance("SHA-256").digest(source.getBytes(UTF_8)).map(b => f"${b & 0xff}%02x").mkString
-    val manifest = Json.obj(
+    // Parallel is an authorized internal effect, not an added public DSL Call.
+    // The release must advertise it explicitly before Jobs can dispatch lanes.
+    def parallelNodes(all: Vector[Instruction]): Vector[String] = all.flatMap {
+      case fork: Fork => Vector(fork.nodeId) ++
+        fork.branches.flatMap(b => parallelNodes(b.body))
+      case fork: ForkEach => Vector(fork.nodeId) ++ parallelNodes(fork.body)
+      case choice: Choose => choice.cases.flatMap(c => parallelNodes(c.body))
+      case rescue: Rescue => parallelNodes(rescue.attempt) ++ parallelNodes(rescue.handler)
+      case loop: RepeatRange => parallelNodes(loop.body)
+      case loop: RepeatEach => parallelNodes(loop.body)
+      case loop: ReduceEach => parallelNodes(loop.body)
+      case _ => Vector.empty
+    }
+    val forks = parallelNodes(program.steps)
+    val declaredEffects = program.effects.map(e => Json.obj(
+      "node_id" -> Json.fromString(e.nodeId),
+      "operation" -> Json.fromString(e.id.wireId)
+    )) ++ forks.map(node => Json.obj(
+      "node_id" -> Json.fromString(node),
+      "operation" -> Json.fromString("native.parallel")
+    ))
+    val manifest = Json.obj((
+      Vector[(String, Json)](
       "schema_version" -> Json.fromInt(program.irVersion),
       "workflow" -> Json.fromString(program.name),
       "source_sha256" -> Json.fromString(sha),
       "runtime_abi" -> Json.fromInt(3),
       "trusted_globals_version" -> Json.fromInt(1),
       "node_ids" -> Json.arr(program.nodeIds.map(Json.fromString)*),
-      "effects" -> Json.arr(program.effects.map(e => Json.obj(
-        "node_id" -> Json.fromString(e.nodeId),
-        "operation" -> Json.fromString(e.id.wireId)
-      ))*)
-    ).noSpaces
+      "effects" -> Json.arr(declaredEffects*)
+      ) ++ (if (forks.nonEmpty) Vector("parallel_version" -> Json.fromInt(1))
+            else Vector.empty)
+    )*).noSpaces
     RustEmitter.Emitted(source, manifest)
   }
   def write(directory: Path, runtime: Path, generated: RustEmitter.Emitted): RustEmitter.Emitted = {

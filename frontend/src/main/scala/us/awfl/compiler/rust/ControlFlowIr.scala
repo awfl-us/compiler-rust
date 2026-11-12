@@ -55,6 +55,16 @@ object ControlFlowIr {
   case class Invoke(effect: Effect, ancestors: Vector[String], next: Int) extends Op {
     def targets = Vector(next)
   }
+  /** A native.parallel journaled effect. Each child resumes the SAME binary
+    * at an independently compiled branch CFG entry with its own slot snapshot.
+    * The parent only continues after the effect result has been journaled.
+    */
+  case class ForkLane(entry: Int, itemSlot: Option[String] = None)
+  case class ForkInvoke(nodeId: String, lanes: Vector[ForkLane],
+                        iterable: Option[Expr], resultSlot: String,
+                        ancestors: Vector[String], next: Int) extends Op {
+    def targets: Vector[Int] = Vector(next) ++ lanes.map(_.entry)
+  }
   case class ThrowError(value: Expr) extends Op {
     def targets = Vector.empty
   }
@@ -98,6 +108,9 @@ object ControlFlowIr {
         case o: CheckFold => o.copy(body = remap(o.body), done = remap(o.done))
         case o: UpdateFold => o.copy(next = remap(o.next))
         case o: Invoke => o.copy(next = remap(o.next))
+        case o: ForkInvoke => o.copy(
+          next = remap(o.next),
+          lanes = o.lanes.map(lane => lane.copy(entry = remap(lane.entry))))
         case d: Done => d
         case t: ThrowError => t
       }

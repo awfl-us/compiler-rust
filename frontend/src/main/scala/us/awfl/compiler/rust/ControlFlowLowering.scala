@@ -12,6 +12,12 @@ import scala.collection.mutable.ArrayBuffer
 object ControlFlowLowering {
   def apply(program: Program): Plan = {
     val blocks = ArrayBuffer.empty[Option[Block]]
+    var syntheticSlotOrdinal = program.slots.size
+    def syntheticSlot(): String = {
+      val slot = "s" + syntheticSlotOrdinal.toString
+      syntheticSlotOrdinal += 1
+      slot
+    }
     def reserve(): Int = {
       val id = blocks.size
       blocks += None
@@ -44,12 +50,28 @@ object ControlFlowLowering {
             val selected = sequence(branch.body, end, loops, handler)
             place(node, Test(branch.condition, selected, otherwise), handler)
           }
-        case _: Fork | _: ForkEach =>
-          // Source normalization retains all branch graphs and slot ownership.
-          // Do not turn true parallelism into a sequential loop: the runtime
-          // fork/join protocol and journal must be implemented first.
-          throw CompileError(s"node=$node",
-            "native durable parallel fork/join scheduler not yet implemented")
+        case fork: Fork =>
+          // The fork result is an ordered list, journaled by the server; bind
+          // each declared child result into its parent-visible slot AFTER join.
+          // Sibling branches compile to independently resumable CFG entry PCs.
+          val resultSlot = syntheticSlot()
+          val afterJoin = fork.branches.zipWithIndex.foldRight(next) {
+            case ((branch, index), after) =>
+              place(node, Bind(branch.joinedSlot,
+                Index(SlotRef(resultSlot), IntValue(index.toLong)), after), handler)
+          }
+          val entries = fork.branches.map { branch =>
+            val finish = place(branch.nodeId, Done(branch.result), None)
+            val entry = sequence(branch.body, finish, Vector.empty, None)
+            ForkLane(entry)
+          }
+          place(node, ForkInvoke(node, entries, None, resultSlot,
+            loops, afterJoin), handler)
+        case fork: ForkEach =>
+          val finish = place(node, Done(fork.result), None)
+          val entry = sequence(fork.body, finish, Vector.empty, None)
+          place(node, ForkInvoke(node, Vector(ForkLane(entry, Some(fork.itemSlot))),
+            Some(fork.iterable), fork.resultSlot, loops, next), handler)
         case r: RepeatRange =>
           val initLabel = reserve()
           val checkLabel = reserve()

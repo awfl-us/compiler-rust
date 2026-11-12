@@ -38,6 +38,8 @@ object ContinuationAnalysis {
     case UpdateFold(value, result, ordinal, _) =>
       references(value) ++ Set(result, ordinal)
     case Invoke(effect, ancestors, _) => references(effect.arguments) ++ ancestors
+    case ForkInvoke(_, _, iterable, _, ancestors, _) =>
+      iterable.map(references).getOrElse(Set.empty) ++ ancestors
     case Done(value) => references(value)
     case ThrowError(value) => references(value)
   }
@@ -56,6 +58,7 @@ object ContinuationAnalysis {
     case CheckFold(_, _, item, _, _) => Set(item)
     case UpdateFold(_, result, ordinal, _) => Set(result, ordinal)
     case Invoke(effect, _, _) => Set(effect.resultSlot)
+    case ForkInvoke(_, _, _, resultSlot, _, _) => Set(resultSlot)
     case _ => Set.empty
   }
 
