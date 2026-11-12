@@ -2,46 +2,39 @@ package us.awfl.compiler.rust
 
 import us.awfl.dsl.{CelFunctions, CallOperations}
 
-/** Compiler-internal operations. The public DSL exposes only String constants;
-  * no new DSL AST or overloads are needed. This is the sole interpretation
-  * boundary between existing CEL/Call nodes and statically compiled Rust.
+/** Internal function names match the CEL standard library verbatim;
+  * Call identifiers remain backend-neutral. Neither introduces new DSL AST
+  * variants. This is the boundary to statically compiled Rust.
   */
 enum FunctionId(val wireId: String, val minArity: Int, val maxArity: Int) {
-  case Default extends FunctionId(CelFunctions.Default, 2, 2)
-  case TypeOf extends FunctionId(CelFunctions.TypeOf, 1, 1)
-  case ToInt extends FunctionId(CelFunctions.ToInt, 1, 1)
-  case ToString extends FunctionId(CelFunctions.ToString, 1, 1)
-  case Length extends FunctionId(CelFunctions.Length, 1, 1)
-  case MapGet extends FunctionId(CelFunctions.MapGet, 2, 2)
-  case MapMerge extends FunctionId(CelFunctions.MapMerge, 2, 2)
-  case ListConcat extends FunctionId(CelFunctions.ListConcat, 2, 2)
-  case JsonDecode extends FunctionId(CelFunctions.JsonDecode, 1, 1)
-  case JsonEncodeBytes extends FunctionId(CelFunctions.JsonEncodeBytes, 1, 1)
-  case JsonEncodeString extends FunctionId(CelFunctions.JsonEncodeString, 1, 1)
-  case Base64Encode extends FunctionId(CelFunctions.Base64Encode, 1, 2)
-  case TextEncode extends FunctionId(CelFunctions.TextEncode, 1, 2)
-  case TextDecode extends FunctionId(CelFunctions.TextDecode, 1, 2)
-  case TextSplit extends FunctionId(CelFunctions.TextSplit, 2, 2)
-  case TextSubstring extends FunctionId(CelFunctions.TextSubstring, 2, 3)
-  case TextLowercase extends FunctionId(CelFunctions.TextLowercase, 1, 1)
-  case TextUrlEncode extends FunctionId(CelFunctions.TextUrlEncode, 1, 1)
-  case TimeFormat extends FunctionId(CelFunctions.TimeFormat, 2, 2)
-  case UuidGenerate extends FunctionId(CelFunctions.UuidGenerate, 0, 0)
-  case ClockNow extends FunctionId(CelFunctions.ClockNow, 0, 0)
-  case EnvironmentGet extends FunctionId(CelFunctions.EnvironmentGet, 1, 2)
+  case Default extends FunctionId(CelFunctions.Core.Default, 2, 2)
+  case TypeOf extends FunctionId(CelFunctions.Core.TypeOf, 1, 1)
+  case ToInt extends FunctionId(CelFunctions.Core.ToInt, 1, 1)
+  case ToString extends FunctionId(CelFunctions.Core.ToString, 1, 1)
+  case Length extends FunctionId(CelFunctions.Core.Length, 1, 1)
+  case MapGet extends FunctionId(CelFunctions.Map.Get, 2, 2)
+  case MapMerge extends FunctionId(CelFunctions.Map.Merge, 2, 2)
+  case ListConcat extends FunctionId(CelFunctions.List.Concat, 2, 2)
+  case JsonDecode extends FunctionId(CelFunctions.Json.Decode, 1, 1)
+  case JsonEncodeBytes extends FunctionId(CelFunctions.Json.Encode, 1, 1)
+  case JsonEncodeString extends FunctionId(CelFunctions.Json.EncodeToString, 1, 1)
+  case Base64Encode extends FunctionId(CelFunctions.Base64.Encode, 1, 2)
+  case TextEncode extends FunctionId(CelFunctions.Text.Encode, 1, 2)
+  case TextDecode extends FunctionId(CelFunctions.Text.Decode, 1, 2)
+  case TextSplit extends FunctionId(CelFunctions.Text.Split, 2, 2)
+  case TextSubstring extends FunctionId(CelFunctions.Text.Substring, 2, 3)
+  case TextLowercase extends FunctionId(CelFunctions.Text.ToLower, 1, 1)
+  case TextUrlEncode extends FunctionId(CelFunctions.Text.UrlEncode, 1, 1)
+  case TimeFormat extends FunctionId(CelFunctions.Time.Format, 1, 2)
+  case UuidGenerate extends FunctionId(CelFunctions.Uuid.Generate, 0, 0)
+  case ClockNow extends FunctionId(CelFunctions.Time.Now, 0, 0)
+  case EnvironmentGet extends FunctionId(CelFunctions.Environment.Get, 1, 2)
 }
 object FunctionId {
   private val byName = values.map(id => id.wireId -> id).toMap
-  // These exact literals are still emitted internally by the published
-  // DSL's `len`, `encodeJson`, and safe-resolver helpers. This is not
-  // general old-name support for application workflow CEL functions.
-  private val dslBuiltins = Map(
-    "len" -> Length,
-    "default" -> Default,
-    "json.encode_to_string" -> JsonEncodeString
-  )
-  def resolve(name: String): Option[FunctionId] =
-    byName.get(name).orElse(dslBuiltins.get(name))
+  // Standard-library names are already the canonical function identifiers.
+  // No translation table or Google-specific alias is needed for CEL.
+  def resolve(name: String): Option[FunctionId] = byName.get(name)
 }
 
 enum CallId(val wireId: String) {

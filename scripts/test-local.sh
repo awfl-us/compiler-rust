@@ -19,7 +19,7 @@ done
   echo "Missing unmodified LoadConversationHistory source at $WORKFLOWS" >&2; exit 1;
 }
 
-echo '== Use published additive DSL v0.3.4 (no local DSL build required) =='
+echo '== Use DSL v0.3.5 with canonical CEL standard-library names =='
 echo '== Scala AST normalization, CFG liveness, and NativeMain =='
 (cd "$ROOT/frontend" && sbt -batch \
   'Test / runMain us.awfl.compiler.rust.FrontendSmoke' \

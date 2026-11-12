@@ -8,6 +8,21 @@ import us.awfl.dsl.*
   */
 object CelStdlibSmoke {
   def main(args: Array[String]): Unit = {
+    // Scala uses time.now() to avoid shadowing scala.sys. The generated
+    // expression keeps the Google standard-library identifier sys.now.
+    assert(time.now() == CelFunc(CelFunctions.Time.Now))
+    assert(CelFunctions.Time.Now == "sys.now")
+    assert(FunctionId.resolve("sys.now").contains(FunctionId.ClockNow))
+    assert(FunctionId.resolve("clock.now").isEmpty)
+    assert(FunctionId.resolve("map.get").contains(FunctionId.MapGet))
+    val clock = Normalize(Workflow((List.empty[Step[?, ?]],
+      Value[Double](time.now()))))
+    val unsupportedClock = try {
+      RustEmitter.emit(clock)
+      throw new AssertionError("native clock must be journaled before enabling")
+    } catch { case e: Ir.CompileError => e.getMessage }
+    assert(unsupportedClock.contains("sys.now"))
+
     val source = "input"
     val present = Value[Int](CelFunc(CelFunctions.MapGet,
       CelConst(s"$source.nested"), CelStr("present")))
