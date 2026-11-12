@@ -12,7 +12,9 @@ fixtures**, but are **not representative of current AWFL agent workloads**.
 The first live Google invocation of `LoadConversationHistoryDev` failed with
 HTTP **400**: Jobs middleware moves the legacy request-body `userId` into
 `req.userId`, then removes the body field; the legacy handler incorrectly
-read it again. The paired server PR #82 fixes the handler to use the
+read it again. The failed execution took **11.93 seconds**, which must not
+be reported as workflow orchestration performance. The paired server PR #82
+includes a handler fix to use the
 middleware-resolved identity and tests a synthetic empty JSON-array input
 without Firestore writes. Do not conflate that code fix with an observed
 successful native or Google execution after deployment.
@@ -46,21 +48,6 @@ The deployed runtime already has the required IAM. **Do not grant the
 development identity broad roles solely for a canary.** Use runtime and
 GitHub deployment identities, review a Terraform plan before any IAM/infra
 change, and leave global native routing off.
-
-**November 12 candidate correction:** `LoadConversationHistory.scala` (last
-source change December 2025) is an appropriate *compiler and native worker
-smoke fixture*, but **not the representative Google-vs-native performance
-candidate**. Its older Jobs handler relies on a hard-coded GCS bucket and
-global `convo.sessions` collection. A direct Google Workflows run against a
-synthetic three-byte JSON file reached that handler but returned HTTP 400:
-the Jobs identity middleware strips `body.userId` and the legacy handler
-still expects it. The observed **11.93 s** failure is a bug baseline, **not**
-an orchestration performance measurement. The current Jobs API convention
-is `req.userId` from `workflowsUserInject` and `req.projectId` from
-`projectIdMiddleware`; application bodies carry effect arguments. A small
-separate server PR #85 addresses the legacy handler, but must not block the
-native milestone. Select a current supported Scala workflow exercising the
-standard Jobs service contract before claiming backend parity or speedup.
 
 ## Objective and scope
 
