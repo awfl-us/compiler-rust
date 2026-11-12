@@ -2,6 +2,26 @@
 
 **Evidence date:** 2026-11-11. **Status:** experimental, opt-in backend; **not production-ready**. This document distinguishes *merged*, *verified on a feature branch*, and *unimplemented*. It does not claim that passing tests equals Google Workflows parity.
 
+## November 12, 2026 — canonical operation migration update
+
+The sections below document the original November 11 execution foundation
+and are retained for historical context. **The newer source-compatibility
+measurement is in [canonical-operation-compatibility.md](canonical-operation-compatibility.md).**
+After switching AWFL workflows and helpers to top-level standard CEL
+helpers and generic Call operation IDs, the constructed-AST audit now finds
+**3 of 66 workflows emit Rust source, 63 remain blocked, and 0 have class
+loading errors or unknown CEL/Call identifiers** (prior baseline: 2/66).
+First blockers: 21 trusted execution globals, 18 step-result symbol collisions,
+14 Parallel/ParallelFor, 9 missing clock semantics, and 1 raw CEL expression.
+This is source emission only—not completed native binaries or live workflows.
+
+DSL v0.3.5, YAML compiler v0.3.2, and migrated workflow-utils v0.3.5
+preserve the old DSL AST while matching canonical standard function names.
+The YAML backend resolves generic connector IDs to Google names.
+The migrated application workflow source is reviewed in workflows PR #8.
+Future changes to Scala workflow code must remain name-level substitutions;
+remaining compiler/runtime work belongs in the respective backends and server.
+
 ## Executive view
 
 - **Working native pipeline:** unchanged Scala AWFL DSL objects -> compiler-private normalized expressions and IR -> one statically generated Rust CFG -> content-addressed Cargo/ELF artifact with `runtime_abi: 3` -> `protocol_version: 2` JSON IPC -> server-managed durable external effects. No YAML/CEL interpreter is involved in native execution.
