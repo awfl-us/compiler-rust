@@ -83,6 +83,18 @@ object ExpressionEmitter {
         s"ops::json_encode_string(&(${inner(value)}))?"
       case Function(FunctionId.JsonEncodeBytes, Vector(value)) =>
         s"ops::json_encode_bytes(&(${inner(value)}))?"
+      case Function(FunctionId.TextEncode, Vector(value)) =>
+        s"ops::text_encode(&(${inner(value)}), None)?"
+      case Function(FunctionId.TextEncode, Vector(value, charset)) =>
+        s"ops::text_encode(&(${inner(value)}), Some(&(${inner(charset)})))?"
+      case Function(FunctionId.TextDecode, Vector(value)) =>
+        s"ops::text_decode(&(${inner(value)}), None)?"
+      case Function(FunctionId.TextDecode, Vector(value, charset)) =>
+        s"ops::text_decode(&(${inner(value)}), Some(&(${inner(charset)})))?"
+      case Function(FunctionId.Base64Encode, Vector(value)) =>
+        s"ops::base64_encode(&(${inner(value)}), None)?"
+      case Function(FunctionId.Base64Encode, Vector(value, padding)) =>
+        s"ops::base64_encode(&(${inner(value)}), Some(&(${inner(padding)})))?"
       case Function(id, _) =>
         throw CompileError(where, s"function ${id.wireId} lacks tested native semantics")
     }

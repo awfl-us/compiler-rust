@@ -1,6 +1,7 @@
 //! Small compiled-code helpers. Generated Rust calls these directly; this is not
 //! a workflow AST evaluator or a mechanism for making external side effects.
 use crate::{AwflValue, ValueError};
+use base64::Engine;
 
 pub fn int_value(value: &AwflValue) -> Result<i64, ValueError> {
     match value {
@@ -187,6 +188,94 @@ pub fn text_lowercase(value: &AwflValue) -> Result<AwflValue, ValueError> {
         AwflValue::String(text) => Ok(AwflValue::String(text.to_lowercase())),
         _ => Err(ValueError::Type("text.to_lower requires a string".into())),
     }
+}
+
+/// Limit initial charset support to the two encodings used by native fixtures.
+/// Unknown IANA names must fail closed, not silently use UTF-8.
+fn charset(value: Option<&AwflValue>) -> Result<&'static str, ValueError> {
+    let text = match value {
+        None => return Ok("UTF-8"),
+        Some(AwflValue::String(text)) => text,
+        Some(_) => return Err(ValueError::Type("charset must be a string".into())),
+    };
+    match text.to_ascii_uppercase().as_str() {
+        "UTF-8" | "UTF8" => Ok("UTF-8"),
+        "US-ASCII" | "ASCII" => Ok("US-ASCII"),
+        _ => Err(ValueError::Type(format!("unsupported charset '{text}'"))),
+    }
+}
+
+pub fn text_encode(
+    value: &AwflValue,
+    encoding: Option<&AwflValue>,
+) -> Result<AwflValue, ValueError> {
+    let text = match value {
+        AwflValue::String(text) => text,
+        _ => return Err(ValueError::Type("text.encode requires string".into())),
+    };
+    let bytes = match charset(encoding)? {
+        "UTF-8" => text.as_bytes().to_vec(),
+        "US-ASCII" if text.is_ascii() => text.as_bytes().to_vec(),
+        "US-ASCII" => {
+            return Err(ValueError::Type(
+                "text is not representable in US-ASCII".into(),
+            ));
+        }
+        _ => unreachable!("validated charset"),
+    };
+    Ok(AwflValue::Bytes(bytes))
+}
+
+/// Workflows text.decode replaces invalid bytes with U+FFFD.
+pub fn text_decode(
+    value: &AwflValue,
+    encoding: Option<&AwflValue>,
+) -> Result<AwflValue, ValueError> {
+    let bytes = match value {
+        AwflValue::Bytes(bytes) => bytes,
+        _ => return Err(ValueError::Type("text.decode requires bytes".into())),
+    };
+    let decoded = match charset(encoding)? {
+        "UTF-8" => String::from_utf8_lossy(bytes).into_owned(),
+        "US-ASCII" => bytes
+            .iter()
+            .map(|byte| {
+                if byte.is_ascii() {
+                    char::from(*byte)
+                } else {
+                    '\u{FFFD}'
+                }
+            })
+            .collect(),
+        _ => unreachable!("validated charset"),
+    };
+    Ok(AwflValue::String(decoded))
+}
+
+/// RFC 4648 standard Base64 alphabet, optionally without trailing padding.
+pub fn base64_encode(
+    value: &AwflValue,
+    padding: Option<&AwflValue>,
+) -> Result<AwflValue, ValueError> {
+    let bytes = match value {
+        AwflValue::Bytes(bytes) => bytes,
+        _ => return Err(ValueError::Type("base64.encode requires bytes".into())),
+    };
+    let with_padding = match padding {
+        None | Some(AwflValue::Bool(true)) => true,
+        Some(AwflValue::Bool(false)) => false,
+        Some(_) => {
+            return Err(ValueError::Type(
+                "base64.encode padding must be boolean".into(),
+            ));
+        }
+    };
+    let text = if with_padding {
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    } else {
+        base64::engine::general_purpose::STANDARD_NO_PAD.encode(bytes)
+    };
+    Ok(AwflValue::String(text))
 }
 
 /// Workflows map.get is a safe *nested* lookup, unlike strict `ops::field`.
@@ -384,6 +473,42 @@ mod tests {
             AwflValue::String("école i̇stanbul".into())
         );
         assert!(text_lowercase(&AwflValue::Integer(1)).is_err());
+    }
+    #[test]
+    fn utf8_ascii_and_base64_are_explicit_and_replayable() {
+        let utf8 = text_encode(&AwflValue::String("Hello 🙂".into()), None).unwrap();
+        assert_eq!(utf8, AwflValue::Bytes("Hello 🙂".as_bytes().to_vec()));
+        assert_eq!(
+            text_decode(&utf8, None).unwrap(),
+            AwflValue::String("Hello 🙂".into())
+        );
+        assert_eq!(
+            base64_encode(&utf8, None).unwrap(),
+            AwflValue::String("SGVsbG8g8J+Zgg==".into())
+        );
+        assert_eq!(
+            base64_encode(&utf8, Some(&AwflValue::Bool(false))).unwrap(),
+            AwflValue::String("SGVsbG8g8J+Zgg".into())
+        );
+        assert_eq!(
+            text_decode(&AwflValue::Bytes(vec![0x66, 0x80, 0x6f]), None).unwrap(),
+            AwflValue::String("f\u{FFFD}o".into())
+        );
+        let ascii = AwflValue::String("A-Z".into());
+        let ascii_charset = AwflValue::String("us-ascii".into());
+        assert_eq!(
+            text_encode(&ascii, Some(&ascii_charset)).unwrap(),
+            AwflValue::Bytes(b"A-Z".to_vec())
+        );
+        assert_eq!(
+            text_decode(&AwflValue::Bytes(vec![65, 255]), Some(&ascii_charset)).unwrap(),
+            AwflValue::String("A\u{FFFD}".into())
+        );
+        assert!(text_encode(&AwflValue::String("é".into()), Some(&ascii_charset)).is_err());
+        assert!(text_encode(&ascii, Some(&AwflValue::String("latin-2".into()))).is_err());
+        assert!(text_decode(&ascii, None).is_err());
+        assert!(base64_encode(&ascii, None).is_err());
+        assert!(base64_encode(&utf8, Some(&AwflValue::String("false".into()))).is_err());
     }
     #[test]
     fn unicode_length_is_codepoint_count() {

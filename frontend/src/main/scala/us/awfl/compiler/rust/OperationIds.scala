@@ -18,7 +18,7 @@ enum FunctionId(val wireId: String, val minArity: Int, val maxArity: Int) {
   case JsonDecode extends FunctionId(CelFunctions.JsonDecode, 1, 1)
   case JsonEncodeBytes extends FunctionId(CelFunctions.JsonEncodeBytes, 1, 1)
   case JsonEncodeString extends FunctionId(CelFunctions.JsonEncodeString, 1, 1)
-  case Base64Encode extends FunctionId(CelFunctions.Base64Encode, 1, 1)
+  case Base64Encode extends FunctionId(CelFunctions.Base64Encode, 1, 2)
   case TextEncode extends FunctionId(CelFunctions.TextEncode, 1, 2)
   case TextDecode extends FunctionId(CelFunctions.TextDecode, 1, 2)
   case TextSplit extends FunctionId(CelFunctions.TextSplit, 2, 2)
