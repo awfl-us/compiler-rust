@@ -47,18 +47,19 @@ object CelStdlibSmoke {
       CelConst(s"$source.left")))
     val bytesRoundtrip = Value[Map[String, Any]](CelFunc(CelFunctions.JsonDecode,
       CelFunc(CelFunctions.JsonEncodeBytes, CelConst(s"$source.left"))))
+    val encodedUrl = Value[String](text.url_encode(CelConst(s"$source.urlText")))
     val output = obj(Map[String, BaseValue[?]](
       "present" -> present, "missing" -> missing, "nested" -> nested,
       "fallback" -> fallback, "keepFalse" -> keepFalse,
       "typeName" -> typeName, "merged" -> merge, "appended" -> appended,
       "decoded" -> decoded, "encoded" -> encoded,
-      "bytesRoundtrip" -> bytesRoundtrip
+      "bytesRoundtrip" -> bytesRoundtrip, "urlEncoded" -> encodedUrl
     ))
     val program = Normalize(Workflow((List.empty[Step[?, ?]], output),
       Some("cel-standard-library")))
     val sourceRust = RustEmitter.emit(program).source
     for (symbol <- List("map_get", "default_value", "type_of", "map_merge",
-          "list_concat", "json_decode", "json_encode_string", "json_encode_bytes")) {
+          "list_concat", "json_decode", "json_encode_string", "json_encode_bytes", "text_url_encode")) {
       assert(sourceRust.contains(s"ops::$symbol"), s"missing Rust direct call $symbol")
     }
     val base = Paths.get("../fixtures/native-cel-stdlib").toAbsolutePath.normalize

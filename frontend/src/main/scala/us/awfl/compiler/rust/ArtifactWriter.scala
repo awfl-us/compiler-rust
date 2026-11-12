@@ -15,6 +15,7 @@ object ArtifactWriter {
       "workflow" -> Json.fromString(program.name),
       "source_sha256" -> Json.fromString(sha),
       "runtime_abi" -> Json.fromInt(3),
+      "trusted_globals_version" -> Json.fromInt(1),
       "node_ids" -> Json.arr(program.nodeIds.map(Json.fromString)*),
       "effects" -> Json.arr(program.effects.map(e => Json.obj(
         "node_id" -> Json.fromString(e.nodeId),

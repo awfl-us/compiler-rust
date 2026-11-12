@@ -31,6 +31,7 @@ def check():
         "left": left, "right": right,
         "items": [1], "append": [3, 4],
         "json": '{"status":"ok","count":2}',
+        "urlText": "a/b/c?item=d+e f~é🙂",
     }
     result = execute(inp)
     assert result["protocol_version"] == 2, result
@@ -43,6 +44,7 @@ def check():
         "decoded": {"status": "ok", "count": 2},
         "encoded": '{"a":1,"nest":{"left":true}}',
         "bytesRoundtrip": left,
+        "urlEncoded": "a%2Fb%2Fc%3Fitem%3Dd%2Be%20f%7E%C3%A9%F0%9F%99%82",
     }, result
     assert execute(inp) == result, "pure CEL result must be deterministic"
 
@@ -51,7 +53,7 @@ def check():
         "protocol_version": 2, "input": invalid,
     }), text=True, capture_output=True, timeout=20)
     assert p.returncode != 0, "invalid JSON must not silently become null"
-    print("CEL STDLIB: 8 compiled functions, safe map paths, shallow merge, "
+    print("CEL STDLIB: 9 compiled functions, safe map paths, shallow merge, "
           "single-element list append, JSON, type, replay, bad JSON: PASS")
 
 

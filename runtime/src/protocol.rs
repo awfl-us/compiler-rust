@@ -54,6 +54,11 @@ pub struct Request {
     pub protocol_version: u32,
     /// Public API input is plain JSON. Continuation values are tagged.
     pub input: serde_json::Value,
+    /// Explicitly supplied by the authenticated server from its persisted
+    /// execution identity and deployment configuration, never from user input.
+    /// Optional for existing pure fixtures and older protocol-v2 runners.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub trusted_globals: Option<BTreeMap<String, String>>,
     #[serde(default)]
     pub continuation: Option<Continuation>,
 }
@@ -65,6 +70,22 @@ impl Request {
                 "unsupported native protocol version {} (expected {})",
                 self.protocol_version, VERSION
             ));
+        }
+        if let Some(globals) = &self.trusted_globals {
+            const KEYS: [&str; 4] = [
+                "GOOGLE_CLOUD_WORKFLOW_ID",
+                "GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID",
+                "GOOGLE_CLOUD_PROJECT_ID",
+                "GOOGLE_CLOUD_LOCATION",
+            ];
+            if globals.len() != KEYS.len()
+                || KEYS.iter().any(|key| !globals.contains_key(*key))
+                || globals
+                    .values()
+                    .any(|value| value.is_empty() || value.len() > 256)
+            {
+                return Err("invalid trusted native execution globals".into());
+            }
         }
         if let Some(continuation) = &self.continuation {
             continuation.validate(step_count)?;
@@ -158,6 +179,7 @@ mod tests {
         let invalid = Request {
             protocol_version: VERSION,
             input: serde_json::json!(null),
+            trusted_globals: None,
             continuation: Some(Continuation {
                 next_step: 3,
                 slots: BTreeMap::new(),
@@ -165,6 +187,38 @@ mod tests {
             }),
         };
         assert!(invalid.validate(2).unwrap_err().contains("outside"));
+    }
+
+    #[test]
+    fn trusted_execution_context_requires_exact_builtins() {
+        let globals = BTreeMap::from([
+            ("GOOGLE_CLOUD_WORKFLOW_ID".into(), "wf".into()),
+            (
+                "GOOGLE_CLOUD_WORKFLOW_EXECUTION_ID".into(),
+                "native_abc".into(),
+            ),
+            ("GOOGLE_CLOUD_PROJECT_ID".into(), "cloud-project".into()),
+            ("GOOGLE_CLOUD_LOCATION".into(), "us-central1".into()),
+        ]);
+        let make = |trusted_globals| Request {
+            protocol_version: VERSION,
+            input: serde_json::json!({"env": {"GOOGLE_CLOUD_PROJECT_ID": "spoofed"}}),
+            trusted_globals,
+            continuation: None,
+        };
+        assert!(make(Some(globals.clone())).validate(2).is_ok());
+        assert!(make(None).validate(2).is_ok()); // Legacy pure fixtures.
+        let encoded = serde_json::to_string(&make(Some(globals.clone()))).unwrap();
+        assert_eq!(
+            serde_json::from_str::<Request>(&encoded)
+                .unwrap()
+                .trusted_globals
+                .unwrap(),
+            globals
+        );
+        let mut invalid = globals;
+        invalid.insert("USER_SECRET".into(), "untrusted".into());
+        assert!(make(Some(invalid)).validate(2).is_err());
     }
 
     #[test]
@@ -193,6 +247,7 @@ mod tests {
         let make = |version, next_step, frames| Request {
             protocol_version: version,
             input: serde_json::Value::Null,
+            trusted_globals: None,
             continuation: Some(Continuation {
                 next_step,
                 slots: BTreeMap::new(),

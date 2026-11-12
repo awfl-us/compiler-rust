@@ -95,6 +95,29 @@ object ScopedNamesSmoke {
     val target = java.nio.file.Paths.get("../fixtures/native-scoped-names")
       .toAbsolutePath.normalize
     RustEmitter.write(executable, target, runtime)
+    // The cache helper's failure branch Raises before using its nominal
+    // result reference. It is incorrect to reject an out-of-scope reference
+    // in code that cannot be reached; reachable ones still fail closed.
+    val unavailable = Value[String]("neverDefined")
+    val terminal = Raise("failed-cache",
+      obj(Error(str(CelStr("cache invalid")), OptValue[Int](CelConst("null")))))
+    val guarded = Switch("guarded", List(
+      CelConst("true") -> (List[Step[?, ?]](terminal) -> unavailable),
+      CelConst("false") -> (List.empty[Step[?, ?]] -> str(CelStr("ok")))
+    ))
+    val guardedIR = Normalize(Workflow((List[Step[?, ?]](guarded),
+      guarded.resultValue), Some("unreachable-result")))
+    assert(guardedIR.steps.head.asInstanceOf[Choose].cases.head.result == NullValue)
+    RustEmitter.emit(guardedIR)
+    val reachable = Switch("reachable", List(
+      CelConst("true") -> (List.empty[Step[?, ?]] -> unavailable)
+    ))
+    val unbound = try {
+      Normalize(Workflow((List[Step[?, ?]](reachable), reachable.resultValue)))
+      throw new AssertionError("reachable unbound CEL reference must not compile")
+    } catch { case e: CompileError => e.getMessage }
+    assert(unbound.contains("neverDefined"))
+
     println("SCOPED_STEP_RESULT_SYMBOLS_PASS")
   }
 }
