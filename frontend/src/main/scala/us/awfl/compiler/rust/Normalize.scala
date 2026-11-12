@@ -266,6 +266,50 @@ object Normalize {
               errSlot, rescueSteps, recovery, resultSlot))
           case raised: us.awfl.dsl.Raise =>
             Vector(Throw(nodeId, label, valueExpr(raised.raise, where)))
+          case parallel: us.awfl.dsl.Parallel =>
+            // All branches see the same pre-fork bindings: no branch may
+            // accidentally depend on results of an earlier sibling.
+            val snapshot = symbols.toMap
+            val branches = parallel.branches.zipWithIndex.map { (branch, branchIdx) =>
+              val branchNode = s"$nodeId.branch$branchIdx"
+              val (body, result) = scoped {
+                symbols.clear()
+                symbols ++= snapshot
+                val code = steps(List(branch), branchNode)
+                (code, valueExpr(branch.resultValue,
+                  s"$where.branch[$branchIdx].result"))
+              }
+              val destination = s"s${slots.size}"
+              slots += destination
+              val exposed = branch.resultValue match {
+                case resolved: Resolved[?] =>
+                  resolved.resolver.path.path match {
+                    case CelConst(resultName) :: Nil => Some(resultName)
+                    case _ => None // No stable result-root alias to export.
+                  }
+                case _ => None
+              }
+              (ForkBranch(branchNode, body, result, destination), exposed)
+            }.toVector
+            // Only explicit branch results cross the join. Internal values
+            // and iterator bindings do not escape their lexical scope.
+            branches.foreach { (branch, exposed) =>
+              exposed.foreach(name => symbols(name) = branch.joinedSlot)
+            }
+            Vector(Fork(nodeId, label, branches.map(_._1)))
+          case parallel: us.awfl.dsl.ParallelFor[?, ?] =>
+            val iterable = valueExpr(parallel.in, s"$where.in")
+            val (itemSlot, body, result) = scoped {
+              val itemName = parallel.item.resolver.path.path match {
+                case CelConst(name) :: Nil => name
+                case other => fail(where, s"invalid parallel iterator path: $other")
+              }
+              val slot = local(itemName, where)
+              val code = steps(parallel.each._1, s"$nodeId.each")
+              (slot, code, valueExpr(parallel.each._2, s"$where.each.result"))
+            }
+            val resultSlot = register(parallel.resultValue, where)
+            Vector(ForkEach(nodeId, label, iterable, itemSlot, body, result, resultSlot))
           case loop: ForRange[?] =>
             val from = cel(loop.from, s"$where.from")
             val until = cel(loop.to, s"$where.until")
@@ -306,8 +350,7 @@ object Normalize {
             }
             Vector(ReduceEach(nodeId, label, initial, iterable, itemSlot,
               body, result, resultSlot))
-          case other =>
-            fail(where, s"${other.getClass.getSimpleName} requires native lowering before Rust emission; cannot silently interpret YAML")
+          case null => fail(where, "null workflow step")
         }
       }.toVector
     }

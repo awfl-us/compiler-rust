@@ -48,6 +48,7 @@ jobs:
             'Test / runMain us.awfl.compiler.rust.CelStdlibSmoke' \
             'Test / runMain us.awfl.compiler.rust.TimeUuidSmoke' \
             'Test / runMain us.awfl.compiler.rust.ScopedNamesSmoke' \
+            'Test / runMain us.awfl.compiler.rust.ParallelIrSmoke' \
             'Test / runMain us.awfl.compiler.rust.TrustedGlobalsSmoke' \
             'Test / runMain us.awfl.compiler.rust.LiteralCollectionsSmoke' \
             'Test / runMain us.awfl.compiler.rust.CelOperatorsSmoke' \
@@ -191,7 +192,7 @@ jobs:
               reason = item.get('reason') or ''
               if item['status'] == 'emitted':
                   category = 'emitted'
-              elif 'requires native lowering' in reason:
+              elif 'requires native lowering' in reason or 'native durable parallel fork/join' in reason:
                   category = 'parallel'
               elif 'unsupported raw CEL/reference' in reason:
                   category = 'raw CEL/reference'

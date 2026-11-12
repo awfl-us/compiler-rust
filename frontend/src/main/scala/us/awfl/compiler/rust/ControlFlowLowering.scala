@@ -44,6 +44,12 @@ object ControlFlowLowering {
             val selected = sequence(branch.body, end, loops, handler)
             place(node, Test(branch.condition, selected, otherwise), handler)
           }
+        case _: Fork | _: ForkEach =>
+          // Source normalization retains all branch graphs and slot ownership.
+          // Do not turn true parallelism into a sequential loop: the runtime
+          // fork/join protocol and journal must be implemented first.
+          throw CompileError(s"node=$node",
+            "native durable parallel fork/join scheduler not yet implemented")
         case r: RepeatRange =>
           val initLabel = reserve()
           val checkLabel = reserve()
