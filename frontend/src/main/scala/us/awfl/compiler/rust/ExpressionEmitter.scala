@@ -60,6 +60,8 @@ object ExpressionEmitter {
         }
       case Unary(OperatorId.Not, value) => s"AwflValue::Bool(!ops::bool_value(&(${inner(value)}))?)"
       case Unary(id, _) => throw CompileError(where, s"unary operator ${id.wireId} unsupported")
+      case Function(FunctionId.ClockNow, Vector()) => "ops::time_now()?"
+      case Function(FunctionId.UuidGenerate, Vector()) => "ops::uuid_generate()"
       case Function(FunctionId.Length, Vector(arg)) => s"ops::length(&(${inner(arg)}))?"
       case Function(FunctionId.Default, Vector(value, fallback)) =>
         s"ops::default_value(${inner(value)}, ${inner(fallback)})"

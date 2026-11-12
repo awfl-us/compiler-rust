@@ -36,7 +36,7 @@
 | `Parallel`, `ParallelFor` | **Not implemented** | Need deterministic branch/iteration IDs, bounded scheduling, isolated state, durable join, failure/cancel semantics |
 | Callback create/await, child workflow `workflow.run` | **Not implemented** | Need durable callback inbox, child-start idempotency, timeout and cancellation propagation |
 | Storage object get, Pub/Sub publish | **Not implemented** | Existing Google connector argument/return contracts need explicit server-side adapters |
-| Conversion/text/bytes/time/UUID/environment and arbitrary CEL | **Partial or not implemented** | Must implement overload-by-overload, clock/UUID journaling and authenticated env bindings; unknown names fail compile |
+| Conversion/text/bytes/time/UUID/environment and arbitrary CEL | **Partial or not implemented** | Native clock/UUID are direct expressions; remaining overloads and authenticated env bindings need implementation; unknown names fail compile |
 | Google equivalence and whole agent graph | **Not established** | No complete ProjectManager dependency closure, differential error/retry/parallel ordering or traced live comparison |
 | Production isolation and operations | **Not established** | OS/network sandbox, lease maintenance, orphan sweeper, monitoring, benchmarks, rollback and failure drills |
 
@@ -126,3 +126,12 @@ connector effects runnable.
 - [IPC ABI 3 / protocol 2](native-ipc-v2.md)
 - [Server native execution guide](https://github.com/awfl-us/server/blob/main/workflows/native/README.md)
 - [Workflows repository](https://github.com/awfl-us/workflows)
+
+
+**Native clock and UUID increment (November 12, 2026):** Scala CEL
+functions time.now() and uuid.generate() emit direct Rust calls using system
+Unix seconds and random UUIDv4. Values are evaluated at each expression use;
+repeated occurrences within a step may differ. Persisted step-result slots
+continue to use the existing CFG continuation and server checkpoint, without
+any new journal. TimeUuidSmoke and the native generated-executable test
+verify the actual process output.

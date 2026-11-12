@@ -26,6 +26,7 @@ echo '== Scala AST normalization, CFG liveness, and NativeMain =='
   'Test / runMain us.awfl.compiler.rust.ControlFlowLoweringSmoke' \
   'Test / runMain us.awfl.compiler.rust.ControlFlowSmoke' \
   'Test / runMain us.awfl.compiler.rust.NativeCliSmoke' \
+  'Test / runMain us.awfl.compiler.rust.TimeUuidSmoke' \
   'Test / runMain us.awfl.compiler.rust.CelStdlibSmoke' \
   'Test / runMain us.awfl.compiler.rust.ConversionSmoke' \
   'Test / runMain us.awfl.compiler.rust.BytesSmoke' \
@@ -72,6 +73,9 @@ echo '== Compile and execute native CEL standard-library expressions =='
 (cd "$ROOT" && cargo build --manifest-path fixtures/native-cel-stdlib/Cargo.toml \
   && cargo clippy --manifest-path fixtures/native-cel-stdlib/Cargo.toml --all-targets --locked -- -D warnings \
   && python3 scripts/test_cel_stdlib.py)
+
+echo '== Compile and execute native time.now and uuid.generate =='
+(cd "$ROOT" && cargo build --manifest-path fixtures/native-time-uuid/Cargo.toml   && cargo clippy --manifest-path fixtures/native-time-uuid/Cargo.toml --all-targets --locked -- -D warnings   && python3 scripts/test_time_uuid.py)
 
 echo '== Compile and execute conversions with native Rust and Unicode/error checks =='
 (cd "$ROOT" && cargo build --manifest-path fixtures/native-conversion/Cargo.toml \

@@ -82,3 +82,9 @@ sequential Calls, nested control flow and early Return. `Try`, `Raise`,
 and error/retry parity still need native implementations and conformance tests.
 Normal Cloud Run revisions retain native execution disabled; the only live
 GCP canary so far is a pure no-effect workflow.
+
+The native runtime implements time.now() / sys.now() using current epoch
+seconds and uuid.generate() as an RFC 4122 UUIDv4. Each invocation is
+evaluated normally (multiple calls inside one step may differ). Step results
+materialized into slots are checkpointed by the existing continuation system;
+there is no separate clock/UUID journal.

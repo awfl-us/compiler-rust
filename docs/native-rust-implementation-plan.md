@@ -97,8 +97,8 @@ clock evaluation still needs persisted nondeterministic results on resume.
 | text.to_lower | CelFunctions.Text.ToLower | Unicode case conversion |
 | text.url_encode | CelFunctions.Text.UrlEncode | Reserved characters and escaping |
 | time.format | CelFunctions.Time.Format | Epoch units, timezone/DST and formatting |
-| uuid.generate | CelFunctions.Uuid.Generate | Persist each generated value on replay |
-| sys.now (Scala `time.now()`) | CelFunctions.Time.Now | Epoch seconds; persist each occurrence on replay |
+| uuid.generate | CelFunctions.Uuid.Generate | Native UUIDv4; materialized step results use existing checkpoints |
+| sys.now (Scala `time.now()`) | CelFunctions.Time.Now | Epoch seconds; materialized step results use existing checkpoints |
 | sys.get_env (Scala `environment.get()`) | CelFunctions.Environment.Get | Explicit server-trusted bindings |
 
 **Implemented native CEL subset (November 11, 2026):** `len`, `default`,
@@ -126,8 +126,7 @@ in the manifest. A separate native `Try` fixture proves it through a
 restricted Node logging dispatcher with journal/resume/crash-after-commit tests
 merged in server PR #79; this is **not** yet live-effect validation.
 
-**Remaining for native runtime:** persist nondeterministic `sys.now`
-and `uuid.generate` results; implement `sys.get_env` trust boundaries,
+**Remaining for native runtime:** implement `sys.get_env` trust boundaries,
 `time.format`, broader text functions and Google-differential behavior;
 child workflow/callback connectors and parallel scheduling. The existing
 constructed-AST scan predates workflow source migration. The proposed
@@ -322,7 +321,7 @@ retains `AWFL_NATIVE_EXECUTION_ENABLED=0`.
 
 **Still unimplemented or materially unverified:** `Parallel`/`ParallelFor`,
 callbacks, child workflow launch/await, storage/Pub/Sub adapters, many CEL
-functions/overloads, clock/UUID journaling, version-safe environment globals,
+functions/overloads, version-safe environment globals,
 Google differential error/retry semantics, remote-uncertain outcome
 reconciliation, authenticated shared-launcher end-to-end audit, safe OS
 sandbox, lease/worker/orphan reliability, and representative performance.
@@ -368,7 +367,7 @@ Gate: generated Rust compiles and executes conformance fixtures; constant-only w
 confirmed HTTP catches. Logging is merged and locally tested;
 remote uncertain-outcome reconciliation remains unsolved.
 - Add backend dispatch, artifact registry, worker IPC, leases, checkpoint/value/effect storage and traces.
-- Add HTTP/log adapters, legacy retry policy and clock/UUID journaling.
+- Add HTTP/log adapters and legacy retry policy; use the existing slot checkpoints for step results.
 - Test crash points before dispatch, after dispatch, before commit and after commit.
 Gate: resume yields correct results, committed effects do not repeat, stale workers cannot commit, unknown outcomes are visible.
 
