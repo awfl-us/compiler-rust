@@ -16,6 +16,10 @@ object NativeCliSmoke {
     assert(results.head.emitted.source.contains("ops::add"))
     assert(results.head.emitted.manifest.contains("\"runtime_abi\":3"))
     assert(results.head.emitted.source.contains("protocol v2"))
+    assert(results.head.emitted.manifest.contains("\"stream_ipc_version\":1"))
+    assert(results.head.emitted.source.contains("AWFL_NATIVE_STREAM_IPC"))
+    assert(results.head.emitted.source.contains("handle_request(&line)"))
+
     val error = try {
       NativeMain.compile(Array("us.awfl.compiler.rust.NativeCliFixture", temp.toString, runtime.toString, "unexpected"))
       throw new AssertionError("expected CLI argument rejection")

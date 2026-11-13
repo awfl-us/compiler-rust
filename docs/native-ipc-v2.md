@@ -203,3 +203,21 @@ process isolation, additional crash windows, and a Firestore emulator/load
 suite. The isolated pure-path shared launcher is deployed but **disabled**
 for normal traffic. Details and gates:
 [current-state-and-roadmap.md](current-state-and-roadmap.md).
+
+## Optional persistent stdin/stdout transport
+
+ABI 3 / protocol v2 compiled binaries now advertise
+`stream_ipc_version:1` in the compiler manifest. By default, the binary
+retains the original single JSON stdin request (read to EOF) and single JSON
+stdout response, then exits. With environment variable
+`AWFL_NATIVE_STREAM_IPC=1` set by the trusted server process, the
+same binary accepts newline-delimited requests, one JSON request per line,
+and flushes one JSON response per line while remaining alive.
+
+The request and response schemas, validation and statically compiled
+continuation semantics do **not** change. Node performs all effects and
+persists the required checkpoints before dispatch. Each request contains
+the complete immutable input, trusted server globals and optional
+continuation. The Rust process holds no privileged credentials and is not
+a persistence boundary. Older compiled releases lack the stream manifest
+flag and execute via the unchanged one-shot path.

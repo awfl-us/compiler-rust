@@ -532,3 +532,15 @@ consumption by stage. See
 Companion CLI PR #25 excludes previously persisted custom Cargo artifact
 trees from subsequent workspace restores. This does not affect production
 native artifact builds or workflow semantics.
+
+### Persistent native IPC (November 13, 2026)
+
+Generated ABI-3 binaries support an opt-in newline-framed, multi-request
+mode and advertise `stream_ipc_version:1` in their manifest, retaining
+the original one-request EOF transport for legacy consumers. The server's
+pinned release metadata gates reuse. See
+[implementation plan](persistent-native-ipc-plan-2026-11-13.md).
+The full compiled ProjectManager parent was tested locally (30 effects,
+0 Jobs HTTP failures) and a 100-request isolated benchmark showed a
+~1.91-second cumulative reduction in Rust invocation overhead; full
+production GKE restart tests remain separate.
