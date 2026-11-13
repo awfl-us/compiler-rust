@@ -4,12 +4,13 @@ import json
 import subprocess
 import tomllib
 from pathlib import Path
+from native_test_paths import native_binary
 
 root = Path(__file__).resolve().parents[1]
 crate = root / "fixtures/native-trusted-globals"
 with (crate / "Cargo.toml").open("rb") as handle:
     binary_name = tomllib.load(handle)["package"]["name"]
-binary = crate / "target/debug" / binary_name
+binary = native_binary(crate, binary_name)
 
 spoof = {
     "env": {

@@ -606,3 +606,14 @@ repeated occurrences within a step may differ. Persisted step-result slots
 continue to use the existing CFG continuation and server checkpoint, without
 any new journal. TimeUuidSmoke and the native generated-executable test
 verify the actual process output.
+
+
+### Build footprint and workspace persistence (2026-11-13)
+
+The Scala-to-native test harness shares one Cargo target directory, disables
+unneeded dev/test debug info and incremental compilation, and reports disk
+consumption by stage. See
+[build-storage-optimization-2026-11-13.md](build-storage-optimization-2026-11-13.md).
+Companion CLI PR #25 excludes previously persisted custom Cargo artifact
+trees from subsequent workspace restores. This does not affect production
+native artifact builds or workflow semantics.

@@ -22,6 +22,11 @@ jobs:
 
   scala-to-native-smoke:
     runs-on: ubuntu-latest
+    env:
+      CARGO_TARGET_DIR: ${{ runner.temp }}/awfl-native-shared-target
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/checkout@v4
@@ -87,7 +92,7 @@ jobs:
           manifest=fixtures/native-cli-v2/cli-fixture-increment/manifest.json
           test "$(jq -r '.runtime_abi' "$manifest")" = 3
           test "$(jq -r '.workflow' "$manifest")" = cli-fixture-increment
-          cargo build --manifest-path fixtures/native-cli-v2/cli-fixture-increment/Cargo.toml --target-dir "$RUNNER_TEMP/native-cli-target"
+          cargo build --manifest-path fixtures/native-cli-v2/cli-fixture-increment/Cargo.toml
           python3 - <<'PYTHON'
           import hashlib
           import json
@@ -102,7 +107,7 @@ jobs:
           assert hashlib.sha256(source).hexdigest() == manifest['source_sha256']
           with (directory / 'Cargo.toml').open('rb') as stream:
               package = tomllib.load(stream)['package']['name']
-          binary = pathlib.Path(os.environ['RUNNER_TEMP']) / 'native-cli-target/debug' / package
+          binary = pathlib.Path(os.environ['CARGO_TARGET_DIR']) / 'debug' / package
           response = subprocess.run(
               [str(binary)], input=json.dumps({'protocol_version': 2, 'input': 41}),
               text=True, capture_output=True, timeout=20, check=True)
@@ -149,8 +154,8 @@ jobs:
       - name: Build and execute real Rust Try/Raise continuations
         run: |
           for name in catch-raise success nested-catch uncaught runtime-error effect-catch default-log; do
-            cargo build --manifest-path "fixtures/native-try-raise/$name/Cargo.toml" --target-dir /tmp/awfl-try-target
-            cargo clippy --manifest-path "fixtures/native-try-raise/$name/Cargo.toml" --all-targets --locked --target-dir /tmp/awfl-try-target -- -D warnings
+            cargo build --manifest-path "fixtures/native-try-raise/$name/Cargo.toml"
+            cargo clippy --manifest-path "fixtures/native-try-raise/$name/Cargo.toml" --all-targets --locked -- -D warnings
           done
           python3 scripts/test_try_raise.py
       - name: Compile an unchanged production workflow into native Rust
@@ -163,9 +168,9 @@ jobs:
           # Test uses original Scala source; no HTTP request is executed here.
           ls fixtures/real-load-history/*/src/main.rs
           for crate in fixtures/real-load-history/*/Cargo.toml; do
-            cargo build --manifest-path "$crate" --target-dir "$RUNNER_TEMP/real-workflow-target"
+            cargo build --manifest-path "$crate"
           done
-          python3 scripts/test_real_workflow.py "$RUNNER_TEMP/real-workflow-target"
+          python3 scripts/test_real_workflow.py "$CARGO_TARGET_DIR"
       - name: Compile and run unchanged production Product combinator
         run: |
           cd frontend
@@ -175,11 +180,11 @@ jobs:
           cd ..
           # This is the exact, unmodified Product.scala from the pinned workflows checkout.
           for crate in fixtures/real-product/{single,cartesian,empty}/Cargo.toml; do
-            cargo build --manifest-path "$crate" --target-dir "$RUNNER_TEMP/real-product-target"
+            cargo build --manifest-path "$crate"
             cargo clippy --manifest-path "$crate" --all-targets --locked \
-              --target-dir "$RUNNER_TEMP/real-product-target" -- -D warnings
+              -- -D warnings
           done
-          python3 scripts/test_real_product.py "$RUNNER_TEMP/real-product-target"
+          python3 scripts/test_real_product.py "$CARGO_TARGET_DIR"
       - name: Build and lint all generated Rust fixtures
         run: |
           for name in native-smoke native-switch native-unmatched native-range native-each native-nested native-fold native-early-return native-top-return native-v2-switch-effects native-v2-nested-switch-effects native-v2-range-two-effects native-v2-nested-range-effects native-v2-each native-v2-fold native-v2-each-effects native-v2-fold-effects native-v2-range-switch-effects native-v2-pure-nested native-v2-deep-switch-effects native-v2-mixed-nested-range; do
@@ -191,6 +196,14 @@ jobs:
           python3 scripts/test_native_smoke.py
           python3 scripts/test_control_flow.py
           python3 scripts/test_native_protocol.py
+
+      - name: Report Cargo build disk usage
+        if: always()
+        run: |
+          echo "Shared Cargo build output (MiB):"
+          du -sm "$CARGO_TARGET_DIR" 2>/dev/null || true
+          echo "Available runner disk space:"
+          df -h "$RUNNER_TEMP"
 
   real-workflow-compatibility:
     runs-on: ubuntu-latest

@@ -4,11 +4,12 @@ import json
 import subprocess
 import tomllib
 from pathlib import Path
+from native_test_paths import native_binary
 
 root = Path(__file__).resolve().parents[1] / "fixtures/native-time-format"
 with (root / "Cargo.toml").open("rb") as f:
     name = tomllib.load(f)["package"]["name"]
-binary = root / "target/debug" / name
+binary = native_binary(root, name)
 
 
 def invoke(timestamp, zone):

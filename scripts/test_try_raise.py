@@ -4,12 +4,13 @@ No external HTTP request is issued. The server failure handoff is separately gat
 """
 import copy
 import json
+import os
 import subprocess
 import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-TARGET = Path('/tmp/awfl-try-target/debug')
+TARGET = Path(os.environ.get('CARGO_TARGET_DIR', '/tmp/awfl-try-target')) / 'debug'
 
 
 def run(name, input_value=None, continuation=None):

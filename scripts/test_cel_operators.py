@@ -4,12 +4,13 @@ import json
 import subprocess
 import tomllib
 from pathlib import Path
+from native_test_paths import native_binary
 
 ROOT = Path(__file__).resolve().parents[1]
 CRATE = ROOT / "fixtures/native-cel-operators"
 with (CRATE / "Cargo.toml").open("rb") as fh:
     package = tomllib.load(fh)["package"]["name"]
-binary = CRATE / "target/debug" / package
+binary = native_binary(CRATE, package)
 
 
 def invoke(value):

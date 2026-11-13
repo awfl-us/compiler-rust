@@ -5,12 +5,13 @@ import json
 import subprocess
 import tomllib
 from pathlib import Path
+from native_test_paths import native_binary
 
 ROOT = Path(__file__).resolve().parents[1]
 CRATE = ROOT / "fixtures/native-schema-text"
 with (CRATE / "Cargo.toml").open("rb") as stream:
     package = tomllib.load(stream)["package"]["name"]
-binary = CRATE / "target/debug" / package
+binary = native_binary(CRATE, package)
 
 for data in ({}, {"example": {"title": "should-not-substitute", "summary": "also-not"}}):
     response = json.loads(subprocess.check_output(

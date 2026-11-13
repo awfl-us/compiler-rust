@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import tempfile
+from contextlib import nullcontext
 import tomllib
 from pathlib import Path
 
@@ -58,7 +59,9 @@ def bind(response, outcome):
 
 
 def check():
-    with tempfile.TemporaryDirectory(prefix="awfl-native-v2-") as target:
+    with (nullcontext(os.environ["CARGO_TARGET_DIR"])
+          if os.environ.get("CARGO_TARGET_DIR")
+          else tempfile.TemporaryDirectory(prefix="awfl-native-v2-")) as target:
         binaries = {}
         for fixture in FIXTURES:
             manifest = ROOT / "fixtures" / fixture / "Cargo.toml"

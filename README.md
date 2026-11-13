@@ -99,6 +99,10 @@ consumer and workspace:
 cd /workspace/compiler-rust
 scripts/test-local.sh --smoke  # Scala DSL + Rust runtime + real workflow
 scripts/test-local.sh --full   # Also run all compiled CFG/effect-resume fixtures
+# Reuses compiled dependencies at target/local-shared and reports disk use per
+# stage. Set CARGO_TARGET_DIR to override. The local harness defaults to
+# CARGO_INCREMENTAL=0 and no dev/test debug info to reduce temporary storage.
+
 ```
 
 The script resolves the published additive DSL **v0.3.5**, loads and
