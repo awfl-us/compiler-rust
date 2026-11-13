@@ -2,6 +2,8 @@ package us.awfl.compiler.rust
 
 import java.nio.file.Paths
 import us.awfl.dsl.*
+import us.awfl.dsl.auto.given
+import us.awfl.utils.Env
 
 /** Generated executable built from the original DSL's CelFunc and Value API.
   * No AST changes, textual CEL parsing, or Google YAML runtime fallback.
@@ -48,7 +50,16 @@ object CelStdlibSmoke {
     val bytesRoundtrip = Value[Map[String, Any]](CelFunc(CelFunctions.JsonDecode,
       CelFunc(CelFunctions.JsonEncodeBytes, CelConst(s"$source.left"))))
     val encodedUrl = Value[String](text.url_encode(CelConst(s"$source.urlText")))
+    val optionalEnv = Value[Env]("input.env").get
+    val optionalFields = obj(Map(
+      "workdir" -> optionalEnv.workdir,
+      "callingWorkflowExec" -> optionalEnv.callingWorkflowExec
+    ))
+    val workflowBucket = Value[String](CelFunc(CelFunctions.TextLowercase,
+      CelStr("-workflow-files${WORKFLOW_ENV}")))
     val output = obj(Map[String, BaseValue[?]](
+      "deploymentBucket" -> workflowBucket,
+      "optionalFields" -> optionalFields,
       "present" -> present, "missing" -> missing, "nested" -> nested,
       "fallback" -> fallback, "keepFalse" -> keepFalse,
       "typeName" -> typeName, "merged" -> merge, "appended" -> appended,
@@ -58,6 +69,7 @@ object CelStdlibSmoke {
     val program = Normalize(Workflow((List.empty[Step[?, ?]], output),
       Some("cel-standard-library")))
     val sourceRust = RustEmitter.emit(program).source
+    assert(!sourceRust.contains("${WORKFLOW_ENV}"), "native release contains unbound deployment suffix")
     for (symbol <- List("map_get", "default_value", "type_of", "map_merge",
           "list_concat", "json_decode", "json_encode_string", "json_encode_bytes", "text_url_encode")) {
       assert(sourceRust.contains(s"ops::$symbol"), s"missing Rust direct call $symbol")
