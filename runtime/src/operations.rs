@@ -192,6 +192,9 @@ pub fn bool_value(value: &AwflValue) -> Result<bool, ValueError> {
     }
 }
 
+/// Google Workflows `+` promotes mixed numbers to double and coerces scalar
+/// numbers/booleans to strings when either operand is a string. Unlike the
+/// explicit string() function, addition also accepts a string operand.
 pub fn add(a: AwflValue, b: AwflValue) -> Result<AwflValue, ValueError> {
     match (a, b) {
         (AwflValue::Integer(x), AwflValue::Integer(y)) => x
@@ -199,7 +202,27 @@ pub fn add(a: AwflValue, b: AwflValue) -> Result<AwflValue, ValueError> {
             .map(AwflValue::Integer)
             .ok_or(ValueError::Overflow),
         (AwflValue::Float(x), AwflValue::Float(y)) => finite(x + y),
+        (AwflValue::Float(x), AwflValue::Integer(y)) => finite(x + y as f64),
+        (AwflValue::Integer(x), AwflValue::Float(y)) => finite(x as f64 + y),
         (AwflValue::String(x), AwflValue::String(y)) => Ok(AwflValue::String(x + &y)),
+        (
+            AwflValue::String(x),
+            y @ (AwflValue::Integer(_) | AwflValue::Float(_) | AwflValue::Bool(_)),
+        ) => {
+            let AwflValue::String(y) = to_string(&y)? else {
+                unreachable!()
+            };
+            Ok(AwflValue::String(x + &y))
+        }
+        (
+            x @ (AwflValue::Integer(_) | AwflValue::Float(_) | AwflValue::Bool(_)),
+            AwflValue::String(y),
+        ) => {
+            let AwflValue::String(x) = to_string(&x)? else {
+                unreachable!()
+            };
+            Ok(AwflValue::String(x + &y))
+        }
         _ => Err(ValueError::Type("unsupported add operand types".into())),
     }
 }
@@ -729,6 +752,50 @@ mod tests {
         );
         assert!(text_lowercase(&AwflValue::Integer(1)).is_err());
     }
+    #[test]
+    fn addition_matches_google_workflows_mixed_type_conversions() {
+        use AwflValue::{Bool, Float, Integer, List, Null, String as Text};
+        assert_eq!(add(Integer(2), Integer(3)).unwrap(), Integer(5));
+        assert_eq!(add(Integer(2), Float(0.5)).unwrap(), Float(2.5));
+        assert_eq!(add(Float(0.5), Integer(2)).unwrap(), Float(2.5));
+        assert_eq!(
+            add(Text("fund=$".into()), Integer(100)).unwrap(),
+            Text("fund=$100".into())
+        );
+        assert_eq!(
+            add(Float(2.5), Text(" spent".into())).unwrap(),
+            Text("2.5 spent".into())
+        );
+        assert_eq!(
+            add(Text("spent=".into()), Float(0.25)).unwrap(),
+            Text("spent=0.25".into())
+        );
+        assert_eq!(
+            add(Text("ready=".into()), Bool(true)).unwrap(),
+            Text("ready=true".into())
+        );
+        assert_eq!(
+            add(Bool(false), Text("!".into())).unwrap(),
+            Text("false!".into())
+        );
+        assert!(matches!(
+            add(Bool(true), Bool(false)),
+            Err(ValueError::Type(_))
+        ));
+        assert!(matches!(
+            add(Null, Text("x".into())),
+            Err(ValueError::Type(_))
+        ));
+        assert!(matches!(
+            add(Text("x".into()), List(vec![])),
+            Err(ValueError::Type(_))
+        ));
+        assert!(matches!(
+            add(Integer(i64::MAX), Integer(1)),
+            Err(ValueError::Overflow)
+        ));
+    }
+
     #[test]
     fn time_format_uses_microseconds_and_iana_timezone_dst() {
         let format = |value: AwflValue, zone: Option<&str>| -> String {

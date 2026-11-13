@@ -1,5 +1,18 @@
 # Native Rust execution: verified state, compatibility matrix, and roadmap
 
+## Project Manager full native smoke — November 13, 2026
+
+The unchanged Scala ProjectManager definition emitted and built **all three**
+static-musl Rust executables. Their compiled Tools and Prompts helpers passed
+with mocked effect/child responses (**11 tools, 10 prompts**); the compiled
+main ran **31 native suspension/resumption transitions to `Completed`** using
+these actual helper outputs and synthetic HTTP/downstream helpers. Native
+mixed string/number `+` needed a runtime compatibility fix. This is a
+**controlled local mock** including a simulated two-lane fork join, not a
+live IAM Jobs request or complete nested workflow graph. See
+[Project Manager smoke report](projectmanager-native-smoke-2026-11-13.md).
+
+
 ## Real workflow execution tests — November 13, 2026
 
 Executed three unchanged Scala-generated Rust workflows through the native
