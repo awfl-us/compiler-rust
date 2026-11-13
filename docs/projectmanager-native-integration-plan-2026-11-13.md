@@ -1,5 +1,23 @@
 # Project Manager — fast native iteration and live integration plan
 
+## Local-first development default
+
+**For ordinary compiler/server fixes, do not deploy Cloud Run.** Run the
+complete Jobs Express service (`npm run start:jobs` on localhost:5055)
+and the actual compiled Rust executor inside the Scala GKE development
+environment. Run Jobs in an interactive persistent foreground session;
+check its health from another command. See
+[the server local-first guide](https://github.com/awfl-us/server/blob/main/docs/native-local-development.md).
+
+The existing server `npm run native:local` is a fast real-Rust,
+recorded-HTTP *replay* option and does not perform new Jobs service
+calls. The Jobs server itself runs the real HTTP route implementations,
+but Firestore/GCS/LLM operations require working development
+configuration. Avoid repeated GCS publications and Cloud Tasks during
+the test/fix loop; use the isolated cloud canary only for final
+integration/IAM checks, with Terraform-owned infra.
+
+
 **As of November 13, 2026.** This is the active execution plan for the Project Manager native Rust backend. Historical smoke tests, compatibility inventories, and benchmark plans remain useful evidence, but their older "next" sections do not supersede this plan.
 
 **Goal:** One developer command builds and publishes ProjectManager plus its registered dependency closure. One ordinary AWFL agent-session API call launches it. Neither action should require manually building child workflows or editing Firestore.
