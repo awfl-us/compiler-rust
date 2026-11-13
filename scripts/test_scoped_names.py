@@ -4,11 +4,12 @@ import json
 import subprocess
 import tomllib
 from pathlib import Path
+from native_test_paths import native_binary
 
 crate = Path(__file__).resolve().parents[1] / "fixtures/native-scoped-names"
 with (crate / "Cargo.toml").open("rb") as file:
     name = tomllib.load(file)["package"]["name"]
-binary = crate / "target/debug" / name
+binary = native_binary(crate, name)
 
 
 def execute(continuation=None):

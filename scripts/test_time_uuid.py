@@ -6,12 +6,13 @@ import time
 import tomllib
 import uuid
 from pathlib import Path
+from native_test_paths import native_binary
 
 root = Path(__file__).resolve().parents[1]
 crate = root / "fixtures/native-time-uuid"
 with (crate / "Cargo.toml").open("rb") as f:
     name = tomllib.load(f)["package"]["name"]
-binary = crate / "target/debug" / name
+binary = native_binary(crate, name)
 
 def execute():
     before = time.time()

@@ -12,6 +12,23 @@ fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 WORKFLOWS="${AWFL_WORKFLOWS_ROOT:-$ROOT/../workflows}"
 export PATH="$HOME/.cargo/bin:$HOME/.local/bin:$PATH"
+
+# Reuse compiled dependencies across all generated fixture crates.
+export CARGO_TARGET_DIR="${CARGO_TARGET_DIR:-$ROOT/target/local-shared}"
+export CARGO_INCREMENTAL="${CARGO_INCREMENTAL:-0}"
+export CARGO_PROFILE_DEV_DEBUG="${CARGO_PROFILE_DEV_DEBUG:-0}"
+export CARGO_PROFILE_TEST_DEBUG="${CARGO_PROFILE_TEST_DEBUG:-0}"
+
+disk_usage() {
+  local stage="$1"
+  echo "== Disk use after $stage (MiB) =="
+  for dir in "$CARGO_TARGET_DIR" "$ROOT/frontend/target" "$HOME/.cargo" /tmp /workspace; do
+    if [[ -e "$dir" ]]; then
+      du -sm "$dir" 2>/dev/null || true
+    fi
+  done
+}
+disk_usage baseline
 for tool in java sbt cargo rustc cc python3; do
   command -v "$tool" >/dev/null || { echo "Missing $tool. Use AWFL Scala+Rust consumer." >&2; exit 1; }
 done
@@ -37,6 +54,8 @@ echo '== Scala AST normalization, CFG liveness, and NativeMain =='
   'Test / runMain us.awfl.compiler.rust.TryRaiseSmoke' \
   'Test / runMain us.awfl.compiler.rust.CompatibilitySmoke')
 
+disk_usage scala-frontend
+
 echo '== Compile unmodified production workflow source =='
 (cd "$ROOT/frontend" && sbt -batch \
   "set Test / unmanagedSources += file(\"$WORKFLOWS/src/main/scala/us/awfl/workflows/LoadConversationHistory.scala\")" \
@@ -47,29 +66,36 @@ echo '== Compile unchanged Product.scala (Try/Fold/For) from AWFL workflows =='
   "set Test / unmanagedSources ++= Seq(file(\"$WORKFLOWS/src/main/scala/us/awfl/workflows/evals/Product.scala\"), file(\"src/integration/scala/us/awfl/compiler/rust/RealProductSmoke.scala\"))" \
   'Test / runMain us.awfl.compiler.rust.RealProductSmoke')
 
+disk_usage scala-real-workflows
+
 echo '== Runtime unit tests and static analysis =='
 (cd "$ROOT" && cargo fmt --all -- --check && cargo test --workspace --locked \
   && cargo clippy --workspace --all-targets --locked -- -D warnings)
+
+disk_usage rust-unit-tests
 
 echo '== Compile and run pure and real workflow Rust binaries =='
 (cd "$ROOT" && cargo build --manifest-path fixtures/native-smoke/Cargo.toml \
   && python3 scripts/test_native_smoke.py \
   && cargo build --manifest-path fixtures/real-load-history/LoadConversationHistory/Cargo.toml \
-       --target-dir "$ROOT/target/local-real-workflow" \
-  && python3 scripts/test_real_workflow.py "$ROOT/target/local-real-workflow")
+  && python3 scripts/test_real_workflow.py "$CARGO_TARGET_DIR")
+
+disk_usage native-smoke
 
 echo '== Compile FlatMap projection and verify effect continuation =='
 (cd "$ROOT" && cargo build --manifest-path fixtures/native-flatmap/Cargo.toml \
-  --target-dir "$ROOT/target/local-flatmap" \
-  && python3 scripts/test_flatmap.py "$ROOT/target/local-flatmap")
+  && python3 scripts/test_flatmap.py "$CARGO_TARGET_DIR")
+
+disk_usage flatmap
 
 echo '== Execute real Product combinator across single, Cartesian and empty inputs =='
 (cd "$ROOT" && for name in single cartesian empty; do
-  cargo build --manifest-path "fixtures/real-product/$name/Cargo.toml" \
-    --target-dir "$ROOT/target/local-product-workflow"
+  cargo build --manifest-path "fixtures/real-product/$name/Cargo.toml"
   cargo clippy --manifest-path "fixtures/real-product/$name/Cargo.toml" \
-    --all-targets --locked --target-dir "$ROOT/target/local-product-workflow" -- -D warnings
-done && python3 scripts/test_real_product.py "$ROOT/target/local-product-workflow")
+    --all-targets --locked -- -D warnings
+done && python3 scripts/test_real_product.py "$CARGO_TARGET_DIR")
+
+disk_usage real-product
 
 echo '== Compile and execute native CEL standard-library expressions =='
 (cd "$ROOT" && cargo build --manifest-path fixtures/native-cel-stdlib/Cargo.toml \
@@ -111,14 +137,18 @@ echo '== Compile existing CEL membership and floor-division operators =='
 
 echo '== Compile nested Try/Raise, recoverable effects and explicit errors =='
 (cd "$ROOT" && for name in catch-raise success nested-catch uncaught runtime-error effect-catch default-log; do
-  cargo build --manifest-path "fixtures/native-try-raise/$name/Cargo.toml" --target-dir /tmp/awfl-try-target
-  cargo clippy --manifest-path "fixtures/native-try-raise/$name/Cargo.toml" --all-targets --locked --target-dir /tmp/awfl-try-target -- -D warnings
+  cargo build --manifest-path "fixtures/native-try-raise/$name/Cargo.toml"
+  cargo clippy --manifest-path "fixtures/native-try-raise/$name/Cargo.toml" --all-targets --locked -- -D warnings
 done && python3 scripts/test_try_raise.py)
+
+disk_usage generated-fixtures
 
 if [[ "$MODE" == '--full' ]]; then
   echo '== Real Rust process control-flow and effect/replay conformance =='
   (cd "$ROOT" && python3 scripts/test_control_flow.py \
     && python3 scripts/test_native_protocol.py)
 fi
+
+disk_usage completed
 
 echo "AWFL_NATIVE_LOCAL_TESTS_PASS ($MODE)"

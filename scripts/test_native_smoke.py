@@ -4,12 +4,13 @@ import json
 import subprocess
 import tomllib
 from pathlib import Path
+from native_test_paths import native_binary
 
 ROOT = Path(__file__).resolve().parents[1]
 CRATE = ROOT / "fixtures/native-smoke"
 with (CRATE / "Cargo.toml").open("rb") as manifest:
     package = tomllib.load(manifest)["package"]["name"]
-BINARY = CRATE / "target/debug" / package
+BINARY = native_binary(CRATE, package)
 for value, expected in ((5, 12), (0, 7), (-4, 3)):
     out = subprocess.check_output([str(BINARY)], input=json.dumps({
         "protocol_version": 2, "input": value,

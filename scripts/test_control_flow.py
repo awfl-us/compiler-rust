@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import tempfile
+from contextlib import nullcontext
 import tomllib
 from pathlib import Path
 
@@ -23,7 +24,9 @@ CASES = [
 
 
 def run() -> None:
-    with tempfile.TemporaryDirectory(prefix="awfl-rust-control-target-") as dirname:
+    with (nullcontext(os.environ["CARGO_TARGET_DIR"])
+          if os.environ.get("CARGO_TARGET_DIR")
+          else tempfile.TemporaryDirectory(prefix="awfl-rust-control-target-")) as dirname:
         for fixture, tests in CASES:
             manifest = ROOT / "fixtures" / fixture / "Cargo.toml"
             if not manifest.is_file():

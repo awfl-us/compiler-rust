@@ -505,3 +505,14 @@ Full acceptance gates and their order are in
 See [compiler architecture](native-control-flow-refactor-plan.md),
 [wire protocol](native-ipc-v2.md), and the
 [full implementation plan](native-rust-implementation-plan.md).
+
+
+### Build footprint and workspace persistence (2026-11-13)
+
+The Scala-to-native test harness shares one Cargo target directory, disables
+unneeded dev/test debug info and incremental compilation, and reports disk
+consumption by stage. See
+[build-storage-optimization-2026-11-13.md](build-storage-optimization-2026-11-13.md).
+Companion CLI PR #25 excludes previously persisted custom Cargo artifact
+trees from subsequent workspace restores. This does not affect production
+native artifact builds or workflow semantics.
