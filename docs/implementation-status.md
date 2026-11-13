@@ -1,5 +1,15 @@
 # Native Rust implementation status — November 12, 2026
 
+**Latest ProjectManager verification (November 13 UTC):** all three
+unchanged Scala-generated Rust variants built as native static-musl
+executables. Compiled Tools and Prompts passed controlled mock execution,
+including numeric funds; the parent reached `Completed` after 31 real Rust IPC
+suspension/resumption transitions with synthetic external effects and downstream
+helpers. A Rust runtime `+` compatibility fix handles scalar/string
+concatenation and mixed numeric arithmetic. See the
+[reproducible smoke](projectmanager-native-smoke-2026-11-13.md). This does
+not establish full live Jobs deployment or Google differential parity.
+
 ## Merged compiler and remaining integration work
 
 Compiler [PR #18](https://github.com/awfl-us/compiler-rust/pull/18)
