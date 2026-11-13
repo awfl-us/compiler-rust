@@ -1,5 +1,21 @@
 # Native Rust execution: verified state, compatibility matrix, and roadmap
 
+
+## Active priority — ProjectManager native execution, November 13, 2026
+
+**Current authoritative plan:** [fast ProjectManager iteration and real Jobs execution](projectmanager-native-integration-plan-2026-11-13.md). Earlier dated sections below record how the architecture evolved; their old "next milestone" statements are not active instructions.
+
+**Merged:** [compiler-rust #31](https://github.com/awfl-us/compiler-rust/pull/31) and [workflows #13](https://github.com/awfl-us/workflows/pull/13) build all **26 ProjectManager native workflows from 12 unchanged Scala modules** in one batch, with a single Cargo cache and static-musl ELF verification. First full run: **199.3 seconds**. Warm repeated run: **52.5 seconds**, of which Cargo consumed **0.11 seconds**. A three-workflow representative release publication test used **fake GCS**, including parallel/storage/callback capabilities and unchanged-upload skipping; **the full 26-workflow release set has not been published to actual GCS**.
+
+**Server:** [#97](https://github.com/awfl-us/server/pull/97) is merged (durable native.parallel parents and local workflow.run children). The existing restricted storage.object_get implementation is tested. [#98](https://github.com/awfl-us/server/pull/98) is **open** (callback.create and callback.await using the existing user-scoped callback records and Jobs routes). Node native regression: **93 passed, 42 skipped, none failed**, including a real generated tools-CliTools Rust binary resumed from a simulated callback delivery with mocked Jobs HTTP. Callback waits currently retain an active Jobs request up to 25 minutes; durable event-driven wake-up is not implemented.
+
+**Live evidence:** First native ProjectManager canary performed **six real HTTP effects**, then failed at native.parallel on an **old tagged Jobs revision** that rejected workflow.run in the pinned operation set; the task was removed and execution cancelled. A separate Google Workflows ProjectManager request successfully used real LIST_DIRECTORY and READ_FILE, but that does **not** establish native parity.
+
+**Next, in this order:** merge/deploy server #98 and confirm correct revision; run one-command publication and verify all 26 actual GCS releases; execute an isolated real native ProjectManager across fork, child workflow, storage, callback and completion; fix actual failures; compare equivalent requests on the **same** public launch path. No extra orchestrator or new IAM. Production native routing stays disabled; all future infra changes must remain in Terraform.
+
+---
+
+
 ## Project Manager full native smoke — November 13, 2026
 
 The unchanged Scala ProjectManager definition emitted and built **all three**
@@ -50,7 +66,7 @@ need planned migration to backend-neutral `CallOperations.WorkflowRun` before
 native deployment. Stable native routing stays disabled.
 
 
-## Next milestone — local synchronous subworkflows
+## Historical design milestone — local synchronous subworkflows (implemented by server #94 and #97)
 
 The native executor's critical scalability requirement is cheap, nested
 subworkflow invocation rather than one Cloud Task/Firestore execution per

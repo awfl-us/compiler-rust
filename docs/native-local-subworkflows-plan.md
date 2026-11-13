@@ -1,5 +1,25 @@
 # Fast local subworkflow calls — implementation plan (November 2026)
 
+
+## Current integration status — November 13 (later checkpoint)
+
+[Server #97](https://github.com/awfl-us/server/pull/97) has merged
+the durable native parallel-parent and pinned synchronous nonparallel
+workflow.run child support. The earlier #94 local runner remains the
+memory-first path. [Server #98](https://github.com/awfl-us/server/pull/98)
+is open with native callbacks using the existing AWFL callback service;
+the current await retains a Jobs request for up to 25 minutes rather
+than implementing a durable event wake-up.
+
+Compiler #31 and Workflows #13 have merged, providing one-command build
+and publication for the 26 ProjectManager native workflows. **Full real
+native ProjectManager completion is pending**: the first canary reached
+six real effects before a stale Jobs worker rejected an operation during
+its fork. Refer to the [current ProjectManager action plan](projectmanager-native-integration-plan-2026-11-13.md). The rest of this
+document is preserved as dated design and benchmark evidence, not the
+latest deployment checklist.
+
+
 ## Implemented and verified — November 13, 2026 UTC
 
 Server [#94](https://github.com/awfl-us/server/pull/94) implements the

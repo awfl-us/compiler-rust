@@ -1,4 +1,19 @@
-# Native Rust implementation status — November 12, 2026
+# Native Rust implementation status — November 13, 2026
+
+
+## Current ProjectManager checkpoint (supersedes dated sections below)
+
+See the [active implementation and execution plan](projectmanager-native-integration-plan-2026-11-13.md). The older implementation checkpoints below describe their original dates and should not be read as current PR status.
+
+- **Merged compiler #31:** single JVM batch compiled 12 unchanged Scala classes into **26 ProjectManager native workflows**, including Tools, Prompts, Summaries, Chain, ToolDispatcher, Tasks, and ContextCollapser. The known legacy UUID CEL literal now lowers to the existing native function.
+- **Merged workflows #13:** one-command recursive compile/build/publish with a shared Cargo workspace, preserved source fingerprints, static musl and ABI verification. All 26 ELF builds passed; full real GCS activation is **pending**. First clean build **199.3 seconds**, warm **52.5 seconds**, with **0.11 seconds** Cargo time.
+- **Merged server #97:** durable parallel parents may call published nonparallel native child workflows locally inside Jobs. The protected storage.object_get handler is already implemented.
+- **Open server #98:** callback.create/await reuse AWFL's existing callback service and user-scoped callback collection. Native tests **93 pass / 42 skip / zero fail**, including the real compiled tools-CliTools executable with simulated HTTP and callback delivery. Active callback waits are bounded to 25 minutes, not durable asynchronous wake-ups.
+- **Native ProjectManager is not yet end-to-end passing:** first live canary ran six real effects and failed at the native fork on a stale tagged Jobs revision, then was cancelled. A separate Google-backed ProjectManager completed LIST_DIRECTORY and READ_FILE successfully; it is not evidence of native completion.
+
+**Next:** verify server #98 merge and deployed version, publish and inspect all 26 GCS release aliases with the new command, run one isolated authenticated native ProjectManager and fix concrete observed errors. Keep normal native routing disabled. Terraform owns IAM and infra.
+
+---
 
 **Latest ProjectManager verification (November 13 UTC):** all three
 unchanged Scala-generated Rust variants built as native static-musl
@@ -17,8 +32,9 @@ Compiler [PR #18](https://github.com/awfl-us/compiler-rust/pull/18)
 [`a285f66`](https://github.com/awfl-us/compiler-rust/commit/a285f66df11efd1b2c9811fbd494dcd45541aa7e).
 Native Scala-to-Rust now compiles nested `Parallel` and `ParallelFor`,
 `time.format`, literal JSON object-to-string schemas and individual workflow
-variants via `NativeMain --only=<FullWorkflowName>`. The paired server
-[PR #82](https://github.com/awfl-us/server/pull/82) is **still open**;
+variants via `NativeMain --only=<FullWorkflowName>`. At this older November 12 checkpoint the paired server
+[PR #82](https://github.com/awfl-us/server/pull/82) was open;
+it has subsequently merged.
 compiler merge does not activate server fork/join or native production routing.
 
 The original `Llm.chatJson` expression was restored by merged
