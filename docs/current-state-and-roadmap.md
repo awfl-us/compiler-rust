@@ -1,5 +1,17 @@
 # Native Rust execution: verified state, compatibility matrix, and roadmap
 
+## New architecture decision — memory-first executor, explicit recovery (November 12)
+
+The workflow author, not the native engine, owns idempotency and explicit
+result caching (`us.awfl.utils.Cache`). The next executor runs Rust
+continuations and external effects in memory, asynchronously coalesces
+observational progress, and awaits only the final Firestore result write.
+Crash recovery restarts the workflow; uncached effects can repeat. This
+replaces the redundant automatic per-effect journal for opted-in single-lane
+releases while retaining the existing durable worker for older and parallel
+executions. See [the detailed plan](native-memory-execution-plan.md).
+
+
 ## November 12 — native worker hot-path simplification (latest)
 
 Server [#91](https://github.com/awfl-us/server/pull/91) and
