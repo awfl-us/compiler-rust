@@ -1,5 +1,29 @@
 # Native Rust execution: verified state, compatibility matrix, and roadmap
 
+## Latest — local nested Rust subworkflows implemented, cloud-tested
+
+Server [#94](https://github.com/awfl-us/server/pull/94) and Scala compiler
+fixture [#26](https://github.com/awfl-us/compiler-rust/pull/26) are merged.
+Synchronous nested `workflow.run` calls execute under the **same root Jobs
+request**, inheriting authenticated context; child binaries are pinned,
+SHA-256-verified, and reused from the local cache, enforcing each child's
+published operation allowlist. No per-child Cloud Tasks, execution records,
+or effect journals are created. Tests: 93 native passes, 36 optional skips.
+
+GCP zero-traffic canary passed 5/5 full real Scala-derived
+`LocalParent→LocalChild→LocalLeaf` Rust workflow trees (40 calls per root).
+Warm median: **3.491s** client-observed, **2.891s** in Jobs. The **81 Rust
+continuation subprocess invocations per tree** consumed median **2.417s**
+inclusive, the dominant remaining bottleneck. Details and caveats:
+[local-subworkflow implementation plan](native-local-subworkflows-plan.md).
+
+**Priority:** simplify/benchmark continuation-process overhead, not more
+Firestore optimization or moving Jobs to GKE before evidence. Existing
+Scala workflows still using the Google `workflows.executions.run` spelling
+need planned migration to backend-neutral `CallOperations.WorkflowRun` before
+native deployment. Stable native routing stays disabled.
+
+
 ## Next milestone — local synchronous subworkflows
 
 The native executor's critical scalability requirement is cheap, nested
