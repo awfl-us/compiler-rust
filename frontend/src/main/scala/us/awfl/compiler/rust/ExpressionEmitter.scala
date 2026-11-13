@@ -79,6 +79,10 @@ object ExpressionEmitter {
         s"ops::to_string(&(${inner(value)}))?"
       case Function(FunctionId.ToInt, Vector(value)) =>
         s"ops::to_int(&(${inner(value)}))?"
+      case Function(FunctionId.TimeFormat, Vector(seconds)) =>
+        s"ops::time_format(&(${inner(seconds)}), None)?"
+      case Function(FunctionId.TimeFormat, Vector(seconds, timezone)) =>
+        s"ops::time_format(&(${inner(seconds)}), Some(&(${inner(timezone)})))?"
       case Function(FunctionId.TextUrlEncode, Vector(value)) =>
         s"ops::text_url_encode(&(${inner(value)}))?"
       case Function(FunctionId.TextLowercase, Vector(value)) =>
