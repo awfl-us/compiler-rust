@@ -1,5 +1,58 @@
 # Fast local subworkflow calls — implementation plan (November 2026)
 
+## Implemented and verified — November 13, 2026 UTC
+
+Server [#94](https://github.com/awfl-us/server/pull/94) implements the
+shared `workflow.run` memory executor, and compiler-rust
+[#26](https://github.com/awfl-us/compiler-rust/pull/26) supplies real Scala
+parent, child, leaf, and child-HTTP compilation fixtures. These have been
+merged. **No new Terraform, IAM, GKE workload, or Cloud Tasks queue**.
+
+Live Cloud Run Jobs test: isolated `jobs-00157-qib` revision, 0% normal
+traffic, published SHA-256-pinned musl Rust executables for `LocalParent` →
+20 `LocalChild` calls → 20 `LocalLeaf` calls. All **five/five** executions
+returned `[3, 4, ..., 22]`, and each had **40 native `workflow.run` effects,
+only one top-level Cloud Task and Firestore execution, zero child records,
+and zero engine effect journals**. The first test ELF used glibc and could
+not launch on Cloud Run (`spawn ... ENOENT`); recompiling the same Scala
+fixtures for `x86_64-unknown-linux-musl` resolved it. The failed initial
+probe was terminal; no effect ran or replayed.
+
+| Cloud Run test | Client wall time (create Firestore record + enqueue Task → terminal) |
+| --- | ---: |
+| First successful static artifact run | 3.222s |
+| Warm run 1 | 3.535s |
+| Warm run 2 | 3.254s |
+| Warm run 3 | 3.446s |
+| Warm run 4 | 3.992s |
+| **Warm median** | **3.491s** |
+
+The warm **Jobs request** median was **2.891s**, from tagged Cloud Run
+structured profiler logs. This particular workflow has **81 separate Rust
+continuation subprocess invocations**, consuming median **2.417s** across
+`runner.transition` spans, with median **0.959s** specifically in
+`rust.spawn_io`. These spans include nested parent/child dispatch and should
+not be naively summed. Warm GCS materialization totaled **~19ms** for
+three distinct cached artifacts; the two required Firestore transactions
+(`claim` and `complete`) together took **~223ms**. No additional child
+network requests or Firestore writes occurred.
+
+The same compiled tree ran in **~1.44s** inside the Scala GKE consumer's
+local environment, highlighting environment/process overhead differences.
+Neither figure compares the *same workflow* on Google Workflows or a
+distributed-per-child native implementation; there is no defensible
+relative-speedup multiplier. This is five sequential executions, not p95,
+concurrency, or cost benchmarking.
+
+**Next highest-leverage work:** reduce Rust process invocation / JSON
+continuation overhead within the existing Jobs service for nested pure
+workflows. A persistent Rust process or direct in-process compiled module
+would help if it stays simple; benchmark an isolated prototype first. GKE
+colocation does not remove that overhead and is not justified yet. Keep
+normal production native routing disabled until migration and broader tests.
+
+---
+
 ## Decision
 
 AWFL frequently decomposes logic into many subworkflows (`Chain`,
