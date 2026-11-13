@@ -674,3 +674,18 @@ The plan preserves the distinction between source-observed behavior, proposed ar
 
 - [workflows/src/main/scala/us/awfl/workflows/evals/experiments/SweBenchLite.scala](https://github.com/awfl-us/workflows/blob/main/src/main/scala/us/awfl/workflows/evals/experiments/SweBenchLite.scala)
 
+
+
+### Verified November 13 production foreground execution
+
+After compiler-rust #37, server #110, and workflows #21, the regular
+authenticated Project Manager launcher ran the native Rust dependency tree
+with sparse optional environment input, invoked the real CLI
+`LIST_DIRECTORY` callback, received its result, resumed, and finished
+`Done` without execution error. The initial native execution was
+`completed` with 30 effects. Server deployment and native closure publishing
+succeeded via existing CI; Terraform remains manually applied and is not part
+of normal application deployment. This closes the foreground sparse-env and
+confirmed-child-failure launch milestone. Next reliability work is detached
+execution recovery and uncertain remote-effect reconciliation, explicitly
+deferred from this fix.

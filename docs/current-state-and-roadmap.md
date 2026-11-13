@@ -652,8 +652,19 @@ child Rust binary as confirmed `workflow.run` failures, journals them,
 handles compiled Try edges, and terminates uncaught parents (releasing the
 fenced lease). Cloud Tasks should stop retrying terminal child failures;
 unknown transport outcomes still require reconciliation rather than
-automatic success/failure. Rollout gate: merge compiler + server patches,
-update the pinned compiler commit in the workflows publisher, publish the
-Project Manager closure, then verify a live native session reaches an
-actual CLI tool response. Detached/background workflow support remains a
-separate deferred milestone.
+automatic success/failure.
+
+**Foreground production smoke PASSED (November 13):** compiler-rust #37,
+server #110 and workflows #21 were merged; server deployment
+[43526306771](https://github.com/awfl-us/server/actions/runs/43526306771)
+and Project Manager closure publication
+[43526560336](https://github.com/awfl-us/workflows/actions/runs/43526560336)
+both succeeded. A fresh authenticated Project Manager session launched
+through the normal API with sparse optional `env`, executed
+`LIST_DIRECTORY` in the existing GKE project workspace, persisted the
+actual tool result, resumed the workflow, and wrote a final assistant
+response. The initial native execution completed in Firestore with 30
+effects; the follow-up native execution finished `Done` without error.
+This verifies foreground agent/tool execution, **not** detached/background
+workflow semantics, comprehensive error reconciliation, or scale tests.
+Detached/background workflow support remains a separate deferred milestone.
