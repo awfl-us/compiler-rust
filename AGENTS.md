@@ -25,3 +25,8 @@ downstream services.
 Maintain the existing Scala DSL and normal workflow semantics. Keep
 production native routing disabled until verified; infrastructure/IAM is
 Terraform-managed.
+
+
+**Current perf plan:** see docs/persistent-native-ipc-plan-2026-11-13.md.
+Keep generated ABI-3 one-shot JSON backward compatible; opt-in persistent
+JSON-lines streaming is release-manifest gated. No Scala DSL changes.
