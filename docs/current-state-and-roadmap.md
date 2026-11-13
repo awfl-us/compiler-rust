@@ -1,5 +1,18 @@
 # Native Rust execution: verified state, compatibility matrix, and roadmap
 
+## Real workflow execution tests — November 13, 2026
+
+Executed three unchanged Scala-generated Rust workflows through the native
+local continuation runner with controlled HTTP handlers: **7/7 branch tests
+passed**, 15 mocked effects, covering `LoadConversationHistory`,
+`helpers-Tasks`, and `tools-Tasks` (including DONE→queued-task promotion).
+`helpers-Chain` compiled and its initial `workflow.run` effect executed, but
+full child dispatch is blocked by its literal `${WORKFLOW_ENV}` placeholder;
+that is **not** counted as a passing workflow. See
+[the detailed execution report](real-workflow-execution-2026-11-13.md).
+These tests did not call live Jobs APIs or change production routing.
+
+
 ## Latest — local nested Rust subworkflows implemented, cloud-tested
 
 Server [#94](https://github.com/awfl-us/server/pull/94) and Scala compiler
