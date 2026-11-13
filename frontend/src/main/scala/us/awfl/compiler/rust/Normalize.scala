@@ -113,6 +113,10 @@ object Normalize {
       // They encode the inner value or null, not {"resolver": ...}.
       case v: OptResolved[?] => cel(v.resolver.path, where)
       case v: OptObj[?] => obj(v.obj.value, where)
+      // OptList is a DSL wrapper, not a JSON product. Match the YAML compiler:
+      // evaluate the optional list with null fallback instead of leaking its
+      // Resolver(path, safe) fields into nested tool schemas.
+      case v: OptList[?] => obj(v.getOrElse(us.awfl.dsl.ListValue.nil(v.spec)), where)
       case v: BaseValue[?] => valueExpr(v, where)
       case v: Product =>
         val fields = v.productElementNames.zip(v.productIterator).toVector
