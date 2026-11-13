@@ -1,5 +1,22 @@
 # Native Rust execution: verified state, compatibility matrix, and roadmap
 
+## Next milestone — local synchronous subworkflows
+
+The native executor's critical scalability requirement is cheap, nested
+subworkflow invocation rather than one Cloud Task/Firestore execution per
+child. The DSL already defines `CallOperations.WorkflowRun`; existing
+workflow definitions use Google's `workflows.executions.run` connector, but
+native Jobs has not supported `workflow.run` as a local handler. Implement
+published SHA-verified child Rust artifacts in the **same active Jobs
+request**, keep the authenticated root context, and reserve distributed
+scheduling for top-level or explicitly detached workflows. See the
+[local-subworkflow implementation plan](native-local-subworkflows-plan.md).
+
+First benchmark warm Cloud Run with local children. Assess moving the
+executor to GKE *after* removing child dispatch overhead and measuring
+root/child latency, not in place of that simplification.
+
+
 ## Memory-first executor merged and cloud-canary verified (November 12)
 
 Server [#93](https://github.com/awfl-us/server/pull/93) added an opt-in
