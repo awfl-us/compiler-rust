@@ -242,6 +242,30 @@ execution disabled until wider equivalence and safety tests pass.
   explicitly unsupported; the 32-name YAML matrix does **not** imply full
   Rust function/effect parity.
 
+## November 13: production launcher parity and workflow-file bucket binding
+
+- Fixed Scala optional `OptResolved` fields in native `Normalize.obj`: use the
+  DSL's own `getOrElse(null)` lowering instead of strict field access. When a
+  nested optional key (for example `input.env.workdir` or
+  `input.env.callingWorkflowExec`) is absent from the authenticated launcher,
+  generated Rust now evaluates to `null` rather than raising
+  `missing field or element`. Explicit optional values remain unchanged.
+- Bind the established `${WORKFLOW_ENV}` deployment placeholder **at compile
+  time** for native `CelStr` values, using `WORKFLOW_ENV` (empty in production).
+  This matches the Google YAML deployment substitution and prevents a literal
+  `awfl-us-workflow-files${workflow_env}` bucket after `text.to_lower`.
+  Releases must be compiled for their intended environment; the publisher
+  must never reuse one compiled artifact across different environment suffixes.
+- Regression coverage in `CelStdlibSmoke` and
+  `scripts/test_cel_stdlib.py` executes compiled Rust with a production-shaped
+  `env` omitting both optional fields, plus an explicit-value case and
+  deployment-bucket suffix assertions.
+- Companion server changes distinguish **confirmed native child failure**
+  from unknown transport failures: catchable errors take the compiled Try edge,
+  uncaught errors commit terminal `failed` with the lease released and the
+  effect journal recorded. Unknown outcomes are deliberately not treated as
+  confirmed.
+
 ## November 11: native CEL standard-library expansion
 
 `feat/native-cel-stdlib` adds eight Google-compatible pure operations to the

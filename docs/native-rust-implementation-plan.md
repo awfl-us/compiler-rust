@@ -205,7 +205,12 @@ workflow.run needs synchronous result and asynchronous skip_polling modes. Norma
   do not interpret or silently reinterpret these strings. No DSL AST changes.
 - CelStr.safe pre-escapes content for YAML. Normalize string contents once and let each backend escape its output; prevent double escaping.
 - Unknown raw CEL fails Rust compilation with a migration suggestion. A small compatibility parser for the known literal/reference subset is acceptable during migration; a general CEL interpreter is not required.
-- Replace WORKFLOW_ENV text substitutions with manifest/deployment bindings, including child workflow names and workflow-file bucket names.
+- **Implemented for compiled native `CelStr` (Nov 13):** substitute
+  `${WORKFLOW_ENV}` when compiling for a deployment, covering workflow-file
+  bucket names and statically known child workflow IDs. The existing Jobs
+  child-dispatch suffix handling remains compatible with previously published
+  binaries. Preserve environment-specific artifact builds; consider an explicit
+  manifest suffix binding if one artifact must later be portable across environments.
 
 ## 3. Compiler design: Scala frontend, native Rust output
 

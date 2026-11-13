@@ -633,3 +633,27 @@ consumption by stage. See
 Companion CLI PR #25 excludes previously persisted custom Cargo artifact
 trees from subsequent workspace restores. This does not affect production
 native artifact builds or workflow semantics.
+
+
+### November 13, 2026 — production Project Manager compatibility follow-up
+
+The first production native Project Manager session was dispatched through
+`/workflows/execute`, but the child tree failed on `workdir` and
+`callingWorkflowExec` lookups that the web/CLI launcher deliberately omits.
+Local test inputs had explicitly supplied both values and so missed this
+contract. Native optional `OptResolved` lowering now uses safe `map.get` plus
+`default(null)` for nested paths, in parity with Google-generated YAML.
+The same patch resolves the literal `${WORKFLOW_ENV}` string in the
+workflow-file bucket name at native compile/publish time. Regression tests
+must use the production launcher's exact sparse `env` shape.
+
+The Jobs companion change classifies failures emitted by a trusted, pinned
+child Rust binary as confirmed `workflow.run` failures, journals them,
+handles compiled Try edges, and terminates uncaught parents (releasing the
+fenced lease). Cloud Tasks should stop retrying terminal child failures;
+unknown transport outcomes still require reconciliation rather than
+automatic success/failure. Rollout gate: merge compiler + server patches,
+update the pinned compiler commit in the workflows publisher, publish the
+Project Manager closure, then verify a live native session reaches an
+actual CLI tool response. Detached/background workflow support remains a
+separate deferred milestone.

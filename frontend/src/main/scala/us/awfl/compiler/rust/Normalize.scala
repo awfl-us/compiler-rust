@@ -111,7 +111,11 @@ object Normalize {
       case v: Option[?] => v.map(obj(_, where)).getOrElse(NullValue)
       // Existing DSL optional field wrappers are not normal product maps.
       // They encode the inner value or null, not {"resolver": ...}.
-      case v: OptResolved[?] => cel(v.resolver.path, where)
+      // The optional wrapper is semantic: missing paths must evaluate to
+      // null, not strict field-access errors. Reuse the DSL's own getOrElse
+      // lowering (default(map.get(parent, key), null) for nested paths),
+      // exactly as the Google Workflows compiler does.
+      case v: OptResolved[?] => valueExpr(v.getOrElse(Value.nil(v.spec)), where)
       case v: OptObj[?] => obj(v.obj.value, where)
       // OptList is a DSL wrapper, not a JSON product. Match the YAML compiler:
       // evaluate the optional list with null fallback instead of leaking its
@@ -193,7 +197,12 @@ object Normalize {
 
     def cel(node: Cel, where: String): Expr = node match {
       case CelConst(value) => raw(value, where)
-      case CelStr(value) => GlobalId.resolve(value).map(Global(_)).getOrElse(StringValue(value))
+      // Match the existing Google Workflows deployment substitution.
+      // Native binaries are compiled separately for each WORKFLOW_ENV.
+      // Do not leave a literal ${WORKFLOW_ENV} in workflow-file bucket names.
+      case CelStr(value) =>
+        val bound = value.replace("${WORKFLOW_ENV}", sys.env.getOrElse("WORKFLOW_ENV", ""))
+        GlobalId.resolve(bound).map(Global(_)).getOrElse(StringValue(bound))
       case CelValue(value) => valueExpr(value, where)
       case CelFunc(name, params) =>
         val id = FunctionId.resolve(name).getOrElse(

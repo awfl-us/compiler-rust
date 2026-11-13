@@ -4,6 +4,7 @@
 Tests exact observable JSON and type semantics, not just presence of Rust code.
 """
 import json
+import os
 import subprocess
 import tomllib
 from pathlib import Path
@@ -33,12 +34,17 @@ def check():
         "items": [1], "append": [3, 4],
         "json": '{"status":"ok","count":2}',
         "urlText": "a/b/c?item=d+e f~é🙂",
+        # Match the production web/CLI/MCP launcher: optional env fields
+        # workdir and callingWorkflowExec are intentionally not present.
+        "env": {"userId": "test", "sessionId": "test"},
     }
     result = execute(inp)
     assert result["protocol_version"] == 2, result
     assert result["status"] == "completed", result
     assert result["result"] == {
         "present": 7, "missing": None, "nested": 42,
+        "optionalFields": {"workdir": None, "callingWorkflowExec": None},
+        "deploymentBucket": ("-workflow-files" + os.getenv("WORKFLOW_ENV", "")).lower(),
         "fallback": "fallback", "keepFalse": False, "typeName": "list",
         "merged": {"a": 1, "b": 2, "nest": {"right": True}},
         "appended": [1, [3, 4]],
@@ -48,6 +54,14 @@ def check():
         "urlEncoded": "a%2Fb%2Fc%3Fitem%3Dd%2Be%20f%7E%C3%A9%F0%9F%99%82",
     }, result
     assert execute(inp) == result, "pure CEL result must be deterministic"
+    populated = dict(inp, env={
+        "workdir": "/workspace", "callingWorkflowExec": "parent_exec",
+    })
+    result_populated = execute(populated)
+    assert result_populated["status"] == "completed", result_populated
+    assert result_populated["result"]["optionalFields"] == {
+        "workdir": "/workspace", "callingWorkflowExec": "parent_exec",
+    }, result_populated
 
     invalid = dict(inp, json="{bad json}")
     p = subprocess.run([str(BINARY)], input=json.dumps({
