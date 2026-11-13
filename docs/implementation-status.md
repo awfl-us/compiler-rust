@@ -266,6 +266,17 @@ execution disabled until wider equivalence and safety tests pass.
   effect journal recorded. Unknown outcomes are deliberately not treated as
   confirmed.
 
+**Production verification:** compiler-rust #37, server #110 and workflows
+#21 merged, followed by successful
+[server deployment](https://github.com/awfl-us/server/actions/runs/43526306771)
+and [native Project Manager publisher](https://github.com/awfl-us/workflows/actions/runs/43526560336).
+An authenticated Project Manager session with omitted optional env fields
+executed a real `LIST_DIRECTORY` tool, received a GKE workspace directory
+listing, resumed for a final answer, and ended `Done` with no error. The
+initial native execution completed with 30 recorded effects. This is a
+foreground end-to-end verification only; detached/background workflow recovery
+remains deferred.
+
 ## November 11: native CEL standard-library expansion
 
 `feat/native-cel-stdlib` adds eight Google-compatible pure operations to the
