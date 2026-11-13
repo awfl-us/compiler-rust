@@ -150,6 +150,10 @@ object Normalize {
 
     def raw(rawValue: String, where: String): Expr = rawValue match {
       case "input" => Input
+      // workflow-utils 0.3.5 still emits this historical CEL literal in
+      // Strider/Prakriya. Lower only this well-known expression; never
+      // interpret arbitrary raw CEL strings.
+      case "uuid.generate()" => Function(FunctionId.UuidGenerate, Vector.empty)
       case "null" => NullValue
       case "true" => BoolValue(true)
       case "false" => BoolValue(false)
