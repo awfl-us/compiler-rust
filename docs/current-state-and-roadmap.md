@@ -1,5 +1,26 @@
 # Native Rust execution: verified state, compatibility matrix, and roadmap
 
+## Memory-first executor merged and cloud-canary verified (November 12)
+
+Server [#93](https://github.com/awfl-us/server/pull/93) added an opt-in
+single-lane native executor that keeps Rust continuations/effect outcomes
+in memory, coalesces optional asynchronous progress, and awaits one final
+Firestore commit; DSL `Cache` controls recovery and idempotency. The
+previous durable worker still handles existing/parallel workflows.
+
+On isolated Jobs revision `jobs-00152-nek`, **5/5** real published Rust
+`helpers-ToolDefs` runs returned `{"defs":[]}`, each with one HTTP effect
+and **zero engine effect-journal documents**. The warm client median
+fell to **0.785 s** (earlier 0.917 s), warm Jobs median to **405 ms**
+(earlier 517 ms). Profiler: **one Firestore claim and one final commit**,
+no progress writes in short workflows. This is a *direct Firestore/Tasks
+canary*, not a same-API or load benchmark. Full measurements and remaining
+tests: [memory-first implementation plan](native-memory-execution-plan.md).
+
+**Next:** representative longer multi-effect Cloud Run test and same
+authenticated Workflows API benchmark. Keep production native mode off.
+
+
 ## New architecture decision — memory-first executor, explicit recovery (November 12)
 
 The workflow author, not the native engine, owns idempotency and explicit

@@ -1,5 +1,62 @@
 # Native execution: in-memory continuations, explicit caching, asynchronous progress
 
+## Implemented and live-canary tested — November 12, 2026
+
+**Server [PR #93](https://github.com/awfl-us/server/pull/93) merged** at
+`17d149682102bc066ba6f177110d7088fb5b7600`. The new opt-in
+`executionMode='memory'` path is deployed in the normal Jobs image but
+**disabled on the public Workflows API**. Existing/parallel workflows keep
+the previous durable path. The previous release and cached executable format
+are unchanged.
+
+### First real cloud test
+
+Isolated zero-traffic Cloud Run Jobs revision `jobs-00152-nek` (`native-memory`
+tag) received five Cloud Tasks authenticated with the existing Jobs OIDC
+identity. Each executed the published, SHA-256-pinned `helpers-ToolDefs`
+Rust ELF against a synthetic nonexistent tool name. All **5/5** completed
+with `{"defs":[]}`, final effect count **1**, and **zero** engine-managed
+Firestore effect-journal documents. Firestore status and result were read
+back after completion; this verifies the *Cloud Tasks / Jobs / Rust /
+Firestore path*, **not** a new public AWFL `/workflows/execute` test.
+
+| Sample | Client: Firestore launch → Tasks → Jobs → poll | Jobs HTTP request |
+| --- | ---: | ---: |
+| Cold | 2.328 s | 1,641 ms |
+| Warm 1 | 1.053 s | 512 ms |
+| Warm 2 | 0.559 s | 343 ms |
+| Warm 3 | 0.660 s | 387 ms |
+| Warm 4 | 0.910 s | 423 ms |
+
+The **four warm client samples** have median **0.785 s**, compared with
+**0.917 s** for the previous durable-state-reuse worker (about **14% lower**).
+Warm Jobs request median is **405 ms** versus the previous **517 ms**
+(about **22% lower**). These are separate five-run sequential batches,
+not a statistically powered A/B, p95, cost, concurrency or same-API test.
+
+Cloud Logging `awfl_native_job_timing` confirms **one**
+`firestore.claim` and **one** `firestore.complete` per execution, with
+**no** progress write during these fast workflows. Among warm runs, the
+claim median was **170.3 ms**, terminal commit **106.0 ms**, and cached
+artifact materialization approximately **5–11 ms**. Cold artifact loading
+and Firestore connection setup were substantially slower.
+
+Canary execution IDs:
+`native_7acdc07eaaa84b6dae6e3d319b509ccc`,
+`native_cb8f8a646a34460d94a5562dd21b8f45`,
+`native_6b3334d763e74ba7bd2fc8d65a4992b2`,
+`native_4fb0b7644f174ec589986c73617a06ae`,
+`native_ee63b2cd4e3848aba12fd72f5636ccf2`.
+
+**Remaining work:** same authenticated AWFL API benchmark; full
+multi-effect Cloud Run canary; longer-running progress snapshots,
+cancellation and crash/retry validation. The eight-effect compiled Rust
+fixture, compiled `Try` error edge, writer coalescing and restart semantics
+all passed local tests. The new code intentionally keeps ordinary
+traffic on Google Workflows until separately opted in.
+
+---
+
 **Decision (November 12, 2026).** AWFL's `us.awfl.utils.Cache` already
 implements opt-in Firebase result persistence around a user-selected step.
 The engine must not impose an additional exactly-once journal around every
