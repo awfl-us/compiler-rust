@@ -1,16 +1,6 @@
 # AWFL native Rust compiler
 
-> **Status, November 12, 2026 — compiler PR [#18](https://github.com/awfl-us/compiler-rust/pull/18)
-> merged into `main` at [`a285f66`](https://github.com/awfl-us/compiler-rust/commit/a285f66df11efd1b2c9811fbd494dcd45541aa7e).**
-> Scala DSL → native Rust ABI 3 / IPC 2 supports compiled `Parallel` and
-> `ParallelFor`, nested fork/join, existing CEL helpers and `time.format`.
-> The original `Llm.chatJson` object-to-string template semantics are preserved;
-> [workflow-utils #8](https://github.com/awfl-us/workflow-utils/pull/8) is merged.
-> **Server fork/join PR [#82](https://github.com/awfl-us/server/pull/82)
-> remains separate and unmerged.** Normal native production routing remains
-> disabled; no authenticated effectful production workflow parity is claimed.
-> See the [current roadmap](docs/current-state-and-roadmap.md) and
-> [real-workflow pilot plan](docs/real-workflow-pilot-and-benchmark-plan.md).
+> **Current status, November 13, 2026:** [compiler #31](https://github.com/awfl-us/compiler-rust/pull/31) and [workflows #13](https://github.com/awfl-us/workflows/pull/13) are merged. Twelve unchanged Scala modules compile to **26 verified static-musl ProjectManager workflows** using the one-command publisher. [Server #97](https://github.com/awfl-us/server/pull/97) merged durable parallel-parent/local-child support; [server #98](https://github.com/awfl-us/server/pull/98), adding callback support through the existing AWFL callback service, is **merged** (live deployment not yet verified). **Full native ProjectManager publication and real end-to-end execution are not yet verified.** Normal production native routing is disabled. See the [active integration plan](docs/projectmanager-native-integration-plan-2026-11-13.md).
 
 The Scala AWFL DSL remains the source of truth. This repository implements a
 **Scala frontend and native Rust backend**, not a Google Workflows YAML interpreter.
@@ -38,8 +28,9 @@ workflow loader. All compiled artifacts use **ABI 3 / protocol 2**; no
 compatibility compiler/runtime variants are shipped. The compiler also emits
 parallel branches and ordered `ParallelFor` results, and handles the original
 `str(CelValue(obj(...)))` JSON-template form without resolving its template
-placeholders as runtime variables. Full exception/retry parity, real network
-effects, and general production routing remain unavailable. The existing server now supports an **opt-in**
+placeholders as runtime variables. The isolated IAM-protected native Jobs worker can issue real HTTP effects,
+but whole-workflow parity, long-lived callbacks and normal production
+native routing remain unverified or disabled. The existing server now supports an **opt-in**
 native Jobs/Firestore backend; a pure ABI 3 `NativePilot` GCP canary passed
 on November 11, 2026. See `docs/implementation-status.md` for evidence,
 deployment boundaries and remaining blockers.

@@ -60,6 +60,27 @@ Expected success marker: `PROJECTMANAGER_NATIVE_SMOKE_PASS`, with
 The script checks native outputs; any failure exits nonzero. These paths are
 example local GKE workspace paths, **not** production release locations.
 
+## Later checkpoint — broader dependency set (November 13)
+
+The three-executable mock smoke above is historical. Compiler #31 and
+workflows #13 now batch-generate **26 verified static-musl executables from
+12 Scala modules** in a single development command, including the previously
+mocked dependency workflows. The first full release build passed in
+**199.3 seconds**; a warm repeated run took **52.5 seconds** with only
+**0.11 seconds of Cargo**. The publisher and representative root/Prompts/
+CliTools manifests passed fake-GCS testing; complete real GCS activation
+and end-to-end native execution have not been verified.
+
+Server #97 merged local compiled children within durable parallel parents.
+Server #98 is merged with native callbacks (deployment not yet verified) using existing AWFL callback
+records; the real compiled tools-CliTools Rust binary passed local
+callback delivery/resumption with simulated HTTP. The first native
+ProjectManager live probe reached six real effects, then failed on a stale
+Jobs worker at the parallel fork and was cancelled. Use the
+[active ProjectManager integration plan](projectmanager-native-integration-plan-2026-11-13.md) for remaining
+real Jobs tests. The original three-executable smoke remains a valid
+regression fixture.
+
 ## Remaining meaningful tests
 
 - Compile and execute the other real ProjectManager dependency workflows
