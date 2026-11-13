@@ -3,11 +3,11 @@
 
 ## Current integration status — November 13 (later checkpoint)
 
-[Server #97](https://github.com/awfl-us/server/pull/97) has merged
+[Server #97](https://github.com/awfl-us/server/pull/97) is merged
 the durable native parallel-parent and pinned synchronous nonparallel
 workflow.run child support. The earlier #94 local runner remains the
 memory-first path. [Server #98](https://github.com/awfl-us/server/pull/98)
-is open with native callbacks using the existing AWFL callback service;
+is merged, adding native callbacks through the existing AWFL callback service; live deployment verification is pending;
 the current await retains a Jobs request for up to 25 minutes rather
 than implementing a durable event wake-up.
 

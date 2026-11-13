@@ -72,7 +72,7 @@ CliTools manifests passed fake-GCS testing; complete real GCS activation
 and end-to-end native execution have not been verified.
 
 Server #97 merged local compiled children within durable parallel parents.
-Server #98 is open with native callbacks using existing AWFL callback
+Server #98 is merged with native callbacks (deployment not yet verified) using existing AWFL callback
 records; the real compiled tools-CliTools Rust binary passed local
 callback delivery/resumption with simulated HTTP. The first native
 ProjectManager live probe reached six real effects, then failed on a stale
