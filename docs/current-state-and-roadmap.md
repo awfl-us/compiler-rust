@@ -690,3 +690,28 @@ emulator, local Jobs and isolated cloud tests pass; retain durable
 native parallel as rollback. Details:
 [native memory plan](native-memory-execution-plan.md) and
 [server runtime design](https://github.com/awfl-us/server/blob/main/workflows/native/MEMORY.md).
+
+
+### Native memory-first parallel deployed and canary-verified (Nov 13, 2026 ET)
+
+The existing compiled Rust fork/join ABI now runs with server
+memory-first parallel after
+[server PR #112](https://github.com/awfl-us/server/pull/112)
+and [deploy 43540051941](https://github.com/awfl-us/server/actions/runs/43540051941).
+No compiler/DSL changes or Project Manager binary republishing
+were needed.
+
+A real production Project Manager BENCH_OK canary completed in
+13.22 seconds client-observed; a read-only LIST_DIRECTORY memory
+canary completed in 19.87 seconds and correctly resumed a
+separate durable child to the final reply. End-to-end session
+timestamps measured 37.57 seconds, versus 49.43/51.66 seconds
+for two earlier durable tool sessions. Memory roots had zero
+engine effect journals; emulator tests confirmed no lane records.
+These non-randomized small samples do not prove exact savings.
+
+The production API memory flag is **still unset**. Ordinary
+web/CLI published Project Manager executions remain durable
+native. Next: deliberate scoped opt-in and repeated same-API
+benchmark, retaining the durable fallback and explicit-cache
+crash replay semantics.
