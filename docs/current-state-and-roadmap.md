@@ -668,3 +668,25 @@ effects; the follow-up native execution finished `Done` without error.
 This verifies foreground agent/tool execution, **not** detached/background
 workflow semantics, comprehensive error reconciliation, or scale tests.
 Detached/background workflow support remains a separate deferred milestone.
+
+
+### Planned: memory-first native fork/join after production smoke
+
+Production Rust Project Manager foreground execution is verified, with
+real tool dispatch, native release publication and final session response.
+**Parallel-bearing workflows remain on durable native execution.**
+The nonparallel memory executor already exists but its compatibility
+gates explicitly reject `parallelVersion:1`.
+
+The next performance experiment should reuse compiled
+`native.parallel` branch selectors and snapshots in a
+bounded in-process execution tree. Keep branch continuations independent,
+shared concurrency bounded, and joins indexed. Retain only root-level
+Firestore claim, observational progress and final commit. This removes
+per-effect and per-lane engine journals but intentionally changes crash
+recovery to full-tree restart with explicit Cache-based idempotency.
+Do not enable this for live Project Manager until generated-Rust,
+emulator, local Jobs and isolated cloud tests pass; retain durable
+native parallel as rollback. Details:
+[native memory plan](native-memory-execution-plan.md) and
+[server runtime design](https://github.com/awfl-us/server/blob/main/workflows/native/MEMORY.md).

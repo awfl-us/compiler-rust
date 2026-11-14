@@ -120,3 +120,52 @@ what to cache. On an environment crash, an uncached workflow starts over.
 - Leave the stable native-routing flag disabled until this path passes its
   canaries. All infrastructure or IAM changes, if truly needed, belong in
   Terraform.
+
+
+## Production status and next milestone — November 13, 2026
+
+Native Rust is now **live in production** for published workflows.
+The authenticated Project Manager foreground run completed an actual
+`LIST_DIRECTORY` response and final assistant message. Its published
+parallel-capable release uses the **durable** native path; memory mode
+has only been canary-tested for nonparallel workflows.
+
+The November 13 production comparison recorded seven paired
+`helpers-ToolDefs` executions with correct equal results.
+Excluding the first pair, the warm median client-observed time was
+approximately 911 ms for durable native and 538 ms for Google
+(launch APIs differ). In a full Project Manager tool-call execution,
+35.95 s total included ~6.36 s for `/llm/chat`, ~5.71 s for
+parallel prompt/tool preparation, and ~6.04 s across eleven
+diagnostic log effects. These are not precise per-transaction
+Firestore timings and should not be described as such.
+
+**Next design — memory-first Parallel / ParallelFor (moderate server work):**
+
+- Reuse the compiled `native.parallel` fork, pinned
+  `parallelVersion:1`, `pc_<n>` lane selectors, captured
+  slots, and ordered joins. No new DSL or compiler protocol.
+- Update server launch, store, memory worker and local runner
+  compatibility gates together. Execute sibling lane continuations
+  concurrently in one authenticated root, with a shared permit
+  budget (8 effect-bearing lanes, 1,000 lanes/fork, depth 3).
+- No implicit durable journal or Firestore document per lane;
+  root claim, optional observational progress, and terminal
+  commit only. Independent virtual lane identities and tagged
+  captured slots isolate branches. Preserve nested calls, errors,
+  cancellation fencing and result order.
+- Root restart after a crash repeats the entire tree. Uncached
+  effects in any lane may repeat, as in existing memory mode.
+  Explicit Scala `Cache` is the application-level mechanism.
+  Durable native remains the default and fallback, and detached
+  execution is a separate milestone.
+- Acceptance: real compiled `Parallel`/`ParallelFor`
+  and nested forks, overlapping effects, ordered results,
+  compiled `Try`, errors, limits, takeover, and emulator
+  proof of zero lane/effect journal documents; then locally
+  execute full Project Manager before an isolated production
+  GKE/Jobs A/B against durable and Google.
+
+Detailed server plan:
+https://github.com/awfl-us/server/blob/main/workflows/native/MEMORY.md .
+No Terraform or IAM change is expected.
