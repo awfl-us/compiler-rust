@@ -83,6 +83,8 @@ object ExpressionEmitter {
         s"ops::text_url_encode(&(${inner(value)}))?"
       case Function(FunctionId.TextLowercase, Vector(value)) =>
         s"ops::text_lowercase(&(${inner(value)}))?"
+      case Function(FunctionId.TextSplit, Vector(source, separator)) =>
+        s"ops::text_split(&(${inner(source)}), &(${inner(separator)}))?"
       case Function(FunctionId.TextSubstring, Vector(source, start, end)) =>
         s"ops::text_substring(&(${inner(source)}), &(${inner(start)}), &(${inner(end)}))?"
       case Function(FunctionId.MapGet, Vector(map, path)) =>

@@ -359,6 +359,28 @@ pub fn text_lowercase(value: &AwflValue) -> Result<AwflValue, ValueError> {
     }
 }
 
+/// Workflows text.split separates on literal, non-overlapping occurrences
+/// of a non-empty UTF-8 separator. Empty fragments are preserved, including
+/// those at the beginning or end; the leftmost match wins on overlaps.
+pub fn text_split(source: &AwflValue, separator: &AwflValue) -> Result<AwflValue, ValueError> {
+    let (AwflValue::String(source), AwflValue::String(separator)) = (source, separator) else {
+        return Err(ValueError::Type(
+            "text.split requires string, string".into(),
+        ));
+    };
+    if separator.is_empty() {
+        return Err(ValueError::Type(
+            "text.split separator must not be empty".into(),
+        ));
+    }
+    Ok(AwflValue::List(
+        source
+            .split(separator)
+            .map(|piece| AwflValue::String(piece.to_string()))
+            .collect(),
+    ))
+}
+
 /// Workflows text.substring uses zero-based Unicode character offsets,
 /// inclusive at start and exclusive at end. Negative indices count back
 /// from the end, and out-of-range indices clamp rather than failing.
@@ -854,6 +876,42 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    #[test]
+    fn text_split_matches_google_workflows_literal_separator_semantics() {
+        let split = |source: &str, delimiter: &str| {
+            text_split(
+                &AwflValue::String(source.into()),
+                &AwflValue::String(delimiter.into()),
+            )
+            .unwrap()
+        };
+        let parts = |values: &[&str]| {
+            AwflValue::List(
+                values
+                    .iter()
+                    .map(|x| AwflValue::String((*x).into()))
+                    .collect(),
+            )
+        };
+        assert_eq!(split("baaab", "aa"), parts(&["b", "ab"]));
+        assert_eq!(split("abc", "a"), parts(&["", "bc"]));
+        assert_eq!(split("abc", "c"), parts(&["ab", ""]));
+        assert_eq!(split("abbc", "b"), parts(&["a", "", "c"]));
+        assert_eq!(split("abc", ","), parts(&["abc"]));
+        assert_eq!(split("", ","), parts(&[""]));
+        assert_eq!(split("🙂hé🙂é", "🙂"), parts(&["", "hé", "é"]));
+        assert_eq!(split("x--y--z", "--"), parts(&["x", "y", "z"]));
+        assert!(
+            text_split(
+                &AwflValue::String("abc".into()),
+                &AwflValue::String(String::new())
+            )
+            .is_err()
+        );
+        assert!(text_split(&AwflValue::Integer(123), &AwflValue::String("2".into())).is_err());
+        assert!(text_split(&AwflValue::String("abc".into()), &AwflValue::Bool(false)).is_err());
     }
 
     #[test]
