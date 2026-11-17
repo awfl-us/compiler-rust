@@ -38,6 +38,12 @@ object ParallelIrSmoke {
     assert(loopIR == Normalize(Workflow((List[Step[?, ?]](forEach), forEach.resultValue))))
     val loopGenerated = RustEmitter.emit(loopIR)
     assert(loopGenerated.source.contains("native.parallel"))
+    // Fork snapshots may include slots that are initialized only on
+    // exceptional control-flow paths. The generated Rust must not require
+    // every maybe-live slot to be present before launching a child lane.
+    assert(loopGenerated.source.contains("let mut __awfl_captured"))
+    assert(loopGenerated.source.contains("if let Some(value) = slots.get("))
+    assert(!loopGenerated.source.contains("\"slots\": std::collections::BTreeMap::<String, AwflValue>::from(["))
     RustEmitter.write(loopIR,
       java.nio.file.Paths.get("../fixtures/native-parallel-for").toAbsolutePath.normalize,
       java.nio.file.Paths.get("../runtime").toAbsolutePath.normalize)

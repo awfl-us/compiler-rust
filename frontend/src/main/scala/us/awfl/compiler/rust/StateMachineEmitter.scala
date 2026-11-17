@@ -85,17 +85,33 @@ object StateMachineEmitter {
       def laneSnapshot(lane: ForkLane, withItem: Boolean): String = {
         val refs = liveness.resumeSlots(lane.entry).toVector.sorted
           .filterNot(id => lane.itemSlot.contains(id))
-        val captures = refs.map(id => s"(${q(id)}.to_owned(), ${slot(id)})")
-        val elements = captures ++
-          (if (withItem) lane.itemSlot.toVector.map(id =>
-            s"(${q(id)}.to_owned(), __awfl_item)") else Vector.empty)
-        s"std::collections::BTreeMap::<String, AwflValue>::from([${elements.mkString(", ")}])"
+        // Liveness includes values needed on exceptional paths. A catch
+        // variable may be read by a child *if* an error occurs, but need not
+        // exist when its enclosing fork starts on the successful path.
+        // Save only initialized slots, just like parent continuations.
+        val captures = refs.map(id =>
+          s"""if let Some(value) = slots.get(${q(id)}) {
+              __awfl_captured.insert(${q(id)}.to_owned(), value.clone());
+          }"""
+        ).mkString("\n")
+        val item = if (withItem) lane.itemSlot.toVector.map(id =>
+          s"__awfl_captured.insert(${q(id)}.to_owned(), __awfl_item);").mkString("\n")
+        else ""
+        s"""{
+          let mut __awfl_captured = std::collections::BTreeMap::<String, AwflValue>::new();
+          $captures
+          $item
+          __awfl_captured
+        }"""
       }
       def laneValue(lane: ForkLane, withItem: Boolean): String =
-        s"""serde_json::json!({
+        s"""{
+          let __awfl_lane_slots = ${laneSnapshot(lane, withItem)};
+          serde_json::json!({
           "entry": ${q("pc_" + lane.entry)},
-          "slots": ${laneSnapshot(lane, withItem)}
-        })"""
+          "slots": __awfl_lane_slots
+        })
+        }"""
       val lanesExpr = fork.iterable match {
         case None =>
           "vec![" + fork.lanes.map(laneValue(_, false)).mkString(", ") + "]"
