@@ -105,10 +105,13 @@ object StateMachineEmitter {
         }"""
       }
       def laneValue(lane: ForkLane, withItem: Boolean): String =
-        s"""serde_json::json!({
+        s"""{
+          let __awfl_lane_slots = ${laneSnapshot(lane, withItem)};
+          serde_json::json!({
           "entry": ${q("pc_" + lane.entry)},
-          "slots": ${laneSnapshot(lane, withItem)}
-        })"""
+          "slots": __awfl_lane_slots
+        })
+        }"""
       val lanesExpr = fork.iterable match {
         case None =>
           "vec![" + fork.lanes.map(laneValue(_, false)).mkString(", ") + "]"
