@@ -1,5 +1,8 @@
 # Project Manager — fast native iteration and live integration plan
 
+> **November 16, 2026 checkpoint — this supersedes the older pending-first-native-run checklist below.** A normal production **Firestore** Project Manager session completed (59 effects, 56.82 s). Separately, the compiled Project Manager ran successfully against a local Jobs server and real managed PostgreSQL or Firestore document adapters (three successful main roots each, 59 effects). The native execution-store's median cumulative DB latency was ~314 ms PG versus ~2,811 ms Firestore, **not a measurement of every Jobs DB call**. Overall local root medians were 14.07 s PG and 14.70 s FS and cannot be compared directly with the production run. Three detached maintenance children failed with an existing Rust subtraction error on both databases. **Next priority:** merge and deploy the server's Jobs/PostgreSQL provider migration, use Terraform and finite state backfill to switch production data-plane paths, and **then** instrument all Jobs Storage calls plus callback/LLM/GCS/Rust/HTTP critical-path latency. Detailed plan: [server production cutover and latency handoff](https://github.com/awfl-us/server/blob/feat/jobs-document-storage-provider/docs/postgres-production-cutover-latency-handoff-2026-11-16.md). No production PostgreSQL cutover has occurred.
+
+
 ## Local-first development default
 
 **For ordinary compiler/server fixes, do not deploy Cloud Run.** Run the
