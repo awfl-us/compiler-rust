@@ -249,6 +249,8 @@ pub fn multiply(a: AwflValue, b: AwflValue) -> Result<AwflValue, ValueError> {
             .map(AwflValue::Integer)
             .ok_or(ValueError::Overflow),
         (AwflValue::Float(x), AwflValue::Float(y)) => finite(x * y),
+        (AwflValue::Float(x), AwflValue::Integer(y)) => finite(x * y as f64),
+        (AwflValue::Integer(x), AwflValue::Float(y)) => finite(x as f64 * y),
         _ => Err(ValueError::Type(
             "unsupported multiplication operand types".into(),
         )),
@@ -1140,6 +1142,23 @@ mod tests {
         assert!(json_encode_string(&AwflValue::Bytes(vec![255])).is_err());
         assert!(json_encode_string(&AwflValue::Float(f64::INFINITY)).is_err());
     }
+    #[test]
+    fn multiplication_promotes_mixed_numeric_operands() {
+        assert_eq!(
+            multiply(AwflValue::Float(2.5), AwflValue::Integer(4)).unwrap(),
+            AwflValue::Float(10.0)
+        );
+        assert_eq!(
+            multiply(AwflValue::Integer(4), AwflValue::Float(2.5)).unwrap(),
+            AwflValue::Float(10.0)
+        );
+        assert_eq!(
+            multiply(AwflValue::Integer(4), AwflValue::Integer(3)).unwrap(),
+            AwflValue::Integer(12)
+        );
+        assert!(multiply(AwflValue::Integer(2), AwflValue::Float(f64::INFINITY)).is_err());
+    }
+
     #[test]
     fn floor_division_rounds_toward_negative_infinity_and_checks_errors() {
         let div = |a, b| floor_divide(&AwflValue::Integer(a), &AwflValue::Integer(b));
