@@ -28,6 +28,12 @@ object CelOperatorsSmoke {
       Paths.get("../runtime").toAbsolutePath.normalize)
     assert(emitted.source.contains("ops::contains"))
     assert(emitted.source.contains("ops::floor_divide"))
+    assert(emitted.source.contains("operation=") == false,
+      "diagnostics must be emitted as runtime errors, not unconditional logs")
+    assert(emitted.source.contains("error.at_operand_types"))
+    assert(emitted.source.contains("\"divide_int\""))
+    assert(emitted.source.contains("\"0.return\""),
+      "the compiler should attach the originating DSL node")
     assert(emitted.manifest.contains("\"runtime_abi\":3"))
     println("Original CEL membership and floor-division operators compiled to Rust")
   }

@@ -44,6 +44,23 @@ object TryRaiseSmoke {
       err => List.empty[Step[?, ?]] -> err.flatMap(_.message))
     emitted("runtime-error", Workflow((List[Step[?, ?]](valueError), valueError.resultValue), Some("runtime-error")))
 
+    // Catch the exact type mismatch that previously failed Summaries-Week.
+    // ValueError must not be turned into a generic uncaught Rust exception
+    // when the compiler adds node/operation/operand-type diagnostics.
+    val badDivision = str(CelOp(CelConst("input"), "//", CelConst("2")))
+    val caughtDivision = Try("catch-divide", List.empty[Step[?, ?]] -> badDivision,
+      err => List.empty[Step[?, ?]] -> err.flatMap(_.message))
+    emitted("catch-divide", Workflow((List[Step[?, ?]](caughtDivision),
+      caughtDivision.resultValue), Some("catch-divide")))
+
+    val uncaughtDivision = str(CelOp(CelConst("input"), "//", CelConst("2")))
+    val uncaughtFlow = Normalize(Workflow((List.empty[Step[?, ?]], uncaughtDivision),
+      Some("runtime-divide")))
+    val divisionResult = RustEmitter.write(uncaughtFlow,
+      base.resolve("runtime-divide"), runtime)
+    assert(divisionResult.source.contains("error.at_operand_types"))
+    assert(divisionResult.source.contains("divide_int"))
+
     val api = Call[Map[String, String], String]("request", CallOperations.HttpPost,
       obj(Map("url" -> "https://example.invalid/try")))
     val guardedHttp = Try("guarded-http", List[Step[?, ?]](api) -> str(CelStr("effect-ok")),

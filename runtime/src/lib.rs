@@ -16,6 +16,42 @@ pub enum ValueError {
     MissingField(String),
     Overflow,
     NonFiniteFloat,
+    /// Compiler-attached DSL context. Retain ValueError for native Try/Catch.
+    Context {
+        node: String,
+        operation: String,
+        operand_types: Option<(String, String)>,
+        source: Box<ValueError>,
+    },
+}
+impl ValueError {
+    pub fn at_node(self, node: &str, operation: &str) -> Self {
+        Self::Context {
+            node: node.into(),
+            operation: operation.into(),
+            operand_types: None,
+            source: Box::new(self),
+        }
+    }
+
+    pub fn at_binary(
+        self,
+        node: &str,
+        operation: &str,
+        left: &AwflValue,
+        right: &AwflValue,
+    ) -> Self {
+        self.at_operand_types(node, operation, left.type_name(), right.type_name())
+    }
+
+    pub fn at_operand_types(self, node: &str, operation: &str, left: &str, right: &str) -> Self {
+        Self::Context {
+            node: node.into(),
+            operation: operation.into(),
+            operand_types: Some((left.into(), right.into())),
+            source: Box::new(self),
+        }
+    }
 }
 impl fmt::Display for ValueError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -24,10 +60,29 @@ impl fmt::Display for ValueError {
             Self::MissingField(name) => write!(f, "missing field or element: {name}"),
             Self::Overflow => write!(f, "signed 64-bit integer overflow"),
             Self::NonFiniteFloat => write!(f, "non-finite floating point number"),
+            Self::Context {
+                node,
+                operation,
+                operand_types,
+                source,
+            } => {
+                write!(f, "node={node} operation={operation}")?;
+                if let Some((left, right)) = operand_types {
+                    write!(f, " left_type={left} right_type={right}")?;
+                }
+                write!(f, ": {source}")
+            }
         }
     }
 }
-impl std::error::Error for ValueError {}
+impl std::error::Error for ValueError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            Self::Context { source, .. } => Some(source.as_ref()),
+            _ => None,
+        }
+    }
+}
 
 /// The persistent representation must distinguish bytes from text, integers from
 /// floating point, and a missing slot from an explicitly bound null value.
@@ -42,6 +97,21 @@ pub enum AwflValue {
     Bytes(Vec<u8>),
     List(Vec<AwflValue>),
     Map(BTreeMap<String, AwflValue>),
+}
+impl AwflValue {
+    /// Expose only the type, never argument values in error diagnostics.
+    pub fn type_name(&self) -> &'static str {
+        match self {
+            Self::Null => "Null",
+            Self::Bool(_) => "Bool",
+            Self::Integer(_) => "Integer",
+            Self::Float(_) => "Float",
+            Self::String(_) => "String",
+            Self::Bytes(_) => "Bytes",
+            Self::List(_) => "List",
+            Self::Map(_) => "Map",
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
@@ -228,5 +298,34 @@ mod tests {
             v.to_tagged_json(),
             Err(CodecError::NonFiniteFloat)
         ));
+    }
+}
+
+#[cfg(test)]
+mod expression_diagnostic_tests {
+    use super::{AwflValue, ValueError};
+    use std::error::Error;
+
+    #[test]
+    fn context_preserves_value_error_type_and_hides_operand_contents() {
+        let left = AwflValue::Float(8.25);
+        let right = AwflValue::Integer(2);
+        let error = ValueError::Type("integer floor division requires two integers".into())
+            .at_binary("weekIndex", "divide_int", &left, &right);
+        let message = error.to_string();
+        assert!(message.contains("node=weekIndex operation=divide_int"));
+        assert!(message.contains("left_type=Float right_type=Integer"));
+        assert!(message.contains("integer floor division requires two integers"));
+        assert!(!message.contains("8.25"));
+        assert!(matches!(error, ValueError::Context { .. }));
+        assert!(error.source().is_some());
+    }
+
+    #[test]
+    fn node_context_preserves_inner_error_for_dsl_catch() {
+        let error = ValueError::MissingField("example".into()).at_node("read", "field");
+        assert!(matches!(error, ValueError::Context { .. }));
+        assert!(error.to_string().starts_with("node=read operation=field"));
+        assert!(error.source().is_some());
     }
 }
