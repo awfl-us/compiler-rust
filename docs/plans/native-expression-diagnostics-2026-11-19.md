@@ -39,3 +39,16 @@ Carry optional Scala source file/line metadata through normalized IR, expose
 structured diagnostic fields in execution records, and improve uncaught native
 process error formatting. Current scope is **DSL node + operation + operand
 types**, not exact source lines or tracing successful steps.
+
+## Verified local results (2026-11-19)
+
+- Rust runtime test suite: **30 passed, 0 failed**.
+- Scala codegen smoke: **CelOperatorsSmoke** and **TryRaiseSmoke** passed.
+- Native executable regression: **NATIVE_EXPRESSION_DIAGNOSTICS_PASS**
+  (uncaught float/integer division, caught error, valid integer division,
+  and no operand values).
+- Full `codebase-ProjectManager` closure: **26/26 static musl Rust
+  binaries built and verified**, `AWFL_NATIVE_DEV_PASS`, `publish=false`.
+- No production deployment. The original division issue still needs its
+  operand source identified and corrected; this change improves diagnostics
+  rather than changing arithmetic semantics.
