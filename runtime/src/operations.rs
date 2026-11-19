@@ -233,6 +233,10 @@ pub fn subtract(a: AwflValue, b: AwflValue) -> Result<AwflValue, ValueError> {
             .map(AwflValue::Integer)
             .ok_or(ValueError::Overflow),
         (AwflValue::Float(x), AwflValue::Float(y)) => finite(x - y),
+        // Epoch timestamps are fractional seconds while window sizes are
+        // integers. Match numeric promotion already supported by ops::add.
+        (AwflValue::Float(x), AwflValue::Integer(y)) => finite(x - y as f64),
+        (AwflValue::Integer(x), AwflValue::Float(y)) => finite(x as f64 - y),
         _ => Err(ValueError::Type(
             "unsupported subtraction operand types".into(),
         )),
@@ -716,6 +720,15 @@ mod tests {
         assert_eq!(parsed.get_version_num(), 4);
         assert_eq!(parsed.to_string(), first);
     }
+    #[test]
+    fn subtraction_promotes_mixed_numbers_for_segment_windows() {
+        assert_eq!(subtract(AwflValue::Float(1200.25), AwflValue::Integer(1200)).unwrap(), AwflValue::Float(0.25));
+        assert_eq!(subtract(AwflValue::Integer(1200), AwflValue::Float(0.25)).unwrap(), AwflValue::Float(1199.75));
+        assert_eq!(subtract(AwflValue::Integer(5), AwflValue::Integer(3)).unwrap(), AwflValue::Integer(2));
+        assert!(subtract(AwflValue::String("1200".into()), AwflValue::Integer(1)).is_err());
+        assert!(matches!(subtract(AwflValue::Integer(i64::MIN), AwflValue::Integer(1)), Err(ValueError::Overflow)));
+    }
+
     #[test]
     fn overflow_is_explicit() {
         assert!(matches!(
