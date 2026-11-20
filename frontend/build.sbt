@@ -8,7 +8,7 @@ libraryDependencies ++= Seq(
   // separate reflection/class-name convention for the native compiler.
   "us.awfl" %% "compiler" % "0.3.2",
   // Only test scope: compile an unchanged real workflow from awfl-us/workflows.
-  "us.awfl" %% "workflow-utils" % "0.3.5" % Test,
+  "us.awfl" %% "workflow-utils" % "0.3.7" % Test,
   "io.circe" %% "circe-core" % "0.14.7",
   "io.circe" %% "circe-parser" % "0.14.7"
 )
