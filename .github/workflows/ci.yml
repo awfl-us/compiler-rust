@@ -238,9 +238,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: awfl-us/workflow-utils
-          # Includes the already-merged literal schema and Firebase 404 fixes.
+          # Includes the reconciled real Kala Match APIs and prior fixes.
           # Pin this checkout so compatibility results are reproducible.
-          ref: 08bda2dfd76d0dd45d21556e455d524d8760e670
+          ref: d7680d371a44a1e231f18700ffc535dc4ca07db6
           path: _audit_utils
       - uses: actions/setup-java@v4
         with:
