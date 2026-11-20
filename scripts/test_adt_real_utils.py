@@ -48,6 +48,22 @@ def check():
             assert b['result']['sessionId']==identifier,(value,b)
         tests+=1
         print('REAL_UTILS_MATCH_PASS',kind,identifier)
+    # A bad Kala must never silently match another structural variant. The
+    # historical Locks helper deliberately wraps Match in Try: its error is
+    # observable as a log.write effect rather than an accidental lock key.
+    # TopicContextYoj has no outer Try and must fail immediately.
+    for malformed in ({}, {'sessionId': 'missing-end'},
+                      {'weekEnd': 12.0, 'extra': True}):
+        lock_error = run(lock, malformed)
+        assert lock_error['status'] == 'suspended', (malformed, lock_error)
+        assert lock_error['effect']['operation'] == 'log.write', (malformed, lock_error)
+        assert 'Non-exhaustive ADT match: matchId' in lock_error['effect']['args']['text']
+        tests += 1
+        context_error = run(context, malformed)
+        assert context_error['status'] == 'failed', (malformed, context_error)
+        assert 'Non-exhaustive ADT match: encodeKalaVal' in context_error['error']['message']
+        tests += 1
+    print('REAL_UTILS_MATCH_MALFORMED_PASS', 6)
     print('REAL_UTILS_MATCH_NATIVE_PASS',tests)
 
 
