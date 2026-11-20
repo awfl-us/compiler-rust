@@ -1,6 +1,7 @@
 package us.awfl.compiler.rust
 
 import us.awfl.dsl.*
+import us.awfl.dsl.CelOps.*
 import us.awfl.dsl.auto.given
 import java.nio.file.Paths
 
@@ -14,7 +15,7 @@ case class RoleDeleted(reason: String, id: Value[String]) extends RoleEvent
 object AdtLiteralNativeSmoke:
   def route(in: Value[RoleEvent]): Step[String, Value[String]] =
     Match("routeByRole", in) {
-      case RoleCreated("admin", id) => List() -> id
+      case RoleCreated("admin", id) => List() -> str(id.cel + CelStr("@admin"))
       case RoleCreated("user", id) => List() -> str("user")
       case RoleDeleted("admin", id) => List() -> str("deleted")
       case _ => List() -> str("other")

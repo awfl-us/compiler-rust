@@ -96,8 +96,8 @@ def check() -> None:
 
     literal = native_binary("native-adt-match-literal")
     literal_cases = (
-        ({"role": "admin", "id": "a"}, "a"),
-        ({"role": "admin", "id": "another"}, "another"),
+        ({"role": "admin", "id": "a"}, "a@admin"),
+        ({"role": "admin", "id": "another"}, "another@admin"),
         ({"role": "user", "id": "u"}, "user"),
         ({"role": "guest", "id": "x"}, "other"),
         ({"reason": "admin", "id": "deleted"}, "deleted"),
