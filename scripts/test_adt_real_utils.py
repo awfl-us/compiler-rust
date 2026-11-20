@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """Native memory-mode parity for real workflow-utils Scala Match call sites."""
 import json
+import os
 import subprocess
 import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-TARGET = ROOT / "target" / "adt-matching"
+TARGET = Path(os.environ.get("CARGO_TARGET_DIR", str(ROOT / "target" / "adt-matching")))
 CASES = (
     ({"sessionId": "s1", "end": 4.0, "windowSeconds": 120.0}, "s1", "SegKala"),
     ({"sessionId": "s2", "sessionEnd": 16.0}, "s2", "SessionKala"),

@@ -62,6 +62,16 @@ jobs:
             'Test / runMain us.awfl.compiler.rust.OptListJsonParitySmoke' \
             'Test / runMain us.awfl.compiler.rust.CelOperatorsSmoke' \
             'Test / runMain us.awfl.compiler.rust.TryRaiseSmoke'
+      - name: Prove original wip-old ADT Match against generated native Rust
+        run: |
+          cd frontend
+          sbt -batch \
+            'Test / runMain us.awfl.compiler.rust.AdtMatchNativeSmoke' \
+            'Test / runMain us.awfl.compiler.rust.AdtLiteralNativeSmoke' \
+            'Test / runMain us.awfl.compiler.rust.AdtRealUtilsNativeSmoke'
+          cd ..
+          python3 scripts/test_adt_match.py
+          python3 scripts/test_adt_real_utils.py
       - name: Compile and execute native Parallel and ParallelFor fork/join
         run: |
           cargo build --manifest-path fixtures/native-parallel-branches/Cargo.toml
