@@ -97,7 +97,9 @@ object StateMachineEmitter {
         val item = if (withItem) lane.itemSlot.toVector.map(id =>
           s"__awfl_captured.insert(${q(id)}.to_owned(), __awfl_item);").mkString("\n")
         else ""
-        s"""{
+        if (refs.isEmpty && item.isEmpty)
+          "std::collections::BTreeMap::<String, AwflValue>::new()"
+        else s"""{
           let mut __awfl_captured = std::collections::BTreeMap::<String, AwflValue>::new();
           $captures
           $item
